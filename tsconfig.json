@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    //"esModuleInterop": true,
+    //vs code doesn't seem to see 'three'
+    //tried https://stackoverflow.com/questions/45903511/vs-code-cannot-find-module-angular-core-or-any-other-modules/48863639
+    "baseUrl": "./src",
+    
+    "moduleResolution": "node",
+    "outDir": "./dist/",
+    "sourceMap": true,
+    "maxNodeModuleJsDepth": 1,
+     //Replaced none from es6
+     //see: https://github.com/Microsoft/TypeScript/issues/11879
+    "module": "es6",
+    // Needed to change this from es5 to es6
+    //cuased issues: with Object.keys().find
+    //https://github.com/Microsoft/TypeScript/issues/6945
+    "target": "es6", 
+    "jsx": "preserve",
+    "allowJs": true ,
+    "typeRoots" : [
+      "node_modules/@types/",
+    ],
+    "alwaysStrict" : true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    //"strictNullChecks": true,
+    "allowSyntheticDefaultImports": true,
+  }
+}
