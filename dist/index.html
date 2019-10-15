@@ -7,6 +7,25 @@
   <meta charset=utf-8>
   <title id="gametitle">Laser Wing VR</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.2/jquery.min.js"></script>
+  <script type='x-shader/x-vertex' id='sprite_vs'>
+    varying vec2 vUv; // pass the uv coordinates of each pixel to the frag shader
+
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  </script>
+  <script type='x-shader/x-vertex' id='sprite_fs'>
+    precision highp float; // set float precision (optional)
+
+    uniform sampler2D texture; // identify the texture as a uniform argument
+    varying vec2 vUv; // identify the uv values as a varying attribute
+
+    void main() {
+      gl_FragColor = texture2D(texture, vUv);
+    }
+  </script>
+
   <script type="text/javascript">
     function getCssValuePrefix() {
       var rtrnVal = '';//default to standard syntax

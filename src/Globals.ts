@@ -6,6 +6,7 @@ import {
   Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D, AlwaysStencilFunc, MeshStandardMaterial,
   MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material
 } from 'three';
+import * as Stats from 'stats.js';
 
 //For SSAA thing.
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -45,6 +46,8 @@ export class _Globals {
   private _ssaaRenderpass: SSAARenderPass = null;
   private _copyPass: ShaderPass = null;
   private _canvas: HTMLCanvasElement = null;
+  private _statsFps: Stats = null;
+  private _statsMb: Stats = null;
 
   // private _cameraCachedPos : Vector3 = new Vector3(0,0,0);
   // private _cameraCachedDir : Vector3 = new Vector3(0,0,0);
@@ -72,6 +75,20 @@ export class _Globals {
     this._input = new Input();
     this._physics3d = new PhysicsManager3D();
     this._prof = new Prof();
+
+    if (this._debug) {
+      this._statsFps = new Stats();
+      this._statsFps.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
+      this._statsFps.dom.style.cssText = 'position:absolute;top:0px;left:0px;';
+      document.body.appendChild(this._statsFps.dom);
+
+      this._statsMb = new Stats();
+      this._statsMb.showPanel(2); // 0: fps, 1: ms, 2: mb, 3+: custom
+      this._statsMb.dom.style.cssText = 'position:absolute;top:0px;left:80px;';
+      document.body.appendChild(this._statsMb.dom);
+
+    }
+
 
     this.createPlayer();
   }
@@ -194,6 +211,7 @@ export class _Globals {
     let that = this;
 
     this.renderer.setAnimationLoop(function (time: number) {
+
       that.prof.frameStart();
       {
         time *= 0.001;//convert to seconds I think
@@ -237,7 +255,16 @@ export class _Globals {
 
         Globals.audio._listener.position.copy(Globals.player.WorldPosition);
 
+
+
+        if (that._statsFps) {
+          that._statsFps.update();
+        }
+        if (that._statsMb) {
+          that._statsMb.update();
+        }
       }
+
       that.prof.frameEnd();
 
       that._frame++;
@@ -363,14 +390,19 @@ export class _Globals {
 
     let bk = szGrid;
 
+    let side = 'dat/img/side_cube-128.png';
+    let top = 'dat/img/top_cube-128.png';
+    let bot = 'dat/img/bot_cube-128.png';
+
+
     this.scene = new THREE.Scene();
     {
       const loader: THREE.CubeTextureLoader = new THREE.CubeTextureLoader();
       const texture: THREE.CubeTexture = loader.load([
-        bk, bk, bk, bk, bk, bk,
+        side, side, top, bot, side, side,
       ]);
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
+      texture.minFilter = THREE.NearestFilter;
+      texture.magFilter = THREE.NearestFilter;
       this.scene.background = texture;
     }
   }

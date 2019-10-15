@@ -1,5 +1,22 @@
 # Helix Game
-Art & Design Seminar Term Project Fall 2019
+Graduate Seminar Term Project Fall 2019
+
+
+
+Essentially a Tile25D IS a Sprite25D, only a Sprite25D container may be hidden however
+a Tile25D can be hidden/visible as well.  Therefore it makes sense to merge the two objects into one class and just use Sprite25D.  Tile25D will go away.
+Object25D is a generic class, it also doesn't have much use.
+Tile25D is only around because I thought that "hey ok so we got tiles that got no animation so we cut the data footprint" but that's just too complicated and unnecessary.
+
+
+
+
+
+
+
+
+
+
 
 
 ***Notes***

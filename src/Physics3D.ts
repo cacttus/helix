@@ -89,7 +89,7 @@ export class PhysicsObject3D extends THREE.Object3D {
     //By default, set us to be the default box so, in case models fail to load, we can
     //still see them.
     if (Globals.isDebug()) {
-      this.setModel(this.createDefaultGeo());
+      //this.setModel(this.createDefaultGeo());
     }
   }
   public destroy() {
