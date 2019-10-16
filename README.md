@@ -1,5 +1,8 @@
 # Helix Game
+Demonstrates 2D games and User Interfaces in VR.
+
 Graduate Seminar Term Project Fall 2019
+
 
 ***Notes***
 Tested in Chrome on Windows and with Oculus Quest.    
