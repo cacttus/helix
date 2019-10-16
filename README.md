@@ -6,9 +6,6 @@ Graduate Seminar Term Project Fall 2019
 ## TRELLO BOARD
 https://trello.com/b/d4cSwyt3
 
-***Notes***
-Tested in Chrome on Windows and with Oculus Quest.    
-
 ## How to Run
 install *npm
 
