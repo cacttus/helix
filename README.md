@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 ### v0.001
 Put Tile25D back and made it a "image". Objects now have tile aggregates that appear on the same layer as the tile itself.
@@ -6,6 +7,8 @@ Removed Tile Registration in buffers
 added color animation.
 Added multi-sprite animation creation.
 
+=======
+>>>>>>> 8cff1e9f508569c84f11998e744ef006533911c6
 # Helix Game
 Helix is a 2D game in VR.  The purpose of this project is to demonstrate how VR can be used to play 2D games, and ways in which 2D games can be played comfortably in an immersive environment.
 
