@@ -26,5 +26,8 @@
     "noImplicitThis": true,
     //"strictNullChecks": true,
     "allowSyntheticDefaultImports": true,
+    //These two are so that we can import the Tiled JSON file. https://hackernoon.com/import-json-into-typescript-8d465beded79
+    "resolveJsonModule": true
+    //,"esModuleInterop": true 
   }
 }

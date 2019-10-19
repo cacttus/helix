@@ -12,6 +12,9 @@ import { PhysicsObject3D, PhysicsManager3D } from './Physics3D';
 import { Globals } from './Globals';
 import { Utils } from './Utils';
 import * as Files from './Files';
+import { vec4, vec3 } from './Math';
+
+export interface AfterLoadFunction { (x: any): void; };
 
 //https://stackoverflow.com/questions/38213926/interface-for-associative-object-array-in-typescript
 export interface Dictionary<T> {
@@ -42,12 +45,23 @@ export class Random {
     c.b = v.z;
     return c;
   }
+  public static randomVec4(min: number, max: number): vec4 {
+    let v: vec4 = new vec4();
+    v.x = Random.float(min, max);
+    v.y = Random.float(min, max);
+    v.z = Random.float(min, max);
+    v.w = Random.float(min, max);
+    return v;
+  }
+  public static randomVec3(min: number, max: number): vec3 {
+    let v: vec3 = new vec3();
+    v.x = Random.float(min, max);
+    v.y = Random.float(min, max);
+    v.z = Random.float(min, max);
+    return v;
+  }
   public static randomNormal(): Vector3 {
-    let v: Vector3 = new Vector3();
-    v.x = Random.float(-1, 1);
-    v.y = Random.float(-1, 1);
-    v.z = Random.float(-1, 1);
-    v.normalize();
+    let v = this.randomVec3(-1, 1).normalize();
     return v;
   }
   public static bool() {
@@ -248,6 +262,7 @@ export class AudioManager {
 
 export interface ModelCallback { (model: THREE.Mesh): void; };
 export interface ModelObjectCallback { (object: PhysicsObject3D, model: THREE.Mesh): void; };
+export interface AfterLoadModel { (success:boolean , arr:Array<Object3D>, gltf: any): Object3D; };
 export class ModelManager {
 
   private _cache: Dictionary<THREE.Object3D> = {};
@@ -256,7 +271,6 @@ export class ModelManager {
   private _callbacks: Dictionary<Array<ModelCallback>> = {}
 
   constructor() {
-    this.loadModels();
   }
   public setModelAsyncCallback(model: Files.Model, callback: ModelCallback): void {
     let szfile = this._modelBaseDir + model;
@@ -272,91 +286,7 @@ export class ModelManager {
       this._callbacks[szfile].push(callback);
     }
   }
-
-  private loadModels(): void {
-    let that = this;
-    try {
-
-      // this.loadModel(Files.Model.Player_Ship, ['MainObject', 'Player_Seat', 'Gun1', 'Gun2'], function (success: boolean, objs: any, gltf: any) {
-      //   if (success) {
-      //     let player_ship: THREE.Object3D = objs['MainObject'];
-      //     player_ship.scale.set(.6, .6, .6);
-
-      //     let player_pos = objs['Player_Seat'].position;
-      //     Globals.userGroup.position.copy(player_pos);
-      //     return player_ship;
-      //   }
-      //   return null;
-      // });
-
-      // this.loadShip(Files.Model.Boss);
-      // this.loadShip(Files.Model.Enemy_Ship);
-      // this.loadShip(Files.Model.Enemy_Ship2);
-      // this.loadShip(Files.Model.Enemy_Ship3);
-      // this.loadShip(Files.Model.Enemy_Ship4);
-
-      // this.loadItem(Files.Model.Big_Bullet);
-      // this.loadItem(Files.Model.Bullet);
-      // this.loadItem(Files.Model.Bomb);
-      // this.loadItem(Files.Model.Bomb_Explosion, false);
-      // this.loadItem(Files.Model.Item, true, new Vector3(1, 1, 1));
-      // this.loadItem(Files.Model.Boss_Bomb_Bullet, true, new Vector3(1, 1, 1));
-      // this.loadItem(Files.Model.Boss_Bomb_Plus, true, new Vector3(1, 1, 1));
-      // this.loadItem(Files.Model.Boss_Missile, true, new Vector3(1, 1, 1));
-      // this.loadItem(Files.Model.Triple_Bullet, true, new Vector3(1, 1, 1));
-      // this.loadItem(Files.Model.Spacejunk_Bullet, true, new Vector3(1, 1, 1));
-    }
-    catch (e) {
-      Globals.logError("Failed to load one or more models: " + e);
-    }
-  }
-  private loadItem(mod: Files.Model, flatShade: boolean = true, defaultscale: Vector3 = new Vector3(0.6, 0.6, 0.6)) {
-    this.loadModel(mod, ['MainObject'], function (success: boolean, objs: any, gltf: any) {
-      if (success) {
-        let a: THREE.Object3D = objs['MainObject'];
-        a.scale.copy(defaultscale);
-        let b = a as THREE.Mesh;
-        if (b) {
-          let m = b.material as THREE.Material;
-          if (m) {
-            m.flatShading = flatShade;
-          }
-        }
-        return a;
-      }
-      return null;
-    });
-  }
-  private loadShip(mod: Files.Model, szobjs: Array<string> = null, loaded: any = null): void {
-    let arr2 = null;
-    let arr = ['MainObject'];
-    if (szobjs != null) {
-      arr2 = szobjs;
-      arr2.concat(arr);
-    }
-    else {
-      arr2 = arr;
-    }
-
-    this.loadModel(mod, arr2, function (success: boolean, objs: any, gltf: any) {
-      if (success) {
-        let ship: THREE.Object3D = objs['MainObject'];
-        ship.scale.set(.6, .6, .6);
-
-        if (loaded) {
-          loaded(success, ship, objs, gltf);
-        }
-        return ship;
-      }
-      else {
-        if (loaded) {
-          loaded(success, null, objs, gltf);
-        }
-        return null;
-      }
-    });
-  }
-  private loadModel(filename: string, obj_names_in_scene: Array<string>, afterLoad: any) {
+  public  loadModel(filename: Files.Model, obj_names_in_scene: Array<string>, afterLoad: AfterLoadModel) {
     Globals.logDebug('loading model "' + filename + '".')
     let that = this;
     let loader = new GLTFLoader_.GLTFLoader();
@@ -367,7 +297,7 @@ export class ModelManager {
         let success: boolean = true;
 
         //Grab a list of named objects the user requested. (why? we could just traverse the graph)
-        let arrobjs: any = [];
+        let arrobjs: Array<Object3D> = new Array<Object3D>();
         for (let i = 0; i < obj_names_in_scene.length; i++) {
           let sz = obj_names_in_scene[i];
 
@@ -377,7 +307,7 @@ export class ModelManager {
             success = false;
           }
           else {
-            arrobjs[sz] = obj;
+            arrobjs.push(obj);
           }
         }
 
@@ -708,6 +638,7 @@ export class VirtualButton {
   private _state: ButtonState = ButtonState.Up;
   get state(): ButtonState { return this._state; }
   public pressed(): boolean { return this.state === ButtonState.Press; }
+  public released(): boolean { return this.state === ButtonState.Release; }
   public down(): boolean { return this.state === ButtonState.Hold; }
   public pressOrHold(): boolean { return this.state === ButtonState.Hold || this.state == ButtonState.Press; }
   public update(pressed: boolean) {
@@ -799,6 +730,14 @@ export class Keyboard {
   get a(): VirtualButton { return this._a; }
   get d(): VirtualButton { return this._d; }
   get buttons() { return this._buttons; }
+
+  private _smoothAxis: boolean = false;  // Whether the X or Y axis smoothly transitions from -1, 0, 1.
+  public get SmoothAxis(): boolean { return this._smoothAxis; }
+  public set SmoothAxis(x: boolean) { this._smoothAxis = x; }
+
+  private _smoothAxisSpeed: number = 10;  // Whether the X or Y axis smoothly transitions from -1, 0, 1.
+  public get SmoothAxisSpeed(): number { return this._smoothAxisSpeed; }
+  public set SmoothAxisSpeed(x: number) { this._smoothAxisSpeed = x; }
 
   public controlDown: boolean = false;
 
@@ -903,8 +842,13 @@ export class Mouse extends Vector3 {
         that.moved = true;
       }
 
+      that.x = e.clientX;
+      that.y = e.clientY;
+      that.z = 0;
+
       //Look at the point in the screen projected into 3D
       let v2 = Globals.screen.getCanvasRelativeXY(e.clientX, e.clientY);
+
       v2.x = (v2.x / Globals.screen.canvas.width) * 2 - 1;
       v2.y = ((Globals.screen.canvas.height - v2.y) / Globals.screen.canvas.height) * 2 - 1;
 
@@ -922,7 +866,9 @@ export class Mouse extends Vector3 {
       let vxy3: Vector3 = new Vector3(vxy.x, vxy.y, vxy.z);
 
       vxy3.normalize().multiplyScalar(5);
-      vxy3.add(Globals.player.WorldPosition);
+      let campos = new vec3();
+      Globals.camera.getWorldPosition(campos);
+      vxy3.add(campos);
 
       Globals.camera.lookAt(new Vector3(vxy3.x, vxy3.y, vxy3.z));
 
@@ -952,6 +898,13 @@ export class VirtualController {
   public B: VirtualButton = new VirtualButton();
   public Trigger: VirtualButton = new VirtualButton();
   public Axis: Vector2 = new Vector2(); // a 
+
+  private c_immMoveAmt: number = 0.1;
+  public get MoveLeft(): boolean { return this.Axis.x < -this.c_immMoveAmt; }
+  public get MoveRight(): boolean { return  this.Axis.x > this.c_immMoveAmt; }
+  public get MoveUp(): boolean { return this.Axis.y > this.c_immMoveAmt; }
+  public get MoveDown(): boolean { return this.Axis.y < -this.c_immMoveAmt; }
+
   //Joystick or Keyboard.
   public anyButtonPressed() {
     return this.A.pressed() || this.B.pressed() || this.Trigger.pressed();
@@ -1038,6 +991,7 @@ export class Input {
         this.updateAxis_Keyboard(dt, this.left);
         this.right.Axis.copy(this.left.Axis);
 
+        //Update the positions of the VR controllers.
         this.right.Trigger.update(this.mouse.Left.pressOrHold());
         this.right.A.update(this.mouse.Right.pressOrHold());
         this.right.Position.copy(lookat);
@@ -1082,28 +1036,61 @@ export class Input {
     }
   }
   private updateAxis_Keyboard(dt: number, joy: VirtualController) {
-    const speed = 2.0;
 
-    if (this._keyboard.a.pressOrHold()) {
-      joy.Axis.x = Math.max(-1, joy.Axis.x - speed * dt);
-    }
-    else if (this._keyboard.d.pressOrHold()) {
-      joy.Axis.x = Math.min(1, joy.Axis.x + speed * dt);
+    if (this.keyboard.SmoothAxis === true) {
+      let speed = this.keyboard.SmoothAxisSpeed;
+      //Interpolate the keyboard based on a speed.
+      if (this.keyboard.a.pressOrHold()) {
+        joy.Axis.x = Math.max(-1, joy.Axis.x - speed * dt);
+      }
+      else if (this.keyboard.d.pressOrHold()) {
+        joy.Axis.x = Math.min(1, joy.Axis.x + speed * dt);
+      }
+      else {
+        if (joy.Axis.x < 0) {
+          joy.Axis.x = Math.min(0, joy.Axis.x + speed * dt);
+        }
+        else if (joy.Axis.x > 0) {
+          joy.Axis.x = Math.max(0, joy.Axis.x - speed * dt);
+        }
+      }
+      if (this.keyboard.s.pressOrHold()) {
+        joy.Axis.y = Math.max(-1, joy.Axis.y - speed * dt);
+      }
+      else if (this.keyboard.w.pressOrHold()) {
+        joy.Axis.y = Math.min(1, joy.Axis.y + speed * dt);
+      }
+      else {
+        if (joy.Axis.y < 0){
+          joy.Axis.y = Math.min(0, joy.Axis.y + speed * dt);
+        }
+        else if (joy.Axis.y > 0) {
+          joy.Axis.y = Math.max(0, joy.Axis.y - speed * dt);
+        }
+      }
     }
     else {
-      if (joy.Axis.x < 0) joy.Axis.x = Math.min(0, joy.Axis.x + speed * dt);
-      else if (joy.Axis.x > 0) joy.Axis.x = Math.max(0, joy.Axis.x - speed * dt);
+      //Immediate directional movement
+      if (this._keyboard.w.pressOrHold()) {
+        joy.Axis.y = 1;
+      }
+      else if (this._keyboard.s.pressOrHold()) {
+        joy.Axis.y = -1;
+      }
+      else{
+        joy.Axis.y = 0;
+      }
+      if (this._keyboard.a.pressOrHold()) {
+        joy.Axis.x = -1;
+      }
+      else if (this._keyboard.d.pressOrHold()) {
+        joy.Axis.x = 1;
+      }
+      else {
+        joy.Axis.x = 0;
+      }
     }
-    if (this._keyboard.s.pressOrHold()) {
-      joy.Axis.y = Math.max(-1, joy.Axis.y - speed * dt);
-    }
-    else if (this._keyboard.w.pressOrHold()) {
-      joy.Axis.y = Math.min(1, joy.Axis.y + speed * dt);
-    }
-    else {
-      if (joy.Axis.y < 0) joy.Axis.y = Math.min(0, joy.Axis.y + speed * dt);
-      else if (joy.Axis.y > 0) joy.Axis.y = Math.max(0, joy.Axis.y - speed * dt);
-    }
+
   }
 }
 /**
@@ -1137,37 +1124,39 @@ export class Frustum {
   public project(screen_x: number, screen_y: number, dist: number): Vector3 {
 
     let wrx = screen_x / Globals.screen.elementWidth;//) * 2 - 1;
-    let wry = screen_y / Globals.screen.elementWidth;//) * 2 + 1;
+    let wry = screen_y / Globals.screen.elementHeight;//) * 2 + 1;
 
     let dx = this._ftr.clone().sub(this._ftl).multiplyScalar(wrx);
     let dy = this._fbl.clone().sub(this._ftl).multiplyScalar(wry);
 
-    let back_plane: Vector3 = this._ftl.clone().add(dx).add(dy);
+    let back_plane: vec3 = this._ftl.clone().add(dx).add(dy);
 
-    let projected: Vector3 = back_plane.clone().sub(Globals.player.position).normalize().multiplyScalar(dist);
+    let cam_pos: vec3 = new vec3();
+    Globals.camera.getWorldPosition(cam_pos);
 
-    let cam_pos: Vector3 = new Vector3();
-    Globals.player.getWorldPosition(cam_pos);
+    let projected: vec3 = back_plane.clone().sub(cam_pos).normalize().multiplyScalar(dist);
+
     projected.add(cam_pos);
 
     return projected;
   }
-  public construct(cam_dir: Vector3 = null, cam_pos: Vector3 = null) {
+  public construct(cam_dir: vec3 = null, cam_pos: vec3 = null) {
     //Doing this the old way
-    if (cam_dir == null) {
-      cam_dir = new Vector3();
+    if (cam_dir === null) {
+      cam_dir = new vec3();
       Globals.camera.getWorldDirection(cam_dir);
     }
-    if (cam_pos == null) {
-      cam_pos = new Vector3();
-      Globals.player.getWorldPosition(cam_pos);
+    if (cam_pos === null) {
+      cam_pos = new vec3();
+      Globals.camera.getWorldPosition(cam_pos);
     }
 
-    let nearCenter: Vector3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.near));
-    let farCenter: Vector3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.far));
+    let nearCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.near));
+    let farCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.far));
     let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
-    let tan_fov_2 = Math.tan(THREE.Math.degToRad(Globals.camera.getEffectiveFOV()) / 2.0);
-    let rightVec = Globals.camera.up.clone().cross(cam_dir);
+    let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV()) ;
+    let tan_fov_2 = Math.tan(fov / 2.0);
+    let rightVec = cam_dir.clone().cross(Globals.camera.up);
 
     let w_far_2 = tan_fov_2 * Globals.camera.far;
     let h_far_2 = w_far_2 * ar;

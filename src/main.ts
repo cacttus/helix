@@ -1,25 +1,18 @@
 import * as THREE from 'three';
 import {
   Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D,
-  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute
+  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute, NormalBlending, WrapAroundEnding
 } from 'three';
 import { Globals, GameState } from './Globals';
 import { basename } from 'upath';
 import { Utils } from './Utils';
-import { Random } from './Base';
+import { Random, ModelManager, AfterLoadFunction, Frustum } from './Base';
+import { vec2, vec3, vec4, mat3, mat4 } from './Math';
+import * as Files from './Files';
+import world_data from './game_world.json';
 
-import vec3 = THREE.Vector3;
-import vec2 = THREE.Vector2;
-import vec4 = THREE.Vector4;
-import mat4 = THREE.Matrix4;
-class ivec2 {
-  public x: number = 0 | 0;
-  public y: number = 0 | 0;
-}
 
-interface AfterLoadFunction { (x: any): void; };
-
-class ImageResource {
+export class ImageResource {
   private _location: string = "";
   public get Location(): string { return this._location; }
   //[Jsonignore]
@@ -42,7 +35,7 @@ class ImageResource {
     this.Texture.generateMipmaps = true;
   }
 }
-class Atlas extends ImageResource {
+export class Atlas extends ImageResource {
   /*
   This is the sprite sheet.
 
@@ -102,8 +95,8 @@ class Atlas extends ImageResource {
     this.load(tex, afterLoad);
   }
 }
-//A sub-image of a texture.
-class SpriteFrame {
+export class SpriteFrame {
+  //A sub-image of a texture.
   //Technically we should allow multiple textures and batching, but for now, just one texture.
   public x: number = 0;
   public y: number = 0;
@@ -117,9 +110,39 @@ class SpriteFrame {
     this.h -= amt * 2;
   }
 }
-enum SpriteKeyFrameInterpolation { Linear, Step }
-//Keyframe for animation
-class SpriteKeyFrame {
+
+class FDef {
+  //Quick Sprite Keyframe Definition
+  p: vec2 = null;
+  h: boolean = false;
+  v: boolean = false;
+  c: vec4 = null;
+  image_interpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
+
+  public constructor(dp: vec2 = null, dh: boolean = null, dv: boolean = null, dc: vec4 = null, ii: SpriteKeyFrameInterpolation = null) {
+    this.p = dp;
+    this.h = dh;
+    this.v = dv;
+    this.c = dc;
+    this.image_interpolation = ii;
+  }
+  public clone(): FDef {
+    let f: FDef = new FDef();
+    f.copy(this);
+    return f;
+  }
+  public copy(other: FDef) {
+    this.p = other.p ? other.p.clone() : null;
+    this.h = other.h;
+    this.v = other.v;
+    this.c = other.c ? other.c.clone() : null;
+    this.image_interpolation = other.image_interpolation;
+  }
+}
+
+export enum SpriteKeyFrameInterpolation { Linear, Step }
+export class SpriteKeyFrame {
+  //Keyframe for animation
   public _parent: SpriteAnimationData = null;//MUST SET
   public _frame: SpriteFrame = null; //The frame the sprite gets set to
   public _position: vec3 = new vec3(0, 0);
@@ -130,11 +153,20 @@ class SpriteKeyFrame {
   public _duration: number = 0;
   public _transformInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Linear;
   public _imageInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
+  public _colorInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Linear;
+  public _flipH: boolean = false;
+  public _flipV: boolean = false;
 
+  public get FlipH(): boolean { return this._flipH; }
+  public set FlipH(x: boolean) { this._flipH = x; }
+  public get FlipV(): boolean { return this._flipV; }
+  public set FlipV(x: boolean) { this._flipV = x; }
   public get TransformInterpolation(): number { return this._transformInterpolation; }
   public set TransformInterpolation(x: number) { this._transformInterpolation = x; }
   public get ImageInterpolation(): number { return this._imageInterpolation; }
   public set ImageInterpolation(x: number) { this._imageInterpolation = x; }
+  public get ColorInterpolation(): number { return this._colorInterpolation; }
+  public set ColorInterpolation(x: number) { this._colorInterpolation = x; }
   public get Duration(): number { return this._duration; }
   public set Duration(x: number) { this._duration = x; }
   public get Frame(): SpriteFrame { return this._frame; }
@@ -153,8 +185,8 @@ class SpriteKeyFrame {
     this._parent = parent;
   }
 }
-//Animation sequence for a single sprite component.
-class SpriteAnimationData {
+export class SpriteAnimationData {
+  //Animation sequence for a single sprite component.
   private _name: string = "";
   private _lstKeyFrames: Array<SpriteKeyFrame> = new Array<SpriteKeyFrame>();
 
@@ -176,148 +208,30 @@ class SpriteAnimationData {
     this._name = name;
   }
 }
-enum AnimationPlayback { Playing, Pauseed, Stopped }
-enum DirtyFlag { Transform = 0x01, UVs = 0x02, Normals = 0x04, Colors = 0x08, All = 0x01 | 0x02 | 0x04 | 0x08 }
-//A sprite component. Arm/leg of a creature, etc.  Represents a single tile or image e.g. a quad.
-class Sprite25D {
-  private static _idGen = 1; // Do not clone
-  private _uniqueId: number = 0;// DO NOT CLONE
-  private _worldView: WorldView25D = null; // Do not clone
-  private _dirty: boolean = false;// Do not clone MUST default to false.  
-  private _destroyed: boolean = false; // Do not clone
+export enum AnimationPlayback { Playing, Pauseed, Stopped }
+class Animation25D {
+  //Separate class to deal with animations and transitinos.  Just because Sprite25D was getting big.
 
-  private _location: vec3 = new vec3(0, 0, 0);
-  private _rotation: Quaternion = new Quaternion(0, 0, 0, 0);
-  private _scale: vec2 = new vec2(1, 1);
-  private _animated_location: vec3 = new vec3(0, 0, 0);
+  private _animated_location: vec3 = new vec3(0, 0, 0); // Animated attributes.  These are applied if there is animation on the object.
   private _animated_rotation: Quaternion = new Quaternion(0, 0, 0, 0);
   private _animated_scale: vec2 = new vec2(1, 1);
 
-  private _size: vec2 = new vec2(1, 1); // this is actual size of geometry
-  private _origin: vec3 = new vec3(0, 0, 0);
-  private _children: Array<Sprite25D> = new Array<Sprite25D>();
-  private _parent: Sprite25D = null; // Do not clone
-  private _visible: boolean = true;
-  private _dirtyFlags: number = 0 | 0; // Do not clone
-
   private _frame: SpriteFrame = null;
-  private _bufferOffset: number = -1; //Do not clone. // The offset of this tile in the tile buffer, -1 = not rendered
+  private _frame2: SpriteFrame = null; //Second frame to blend to.
+  private _frameBlend: number = 0; // blend amount for the given frame.
 
   private _loop: boolean = true;
   private _animations: Map<string, SpriteAnimationData> = new Map<string, SpriteAnimationData>();//Shared -> Map of animation name to the data.
-  private _curAnimation: SpriteAnimationData = null;
+  private _currentAnimation: SpriteAnimationData = null;
   private _animationTime: number = 0;
   private _animationSpeed: number = 1;//multiplier
   private _playback: AnimationPlayback = AnimationPlayback.Stopped;
 
-  public get UniqueId(): number { return this._uniqueId; }
-  public get Origin(): vec3 { return this._origin; }
-  public get DirtyFlags(): number { return this._dirtyFlags; }
-  public get Visible(): boolean { return this._visible; }
-  public set Visible(x: boolean) {
-    if (this._visible !== x) {
-      this.markDirty();
-    }
-    this._visible = x;
-  }
-  public get Parent(): Sprite25D { return this._parent; }
-  public get Children(): Array<Sprite25D> { return this._children; }
-  public get WorldView(): WorldView25D { return this._worldView; }
-  public set WorldView(x: WorldView25D) { this._worldView = x; }
+  private _sprite: Sprite25D = null;
 
-  public get Dirty(): boolean { return this._dirty; }
+  public get Playback(): AnimationPlayback { return this._playback; }
 
-  public get Destroyed(): boolean { return this._destroyed; }
-  public set Destroyed(x: boolean) { this._destroyed = x; }
-
-  public get Position(): vec3 { return this._location; }
-  public set Position(x: vec3) {
-    if (this._location.x !== x.x ||
-      this._location.y !== x.y ||
-      this._location.z !== x.z) {
-      this.markDirty();
-    }
-    this._location = x;
-  }
-  public get Rotation(): Quaternion { return this._rotation; }
-  public set Rotation(x: Quaternion) {
-    if (this._rotation.x !== x.x ||
-      this._rotation.y !== x.y ||
-      this._rotation.z !== x.z ||
-      this._rotation.w !== x.w) {
-      this.markDirty();
-    }
-    this._rotation = x;
-  }
-  public get Scale(): vec2 { return this._scale; }
-  public set Scale(x: vec2) {
-    if (this._scale.x !== x.x ||
-      this._scale.y !== x.y) {
-      this.markDirty();
-    }
-    this._scale = x;
-  }
-
-  //Tile versions are animated positions.  Not the position of this object.
-  public get AnimatedPosition(): vec3 { return this._animated_location; }
-  public set AnimatedPosition(x: vec3) {
-    if (this._animated_location.x !== x.x ||
-      this._animated_location.y !== x.y ||
-      this._animated_location.z !== x.z) {
-      this.markDirty();
-    }
-    this._animated_location = x;
-  }
-  public get AnimatedRotation(): Quaternion { return this._animated_rotation; }
-  public set AnimatedRotation(x: Quaternion) {
-    if (this._animated_rotation.x !== x.x ||
-      this._animated_rotation.y !== x.y ||
-      this._animated_rotation.z !== x.z ||
-      this._animated_rotation.w !== x.w) {
-      this.markDirty();
-    }
-    this._animated_rotation = x;
-  }
-  public get AnimatedScale(): vec2 { return this._animated_scale; }
-  public set AnimatedScale(x: vec2) {
-    if (this._animated_scale.x !== x.x ||
-      this._animated_scale.y !== x.y) {
-      this.markDirty();
-    }
-    this._animated_scale = x;
-  }
-
-  public get Size(): vec2 { return this._size; }
-  public set Size(x: vec2) {
-    if (this._size.x !== x.x || this._size.y !== x.y) {
-      this.markDirty();
-    }
-    this._size = x;
-  }
-  public get Width(): number { return this._size.x; }
-  public set Width(x: number) {
-    if (this._size.x != x) {
-      this.markDirty();
-    }
-    this._size.x = x;
-  }
-  public get Height(): number { return this._size.y; }
-  public set Height(x: number) {
-    if (this._size.y !== x) {
-      this.markDirty();
-    }
-    this._size.y = x;
-  }
-  public get Frame(): SpriteFrame { return this._frame; }
-  public set Frame(x: SpriteFrame) {
-    if (this._frame !== x) {
-      this.markDirty();
-    }
-    this._frame = x;
-  }
-  public get BufferOffset(): number { return this._bufferOffset; }
-  public set BufferOffset(x: number) { this._bufferOffset = x; }
-
+  public get Sprite(): Sprite25D { return this._sprite; }
   public get AnimationTime(): number { return this._animationTime; }
   public set AnimationTime(x: number) { this._animationTime = x; }
   public get AnimationSpeed(): number { return this._animationSpeed; }
@@ -325,154 +239,80 @@ class Sprite25D {
   public get Animations(): Map<string, SpriteAnimationData> { return this._animations; }
   public get Loop(): boolean { return this._loop; }
 
-  public constructor() {
-    this._uniqueId = Sprite25D._idGen++;
-  }
+  //Tile versions are animated positions.  Not the position of this object.
+  public get AnimatedPosition(): vec3 { return this._animated_location; }
+  public set AnimatedPosition(x: vec3) { this._animated_location = x; }
+  public get AnimatedRotation(): Quaternion { return this._animated_rotation; }
+  public set AnimatedRotation(x: Quaternion) { this._animated_rotation = x; }
+  public get AnimatedScale(): vec2 { return this._animated_scale; }
+  public set AnimatedScale(x: vec2) { this._animated_scale = x; }
+  public get CurrentAnimation(): SpriteAnimationData { return this._currentAnimation; }
 
-  public copy(other: Sprite25D) {
-    //We do not clone every member, see comments above.
-    this._location = other._location.clone();
-    this._rotation = other._rotation.clone();
-    this._scale = other._scale.clone();
-    this._size = other._size.clone();
-    this._origin = other._origin.clone();
-
-    for (let ci = 0; ci < other._children.length; ci++) {
-      this._children.push(other._children[ci].clone());
+  public get Frame(): SpriteFrame { return this._frame; }
+  public set Frame(x: SpriteFrame) {
+    if (this._frame !== x) {
+      this.Sprite.markDirty(DirtyFlag.UVs);
     }
-    this._visible = other._visible;
+    this._frame = x;
+  }
+  public get Frame2(): SpriteFrame { return this._frame2; }
+  public set Frame2(x: SpriteFrame) {
+    if (this._frame2 !== x) {
+      this.Sprite.markDirty(DirtyFlag.UVs);
+    }
+    this._frame2 = x;
+  }
+  public get FrameBlend(): number { return this._frameBlend; }
+  public set FrameBlend(x: number) { this._frameBlend = x; }
 
-    this._frame = other._frame;
+  public constructor(sprite: Sprite25D) {
+    this._sprite = sprite;
+  }
+  public copy(other: Animation25D) {
 
     this._loop = other._loop;
     this._animations = other._animations; // this is a shallow copy.  Animation data is shared.
-    this._curAnimation = other._curAnimation;
+    this._currentAnimation = other._currentAnimation;
     this._animationTime = other._animationTime;
     this._animationSpeed = other._animationSpeed;
     this._playback = other._playback;
+
+    this._frame = other._frame;
+    this._frame2 = other._frame2;
+    this._frameBlend = other._frameBlend;
+
   }
-  public clone(): Sprite25D {
-    let ret = new Sprite25D();
+  public clone(parent: Sprite25D): Animation25D {
+    let ret: Animation25D = new Animation25D(parent);
     ret.copy(this);
     return ret;
   }
+
+
   public update(dt: number) {
-    this.animate(dt);
+    //Update Animation
+    if (this.Playback === AnimationPlayback.Playing) {
+      let anim = this._currentAnimation;
 
-    for (let ci = 0; ci < this._children.length; ++ci) {
-      this._children[ci].update(dt);
+      if (anim) {
+        if (anim.KeyFrames.length > 0) {
+          this._animationTime += dt * this._animationSpeed;
+
+          let ob = this.getFrames(anim);
+          let kflen = this._currentAnimation.KeyFrames.length;
+          if (ob.frameA >= 0 &&
+            ob.frameA <= kflen &&
+            ob.frameB >= 0 &&
+            ob.frameB <= kflen) {
+
+            let keyA = anim.KeyFrames[ob.frameA];
+            let keyB = anim.KeyFrames[ob.frameB];
+            this.interpolateKeyFrames(keyA, keyB, ob.t01);
+          }
+
+        }//anim.keyframes.length > 0
+      }//if(anim)
     }
-  }
-  public add(ob: Sprite25D) {
-    this._children.push(ob);
-    ob._parent = this;
-  }
-  public remove(ob: Sprite25D) {
-    for (let i = 0; i < this._children.length; i--) {
-      if (this._children[i] === ob) {
-        this._children.splice(i, 1);
-        ob._parent = null;
-        break;
-      }
-    }
-  }
-  public destroy() {
-    if (this.WorldView) {
-      this.WorldView.destroyObject25(this);
-      for (let ci = 0; ci < this._children.length; ++ci) {
-        this._children[ci].destroy();
-      }
-    }
-  }
-  public markDirty(flags: number = DirtyFlag.All) {
-    if (this._dirty === false) {
-      if (this.WorldView) {
-        this._dirty = true;
-        this._dirtyFlags |= flags;
-        this.WorldView.markDirty(this);
-      }
-    }
-  }
-  public clearDirty() {
-    this._dirty = false;
-    this._dirtyFlags = 0;
-  }
-  public stop() {
-    this._playback = AnimationPlayback.Stopped;
-  }
-  public play(animation_name: string = null) {
-    if (animation_name === null) {
-      if (this._curAnimation) {
-        this._playback = AnimationPlayback.Playing;
-      }
-    }
-    else {
-      let d = this._animations.get(animation_name);
-      if (d) {
-        this._curAnimation = d;
-        this._playback = AnimationPlayback.Playing;
-      }
-      else {
-        //not found.
-      }
-    }
-
-    for (const c of this.Children) {
-      c.play(animation_name);
-    }
-  }
-  public addAnimation(animation_name: string, tiles: Array<ivec2>, duration: number, atlas: Atlas): SpriteAnimationData {
-    let ret = new SpriteAnimationData(animation_name);
-
-    //Create Tiles.
-    let sw = atlas.TileWidth / atlas.ImageWidth;
-    let sh = atlas.TileHeight / atlas.ImageHeight;
-    for (let ti = 0; ti < tiles.length; ++ti) {
-      let v = tiles[ti];
-
-      let kf = new SpriteKeyFrame(ret);
-      kf.Frame = new SpriteFrame();
-      kf.Frame.x = (atlas.LeftPad + v.x * (atlas.TileWidth + atlas.SpaceX)) / atlas.ImageWidth;
-      //Tex is in gl coords from bot left corner. so 0,0 is actually 0,h-1
-      kf.Frame.y = 1 - (atlas.TopPad + v.y * (atlas.TileHeight + atlas.SpaceY)) / atlas.ImageHeight - sh;
-      kf.Frame.w = sw;
-      kf.Frame.h = sh;
-
-      kf.Frame.shrink(0.0001);
-
-      kf.Duration = duration / tiles.length;
-
-      ret.KeyFrames.push(kf);
-    }
-    this.Animations.set(animation_name, ret);
-
-    ret.calcDuration();
-
-    return ret;
-  }
-
-  private animate(dt: number) {
-    let anim = this._curAnimation;
-
-    if (anim) {
-      if (anim.KeyFrames.length > 0) {
-        this._animationTime += dt * this._animationSpeed;
-
-        let ob = this.getFrames(anim);
-        let kflen = this._curAnimation.KeyFrames.length;
-        if (ob.frameA >= 0 &&
-          ob.frameA <= kflen &&
-          ob.frameB >= 0 &&
-          ob.frameB <= kflen) {
-
-          let keyA = anim.KeyFrames[ob.frameA];
-          let keyB = anim.KeyFrames[ob.frameB];
-          this.interpolateFrames(keyA, keyB, ob.t01);
-        }
-
-      }//anim.keyframes.length > 0
-    }//if(anim)
-
   }
   private getFrames(anim: SpriteAnimationData): any {
     //Return value is an object.
@@ -516,39 +356,374 @@ class Sprite25D {
 
     return ob;
   }
-  private interpolateFrames(keyA: SpriteKeyFrame, keyB: SpriteKeyFrame, t01: number) {
-    if (keyB.TransformInterpolation === SpriteKeyFrameInterpolation.Linear) {
-      let p = keyA.Position.clone().lerp(keyB.Position, t01);
-      let s = keyA.Scale.clone().lerp(keyB.Scale, t01);
-      let r = keyA.Rotation.clone().slerp(keyB.Rotation, t01);
+  private interpolateKeyFrames(keyA: SpriteKeyFrame, keyB: SpriteKeyFrame, t01: number) {
+    //KeyB can be null, in which case we just set the keyframe to be frame A and we ignore t01
 
-      if (this.Parent) {
-        p.add(this.Parent.Position);
-        s.multiply(this.Parent.Scale);
-        r.multiply(this.Parent.Rotation);
+    let p: vec3 = null;
+    let r: Quaternion = null;
+    let s: vec2 = null;
+    let c: vec4 = null;
+
+    if (keyB === null) {
+      p = keyA.Position;
+      s = keyA.Scale;
+      r = keyA.Rotation;
+      c = keyA.Color;
+    }
+    else {
+      if (keyB.TransformInterpolation === SpriteKeyFrameInterpolation.Linear) {
+        p = keyA.Position.clone().lerp(keyB.Position, t01);
+        s = keyA.Scale.clone().lerp(keyB.Scale, t01);
+        r = keyA.Rotation.clone().slerp(keyB.Rotation, t01);
+      }
+      else if (keyB.TransformInterpolation === SpriteKeyFrameInterpolation.Step) {
+        p = keyA.Position;
+        s = keyA.Scale;
+        r = keyA.Rotation;
       }
 
-      this.AnimatedPosition = p;
-      this.AnimatedScale = s;
-      this.AnimatedRotation = r;
+      if (keyB.ColorInterpolation === SpriteKeyFrameInterpolation.Linear) {
+        c = keyA.Color.clone().lerp(keyB.Color, t01);
+      }
+      else if (keyB.ColorInterpolation === SpriteKeyFrameInterpolation.Step) {
+        c = keyA.Color;
+      }
     }
-    //TODO: image interpolation
-    //if(keyB.ImageInterpolation === SpriteKeyFrameInterpolation.Linear){
-    this.Frame = keyA.Frame;
-    //}
+
+    if (this.Sprite.Parent) {
+      p.add(this.Sprite.Parent.Position);
+      s.multiply(this.Sprite.Parent.Scale);
+      r.multiply(this.Sprite.Parent.Rotation);
+      c.x *= this.Sprite.Parent.Color.x; // Apply parent color
+      c.y *= this.Sprite.Parent.Color.y;
+      c.z *= this.Sprite.Parent.Color.z;
+      c.w *= this.Sprite.Parent.Color.w;
+    }
+
+    this.AnimatedPosition = p;
+    this.AnimatedScale = s;
+    this.AnimatedRotation = r;
+    this.Sprite.Color = c;
+    this.Sprite.FlipH = keyA.FlipH;
+    this.Sprite.FlipV = keyA.FlipV;
+
+    //TODO: blended image interpolation
+    if (keyB && keyB.ImageInterpolation === SpriteKeyFrameInterpolation.Linear) {
+      this.Frame = keyA.Frame;
+      this.Frame2 = keyB.Frame;
+      this.FrameBlend = t01;
+    }
+    else {
+      this.Frame = keyA.Frame;
+      this.Frame2 = null;
+      this.FrameBlend = 0;
+    }
   }
 
+  public setKeyFrame(frameIndex: number, anim: SpriteAnimationData = null) {
+    if (anim === null) {
+      anim = this._currentAnimation;
+    }
+    //Sets the given keyframe data for the character.
+    if (anim) {
+      if (anim.KeyFrames.length > frameIndex) {
+        let key = anim.KeyFrames[frameIndex];
+        this.interpolateKeyFrames(key, null, 0);
+      }
+      else {
+        Globals.logError("Tried to set invalid keyframe for obj " + this.Sprite.Name + " index : " + frameIndex);
+      }
+    }
+  }
+  public pause() {
+    this._playback = AnimationPlayback.Stopped;
+    for (const c of this.Sprite.Children) {
+      c.Animation.pause();
+    }
+  }
+  public play(animation_name: string = null, preventRestart: boolean = false) {
+    //if PreventRestart is true, then skip setting a new animation if the same animation is already playing.
+    if (animation_name === null) {
+      if (this._currentAnimation) {
+        this._playback = AnimationPlayback.Stopped;
+      }
+      this._currentAnimation = null;
+    }
+    else if (this.CurrentAnimation !== null && (this.CurrentAnimation.Name === animation_name) && preventRestart) {
+      //Do not play new animation.  It's already playing and we dont' want to interrupt.
+    }
+    else {
+      let d = this._animations.get(animation_name);
+      if (d) {
+        this._currentAnimation = d;
+        this._playback = AnimationPlayback.Playing;
+      }
+      else {
+        //not found.
+      }
+    }
+
+    for (const c of this.Sprite.Children) {
+      c.Animation.play(animation_name);
+    }
+  }
+  public addTiledAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, imageSize: vec2 = null) {
+    //Frames should be the top left corner (root) of the animated image.
+    for (let jtile = 0; jtile < imageSize.y; ++jtile) {
+      for (let itile = 0; itile < imageSize.x; ++itile) {
+
+        if (itile === 0 && jtile === 0) {
+          this.Sprite.SubTile = new vec2(itile, jtile);
+          //Root tile is tile 0,0
+          //Add the animation to THIS sprite.
+          this.addAnimation(animation_name, frames, duration, atlas);
+        }
+        else {
+          let sp: Sprite25D = this.Sprite.getSubTile(itile, jtile);
+          if (sp === null) {
+            sp = new Sprite25D();
+            sp.SubTile = new vec2(itile, jtile);
+            this.Sprite.add(sp);
+          }
+
+          let newframes: Array<FDef> = new Array<FDef>();
+          for (let ff of frames) {
+            let newfr = ff.clone();
+            newfr.p.x = (ff.p.x + itile) | 0;
+            newfr.p.y = (ff.p.y + jtile) | 0;
+            newframes.push(newfr);
+          }
+          sp.Animation.addAnimation(animation_name, newframes, duration, atlas);
+          sp.Position.set(this.Sprite.Position.x + itile * this.Sprite.Size.x, this.Sprite.Position.y + jtile * this.Sprite.Size.y, this.Sprite.Position.z);
+        }
+
+      }
+    }
+  }
+  public addAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas): SpriteAnimationData {
+    let ret = new SpriteAnimationData(animation_name);
+
+    //Create Tiles.
+    let sw = atlas.TileWidth / atlas.ImageWidth;
+    let sh = atlas.TileHeight / atlas.ImageHeight;
+    for (let iframe = 0; iframe < frames.length; ++iframe) {
+      let def: FDef = frames[iframe];
+
+      let kf = new SpriteKeyFrame(ret);
+      kf.Frame = new SpriteFrame();
+      kf.Frame.x = (atlas.LeftPad + def.p.x * (atlas.TileWidth + atlas.SpaceX)) / atlas.ImageWidth;
+      //Tex is in gl coords from bot left corner. so 0,0 is actually 0,h-1
+      kf.Frame.y = 1 - (atlas.TopPad + def.p.y * (atlas.TileHeight + atlas.SpaceY)) / atlas.ImageHeight - sh;
+      kf.Frame.w = sw;
+      kf.Frame.h = sh;
+      kf.Frame.shrink(0.0001);
+
+      kf.Color = def.c ? def.c : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
+      kf.FlipH = def.h ? def.h : false;
+      kf.FlipV = def.v ? def.v : false;
+
+      kf.ImageInterpolation = def.image_interpolation;
+
+      kf.Duration = duration / frames.length;
+
+      ret.KeyFrames.push(kf);
+    }
+    this.Animations.set(animation_name, ret);
+
+    ret.calcDuration();
+
+    return ret;
+  }
+}
+export enum DirtyFlag { /*Transform = 0x01,*/ UVs = 0x02, Normals = 0x04, Colors = 0x08, All = 0x01 | 0x02 | 0x04 | 0x08 }
+class Sprite25D {
+  private _subTile: vec2 = null; //If set, this tile is a collection of other subtiles.
+
+  private static _idGen = 1; // Do not clone
+  private _name: string = "";
+  private _uniqueId: number = 0;// DO NOT CLONE
+  private _worldView: WorldView25D = null; // Do not clone
+  private _dirty: boolean = false;// Do not clone MUST default to false.  
+  private _destroyed: boolean = false; // Do not clone
+
+  private _location: vec3 = new vec3(0, 0, 0); // Location of the object (relative to parent or scene).  This is not animated.
+  private _rotation: Quaternion = new Quaternion(0, 0, 0, 0);
+  private _scale: vec2 = new vec2(1, 1);
+
+  private _size: vec2 = new vec2(1, 1); // this is actual size of geometry
+  private _origin: vec3 = new vec3(0, 0, 0);
+  private _children: Array<Sprite25D> = new Array<Sprite25D>();
+  private _parent: Sprite25D = null; // Do not clone
+  private _visible: boolean = true;
+  private _dirtyFlags: number = 0 | 0; // Do not clone
+
+  private _color: vec4 = new vec4(1, 1, 1, 1);
+  public _flipH: boolean = false;
+  public _flipV: boolean = false;
+  public _animation: Animation25D = null;
+
+  public get Animation(): Animation25D { return this._animation; }
+
+  public get Name(): string { return this._name; }
+  public set Name(x: string) { this._name = x; }
+  public get SubTile(): vec2 { return this._subTile; }
+  public set SubTile(x: vec2) { this._subTile = x; }
+
+  public get Color(): vec4 { return this._color; }
+  public set Color(x: vec4) { this._color = x; this.markDirty(DirtyFlag.Colors); }
+  public get FlipH(): boolean { return this._flipH; }
+  public set FlipH(x: boolean) { this._flipH = x; }
+  public get FlipV(): boolean { return this._flipV; }
+  public set FlipV(x: boolean) { this._flipV = x; }
+
+  public get UniqueId(): number { return this._uniqueId; }
+  public get Origin(): vec3 { return this._origin; }
+  public get DirtyFlags(): number { return this._dirtyFlags; }
+  public get Visible(): boolean { return this._visible; }
+  public set Visible(x: boolean) { this._visible = x; }
+  public get Parent(): Sprite25D { return this._parent; }
+  public get Children(): Array<Sprite25D> { return this._children; }
+  public get WorldView(): WorldView25D { return this._worldView; }
+  public set WorldView(x: WorldView25D) { this._worldView = x; }
+
+  public get Dirty(): boolean { return this._dirty; }
+
+  public get Destroyed(): boolean { return this._destroyed; }
+  public set Destroyed(x: boolean) { this._destroyed = x; }
+
+  public get Position(): vec3 { return this._location; }
+  public set Position(x: vec3) { this._location = x; }
+  public get Rotation(): Quaternion { return this._rotation; }
+  public set Rotation(x: Quaternion) { this._rotation = x; }
+  public get Scale(): vec2 { return this._scale; }
+  public set Scale(x: vec2) { this._scale = x; }
+
+  public get Size(): vec2 { return this._size; }
+  public set Size(x: vec2) { this._size = x; }
+  public get Width(): number { return this._size.x; }
+  public set Width(x: number) { this._size.x = x; }
+  public get Height(): number { return this._size.y; }
+  public set Height(x: number) { this._size.y = x; }
+
+
+  public constructor(name: string = null) {
+    if (name) {
+      this._name = name;
+    }
+
+    this._uniqueId = Sprite25D._idGen++;
+    this._animation = new Animation25D(this);
+  }
+
+  public copy(other: Sprite25D) {
+    //We do not clone every member, see comments above.
+    this._location = other._location.clone();
+    this._rotation = other._rotation.clone();
+    this._scale = other._scale.clone();
+    this._size = other._size.clone();
+    this._origin = other._origin.clone();
+
+    for (let ci = 0; ci < other._children.length; ci++) {
+      this._children.push(other._children[ci].clone());
+    }
+    this._visible = other._visible;
+
+
+    this._animation = other._animation.clone(this);
+
+    this._color = other._color;
+    this._subTile = other._subTile.clone();
+    this._flipH = other._flipH;
+    this._flipV = other._flipV;
+  }
+  public clone(): Sprite25D {
+    let ret = new Sprite25D();
+    ret.copy(this);
+    return ret;
+  }
+  public update(dt: number) {
+    this.Animation.update(dt);
+
+    for (let ci = 0; ci < this._children.length; ++ci) {
+      this._children[ci].update(dt);
+    }
+  }
+  public add(ob: Sprite25D) {
+    if (this.findById(ob.UniqueId) !== null) {
+      Globals.logError("Tried to add duplicate sprite to hierarchy.");
+    }
+    else {
+      this._children.push(ob);
+      ob._parent = this;
+    }
+  }
+  public findById(id: number) {
+    let ret: { x: Sprite25D; } = { x: null };
+    this.findById_r(id, ret);
+    return ret.x;
+  }
+  private findById_r(id: number, ret: { x: Sprite25D }) {
+    if (this.UniqueId === id) {
+      ret.x = this;
+      return;
+    }
+    else {
+      for (let c of this.Children) {
+        c.findById_r(id, ret);
+        if (ret.x) {
+          break;
+        }
+      }
+    }
+  }
+  public remove(ob: Sprite25D) {
+    for (let i = 0; i < this._children.length; i--) {
+      if (this._children[i] === ob) {
+        this._children.splice(i, 1);
+        ob._parent = null;
+        break;
+      }
+    }
+  }
+  public destroy() {
+    if (this.WorldView) {
+      this.WorldView.destroyObject25(this);
+      for (let ci = 0; ci < this._children.length; ++ci) {
+        this._children[ci].destroy();
+      }
+    }
+  }
+  public getSubTile(i: number, j: number): Sprite25D {
+    //Returns the SubTile at the given i,j offset
+    let ret: { x: Sprite25D; } = { x: null };
+    this.getSubTile_r(i, j, ret);
+    return ret.x;
+  }
+  private getSubTile_r(i: number, j: number, ret: { x: Sprite25D }) {
+    if (this.SubTile && this.SubTile.x === i && this.SubTile.y === j) {
+      ret.x = this;
+    }
+    else {
+      for (let c of this.Children) {
+        c.getSubTile_r(i, j, ret);
+        if (ret.x) { }
+        break;
+      }
+    }
+  }
+
+  public markDirty(flags: number = DirtyFlag.All) {
+    this._dirty = true;
+    this._dirtyFlags |= flags;
+  }
+  public clearDirty() {
+    this._dirty = false;
+    this._dirtyFlags = 0;
+  }
 
 }
-//Somewhat Optimized buffer for rendering quads
-class TileBuffer extends THREE.BufferGeometry {
-
+export class TileBuffer extends THREE.BufferGeometry {
   private _bufferSizeTiles: number = 0;
-
-  //Note: the _tiles array allocation matches the buffer array.  It's sort of a slot map.
-  private _tiles: Array<Sprite25D> = new Array<Sprite25D>();
-  // private _destroyed: Array<Tile25D> = new Array<Tile25D>();
-  //private _dirty: Array<Tile25D> = new Array<Tile25D>();
 
   private _vsiz: number = 3;
   private _nsiz: number = 3;
@@ -566,8 +741,6 @@ class TileBuffer extends THREE.BufferGeometry {
 
   private _updFlags: number = 0;
 
-  //public get Tiles(): Array<Tile25D> { return this._tiles; }
-
   //Custom shaders
   //https://bl.ocks.org/duhaime/c8375f1c313587ac629e04e0253481f9
   //Updateing buffers
@@ -579,13 +752,6 @@ class TileBuffer extends THREE.BufferGeometry {
   }
   public allocate(numTiles: number) {
     this._bufferSizeTiles = numTiles;
-
-
-    //The tiles array matches the buffer.  it's initialized to null to indicate that this buffer slot is not taken.
-    this._tiles = new Array<Sprite25D>(numTiles);
-    for (let i = 0; i < this._tiles.length; ++i) {
-      this._tiles[i] = null;
-    }
 
     this.setDrawRange(0, 0);
 
@@ -627,90 +793,61 @@ class TileBuffer extends THREE.BufferGeometry {
 
     this.setIndex(indexes);
   }
-  public addTile(tile: Sprite25D) {
-    for (let i = 0; i < this._tiles.length; ++i) {
-      if (this._tiles[i] === null) {
-        this._tiles[i] = tile;
-        tile.BufferOffset = i;
-
-        //Really, this is suboptimal, we need to use the maximum filled buffer slot
-        if (i + 1 > this._usedBufferLengthTiles) {
-          this._usedBufferLengthTiles = i + 1;
-        }
-        break;
-      }
-    }
-    tile.markDirty(DirtyFlag.All);
-    this.updateBufferRange();
-  }
-  public removeTile(tile: Sprite25D) {
-    if (tile.BufferOffset !== -1) {
-      //if -1 then the tile was not added.
-      let off: number = tile.BufferOffset;
-      this._tiles[off] = null;
-    }
-
-    tile.Destroyed = true;
-  }
   public beginCopy() {
     this._updFlags = 0;
+    this._usedBufferLengthTiles = 0; //reset
   }
   public endCopy() {
-    let p: boolean = (this._updFlags & DirtyFlag.Transform) > 0;
+    let p: boolean = true; //From now on always update tile transform (since tiles will almost always be needing update)
     let n: boolean = (this._updFlags & DirtyFlag.Normals) > 0;
     let c: boolean = (this._updFlags & DirtyFlag.Colors) > 0;
     let t: boolean = (this._updFlags & DirtyFlag.UVs) > 0;
 
-    //(this.attributes['position'] as BufferAttribute).needsUpdate = p;
-    //(this.attributes['normal'] as BufferAttribute).needsUpdate = n;
-    //(this.attributes['color'] as BufferAttribute).needsUpdate = c;
-    //(this.attributes['uv'] as BufferAttribute).needsUpdate = t;
     this._attrPosition.needsUpdate = p;
     this._attrNormal.needsUpdate = n;
     this._attrColor.needsUpdate = c;
     this._attrTexture.needsUpdate = t;
 
+    this.updateBufferRange();
     this.computeBoundingBox();
     this.computeBoundingSphere();
   }
-  public copyTile(tile: Sprite25D, clear: boolean = false) {
-    //Specify clear to clear the tile's position and essentially hide it.
-    //Essentially there won't be too many cleared tiles, I suspect that particles would be the only reason.
-    //you can check if a tile was cleared with tile.Destroyed or null in the tiles array
-
-    if (tile.BufferOffset === -1) {
-      //Register new tile.
-      this.addTile(tile);
+  private _debugNumCopies = 0;
+  public copyTile(tile: Sprite25D) {
+    if (tile.Animation.Frame2 && tile.Animation.FrameBlend > 0.0001) {
+      this.copyFrame(tile, tile.Animation.Frame, tile.Animation.FrameBlend);
+      this.copyFrame(tile, tile.Animation.Frame2, 1 - tile.Animation.FrameBlend);
     }
-
+    else {
+      this.copyFrame(tile, tile.Animation.Frame);
+    }
+  }
+  public copyFrame(tile: Sprite25D, frame: SpriteFrame, blend: number = 1) {
     let v: Array<vec3> = new Array<vec3>(4);
     let t: Array<vec2> = new Array<vec2>(4);
-    let off: number = tile.BufferOffset * 4;
-
-
+    let off = this._usedBufferLengthTiles * 4;
     let flags = tile.DirtyFlags;
+    if (blend) {
+      flags |= DirtyFlag.Colors;
+    }
+
     this._updFlags |= tile.DirtyFlags;
     /*
     0 --- 1
     2 --- 3
     */
-    if (clear) {
-      v[0] = v[1] = v[2] = v[3] = new vec3(Infinity, Infinity, Infinity);
-    }
-    else if (flags & DirtyFlag.Transform) {
-      //Translate tile with origin.
-      let tilepos_translated: vec3 = tile.Position.clone().add(tile.AnimatedPosition).add(tile.Origin);
+    //Translate tile with origin.
+    let tilepos_translated: vec3 = tile.Position.clone().add(tile.Animation.AnimatedPosition).add(tile.Origin);
 
-      //Position the image relative to the world grid's basis
-      let tilepos_local: vec3 = this._view.Right.clone().multiplyScalar(tilepos_translated.x);
-      tilepos_local.add(this._view.Down.clone().multiplyScalar(tilepos_translated.y));
-      tilepos_local.add(this._view.Normal.clone().multiplyScalar(tilepos_translated.z));
+    //Position the image relative to the world grid's basis
+    let tilepos_local: vec3 = this._view.Right.clone().multiplyScalar(tilepos_translated.x);
+    tilepos_local.add(this._view.Down.clone().multiplyScalar(tilepos_translated.y));
+    tilepos_local.add(this._view.Normal.clone().multiplyScalar(tilepos_translated.z));
 
-      v[0] = this._view.position.clone().add(tilepos_local);
-      v[1] = v[0].clone().add(this._view.Right.clone().multiplyScalar(tile.Width * tile.Scale.x * tile.AnimatedScale.x));
-      v[2] = v[0].clone().add(this._view.Down.clone().multiplyScalar(tile.Height * tile.Scale.y * tile.AnimatedScale.y));
-      v[3] = v[2].clone().add(this._view.Right.clone().multiplyScalar(tile.Width * tile.Scale.x * tile.AnimatedScale.x));
-    }
+    v[0] = this._view.position.clone().add(tilepos_local);
+    v[1] = v[0].clone().add(this._view.Right.clone().multiplyScalar(tile.Width * tile.Scale.x * tile.Animation.AnimatedScale.x));
+    v[2] = v[0].clone().add(this._view.Down.clone().multiplyScalar(tile.Height * tile.Scale.y * tile.Animation.AnimatedScale.y));
+    v[3] = v[2].clone().add(this._view.Right.clone().multiplyScalar(tile.Width * tile.Scale.x * tile.Animation.AnimatedScale.x));
 
     let verts: Float32Array = (this._attrPosition.array as Float32Array);
     let norms: Float32Array = (this._attrNormal.array as Float32Array);
@@ -720,43 +857,58 @@ class TileBuffer extends THREE.BufferGeometry {
     for (let vi = 0; vi < 4; ++vi) {
       let vv = off + vi;
 
-      if (flags & DirtyFlag.Transform) {
-        verts[vv * this._vsiz + 0] = v[vi].x;
-        verts[vv * this._vsiz + 1] = v[vi].y;
-        verts[vv * this._vsiz + 2] = v[vi].z;
-      }
+      verts[vv * this._vsiz + 0] = v[vi].x;
+      verts[vv * this._vsiz + 1] = v[vi].y;
+      verts[vv * this._vsiz + 2] = v[vi].z;
+
       if (flags & DirtyFlag.Normals) {
         norms[vv * this._nsiz + 0] = this._view.Normal.x;
         norms[vv * this._nsiz + 1] = this._view.Normal.y;
         norms[vv * this._nsiz + 2] = this._view.Normal.z;
       }
       if (flags & DirtyFlag.Colors) {
-        colors[vv * this._csiz + 0] = 1;
-        colors[vv * this._csiz + 1] = 1;
-        colors[vv * this._csiz + 2] = 1;
-        colors[vv * this._csiz + 3] = 1;
+        colors[vv * this._csiz + 0] = tile.Color.x;
+        colors[vv * this._csiz + 1] = tile.Color.y;
+        colors[vv * this._csiz + 2] = tile.Color.z;
+        colors[vv * this._csiz + 3] = tile.Color.w * blend;
       }
     }
 
     if (flags & DirtyFlag.UVs) {
-      if (tile.Frame) {
-
-        let f = tile.Frame;
-        let x0 = f.x;
-        let y0 = f.y;
-        let x1 = f.x + f.w;
-        let y1 = f.y + f.h;
-
-        uvs[off * 2 + 0] = x0;
-        uvs[off * 2 + 1] = y1;
-        uvs[off * 2 + 2] = x1;
-        uvs[off * 2 + 3] = y1;
-        uvs[off * 2 + 4] = x0;
-        uvs[off * 2 + 5] = y0;
-        uvs[off * 2 + 6] = x1;
-        uvs[off * 2 + 7] = y0;
+      if (frame) {
+        this.copyFrameUVs(uvs, frame, tile.FlipH, tile.FlipV, off);
       }
     }
+
+    this._debugNumCopies++;
+    this._usedBufferLengthTiles++;
+  }
+  private copyFrameUVs(uvs: Float32Array, frame: SpriteFrame, fliph: boolean, flipv: boolean, off: number) {
+    let f = frame;
+    let x0 = f.x;
+    let y0 = f.y;
+    let x1 = f.x + f.w;
+    let y1 = f.y + f.h;
+
+    if (fliph) {
+      let t = x0;
+      x0 = x1;
+      x1 = t;
+    }
+    if (flipv) {
+      let t = y0;
+      y0 = y1;
+      y1 = t;
+    }
+
+    uvs[off * 2 + 0] = x0;
+    uvs[off * 2 + 1] = y1;
+    uvs[off * 2 + 2] = x1;
+    uvs[off * 2 + 3] = y1;
+    uvs[off * 2 + 4] = x0;
+    uvs[off * 2 + 5] = y0;
+    uvs[off * 2 + 6] = x1;
+    uvs[off * 2 + 7] = y0;
   }
   private fillDefault(vb: Float32Array, tb: Float32Array, nb: Float32Array, cb: Float32Array) {
     vb[0] = 0;
@@ -797,18 +949,18 @@ class TileBuffer extends THREE.BufferGeometry {
   }
   private updateBufferRange() {
     if (this._usedBufferLengthTiles > 0) {
-      //*6 = we're using indexes here
       this.setDrawRange(0, this._usedBufferLengthTiles * 6);
     }
     else {
       this.setDrawRange(0, 6);
     }
   }
-
+}
+export class Viewport25D {
 
 }
-// This class is a viewport into the 2D game world.  
-class WorldView25D extends Object3D {
+export class WorldView25D extends Object3D {
+  // This class is a viewport into the 2D game world.  
   private _tilesWidth: number = 10;
   private _tilesHeight: number = 10;
   private _tileWidth: number = 1;
@@ -827,9 +979,7 @@ class WorldView25D extends Object3D {
   private _mesh: THREE.Mesh = null;
 
   private _objects: Map<Sprite25D, Sprite25D> = new Map<Sprite25D, Sprite25D>(); // Objects that do not update.
-  //private _objects_active: Map<Object25D, Object25D> = new Map<Object25D, Object25D>(); //Objects with active updates
   private _destroyed: Map<Sprite25D, Sprite25D> = new Map<Sprite25D, Sprite25D>();
-  private _dirty: Map<Sprite25D, Sprite25D> = new Map<Sprite25D, Sprite25D>();
 
   public get Buffer(): TileBuffer { return this._buffer; }
   public get TilesWidth(): number { return this._tilesWidth; }
@@ -856,9 +1006,10 @@ class WorldView25D extends Object3D {
       , map: r.Texture
       , vertexColors: THREE.VertexColors
       , flatShading: true
-      , transparent: true
+      , transparent: true //Adds this to the transparency step of the rasterizer.
       , wireframe: false
-      , alphaTest: 0.01
+      , alphaTest: 0.01 // Quickly cut out shitty transparency
+      , blending: THREE.MultiplyBlending // or Normalblending (unsure)
     });
 
     this._mesh = new THREE.Mesh(this._buffer, mat);
@@ -882,9 +1033,6 @@ class WorldView25D extends Object3D {
     this._destroyed.set(ob, ob);
     ob.Destroyed = true;
   }
-  public markDirty(ob: Sprite25D) {
-    this._dirty.set(ob, ob);
-  }
   public update(dt: number) {
     //Update the plane information
     this.updatePlane();
@@ -895,6 +1043,31 @@ class WorldView25D extends Object3D {
       key.update(dt);
     }
 
+    //   gatherVisibleObjects();
+
+    //   sortVisibleObjects();
+
+    //   //Sort by Z
+    //   this._objects = this._objects.sort((obj1, obj2) => {
+    //     if (obj1.Position.z > obj2.Position.z) {
+    //         return 1;
+    //     }
+    //     if (obj1.Position.z < obj2.Position.z) {
+    //       return -1;
+    //   }
+    //     return 0;
+    // });
+
+    //Copy Render Data
+    this._buffer.beginCopy();
+    for (const [key, value] of this._objects) {
+      if (key.Visible) {
+        //There may be a faster way to do this. For instance, static objects don't update.
+        this.copyTile(key);
+      }
+    }
+    this._buffer.endCopy();
+
     //Box
     if (Globals.isDebug()) {
       if (this._boxHelper !== null) {
@@ -903,25 +1076,16 @@ class WorldView25D extends Object3D {
       this._boxHelper = new THREE.BoxHelper(this._mesh, new THREE.Color(0xffff00));
       this.add(this._boxHelper);
     }
-
-    //Dirty
-    this._buffer.beginCopy();
-    for (const [key, value] of this._dirty) {
-      this.copyDirtyTileGeom(key);
-    }
-    this._buffer.endCopy();
-    this._dirty.clear();
-
   }
-  private copyDirtyTileGeom(ob: Sprite25D) {
-    this._buffer.copyTile(ob, false);
+
+  private copyTile(ob: Sprite25D) {
+    this._buffer.copyTile(ob);
     ob.clearDirty();
 
     for (let ci = 0; ci < ob.Children.length; ci++) {
-      this.copyDirtyTileGeom(ob.Children[ci]);
+      this.copyTile(ob.Children[ci]);
     }
   }
-
   private updatePlane() {
     let n = new vec3();
     this.getWorldDirection(n);
@@ -936,9 +1100,8 @@ class WorldView25D extends Object3D {
     this.Down = this.Right.clone().cross(this.Normal);
     this.Down.normalize();
   }
-
 }
-class WorldManager25D extends Object3D {
+export class WorldManager25D extends Object3D {
   private _views: Array<WorldView25D> = new Array<WorldView25D>();
   public get views(): Array<WorldView25D> { return this._views; }
 
@@ -958,6 +1121,7 @@ let g_pointlight: THREE.PointLight = null;
 let g_ambientlight: THREE.AmbientLight = null;
 let g_world: WorldManager25D = null;
 let axis: THREE.AxesHelper = null;
+let g_hand: THREE.Object3D = null;
 
 $(document).ready(function () {
   Globals.setFlags(document.location);
@@ -969,26 +1133,57 @@ $(document).ready(function () {
 });
 let g_atlas: Atlas = null;
 function loadResources() {
-  //this should really be handled by a promise.
-  g_atlas = new Atlas(1, 1, 1, 1, 1, 1, 12, 12, './dat/img/sprites.png', function () {
-    createWorld();
-    createBackground();
+  const word = (<any>world_data);
+  console.log(word); // output 'testing
 
-    if (Globals.isDebug()) {
-      axis = new THREE.AxesHelper(1);
-      Globals.scene.add(axis);
-    }
 
-    Globals.prof.frameEnd();
+  //https://threejs.org/docs/#manual/en/introduction/Animation-system
 
-    $('#outPopUp').hide();
+  // this should really be handled by a promise.
+  g_atlas = new Atlas(
+    1, 1, 1, 1,
+    1, 1,
+    16, 16, './dat/img/tiles.png', function () {
+      Globals.models.loadModel(Files.Model.Hand, ['Armature', 'Action_Point'], function (success: boolean, arr: Array<Object3D>, gltf: any): THREE.Object3D {
+        if (success) {
+          if (arr.length === 2) {
+            return arr[0];
+          }
+        }
+        return null;
+      })
+    });
+  Globals.models.setModelAsyncCallback(Files.Model.Hand, function (model: THREE.Mesh) {
+    g_hand = model;
+    //Apply Hand Transforms.
+    //Note: We might be able to swap left/right here.
+    g_hand.rotateY(Math.PI);
+    //g_hand.scale.set(-1,0,0);
+    Globals.scene.add(g_hand);
 
-    Globals.startGameEngine(gameLoop);
+    initializeGame();
   });
-
 }
+function initializeGame() {
+  createWorld();
+  createBackground();
+
+  if (Globals.isDebug()) {
+    axis = new THREE.AxesHelper(1);
+    Globals.scene.add(axis);
+  }
+
+  Globals.prof.frameEnd();
+
+  $('#outPopUp').hide();
+
+  Globals.startGameEngine(gameLoop);
+}
+
 //Testing Yield / Async/Await & Promise
 //Generator returns value & boolean whehter done.
+
+let g_playerchar: Sprite25D = null;
 
 function createWorld() {
   //Load Resources
@@ -1001,24 +1196,33 @@ function createWorld() {
   g_world.addView(world);
   Globals.scene.add(g_world);
 
-  let sp = new Sprite25D();
-  sp.addAnimation("walk", [new vec2(1, 0), new vec2(0, 0), new vec2(1, 0), new vec2(2, 0)], 1.1, g_atlas);
-  // ob.add(sp);
-  world.addObject25(sp);
-
-  sp.play("walk");
-
-  for (let i = 0; i < 20; i++) {
-    let x1 = sp.clone();
-    x1.play("walk");
-    sp.Position.x = Random.float(-2, 2);
-    sp.Position.y = Random.float(-2, 2);
-    sp.Position.z = Random.float(0, 0.3);
-    sp.AnimationSpeed = Random.float(0.8, 1.5);
-    world.addObject25(x1);
+  function mfr(x: number, y: number): FDef {
+    //make frame
+    return new FDef(new vec2(x, y), false, false, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step);
   }
 
+  //g_testTile = new Sprite25D();
+  //world.addObject25(g_testTile);
 
+  g_playerchar = new Sprite25D();
+  g_playerchar.Animation.addTiledAnimation("walk_down",
+    [mfr(0, 1), mfr(1, 1), mfr(0, 1), mfr(2, 1)],
+    0.7, g_atlas,
+    new vec2(1, 2));
+  g_playerchar.Animation.addTiledAnimation("walk_right",
+    [mfr(3, 1), mfr(4, 1), mfr(3, 1), mfr(5, 1)],
+    0.7, g_atlas,
+    new vec2(1, 2));
+  g_playerchar.Animation.addTiledAnimation("walk_left",
+    [mfr(0, 3), mfr(1, 3), mfr(0, 3), mfr(2, 3)],
+    0.7, g_atlas,
+    new vec2(1, 2));
+  g_playerchar.Animation.addTiledAnimation("walk_up",
+    [mfr(6, 1), mfr(7, 1), mfr(6, 1), mfr(8, 1)],
+    0.7, g_atlas,
+    new vec2(1, 2));
+
+  world.addObject25(g_playerchar);
 
 }
 function listenForGameStart() {
@@ -1048,9 +1252,44 @@ function gameLoop(dt: number) {
   }
 
   //Movement
+  if (Globals.input.mouse.Left.pressed()) {
+    Globals.input.left.Axis.set(0, 0);
+    Globals.input.keyboard.SmoothAxis = true;
+  }
+  else if (Globals.input.mouse.Left.released()) {
+    Globals.input.keyboard.SmoothAxis = false;
+    Globals.input.left.Axis.set(0, 0);
+  }
+  if (Globals.input.mouse.Left.pressOrHold()) {
+    movePlayer(dt);
+  } else {
+    movePlayerChar();
+  }
+
+  if (g_playerchar.Animation.CurrentAnimation === null) {
+    g_playerchar.Animation.play("walk_down", true);
+  }
+
+  //Update hand
+  if (g_hand) {
+    if (Globals.userIsInVR()) {
+      g_hand.position.copy(Globals.input.right.Position);
+    }
+    else {
+      let handpos = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 4);
+
+      
+      g_hand.position.copy(handpos);
+      //g_hand.updateMatrix();
+    }
+  }
+
+  g_world.update(dt);
+  Globals.prof.end("main game loop");
+}
+function movePlayer(dt: number) {
   let player = Globals.player;
   let spd = 12;
-
   let amtstr = spd * Globals.input.left.Axis.x * dt;
   if (amtstr !== 0) {
     let n: vec3 = new vec3(0, 0, 0);
@@ -1066,10 +1305,26 @@ function gameLoop(dt: number) {
     Globals.camera.getWorldDirection(n);
     player.position.add(n.multiplyScalar(amtfw));
   }
+}
+function movePlayerChar() {
+  if (Globals.input.left.MoveLeft) {
+    g_playerchar.Animation.play("walk_left", true);
+  }
+  else if (Globals.input.left.MoveRight) {
+    g_playerchar.Animation.play("walk_right", true);
+  }
+  else if (Globals.input.left.MoveUp) {
+    g_playerchar.Animation.play("walk_up", true);
+  }
+  else if (Globals.input.left.MoveDown) {
+    g_playerchar.Animation.play("walk_down", true);
+  }
+  else {
 
+    g_playerchar.Animation.pause();
 
-  g_world.update(dt);
-  Globals.prof.end("main game loop");
+    g_playerchar.Animation.setKeyFrame(0);
+  }
 }
 function createBackground() {
   g_ambientlight = new THREE.AmbientLight(0x404040);
@@ -1078,3 +1333,10 @@ function createBackground() {
   g_pointlight = new THREE.PointLight(0xffff99, 1, 2000);
   Globals.scene.add(g_pointlight);
 }
+
+//GetCellManifoldForBox
+class Level {
+
+
+}
+

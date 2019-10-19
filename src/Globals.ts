@@ -278,6 +278,9 @@ export class _Globals {
       this._composer.render();
     }
   }
+  public debugBreak(){
+    debugger;
+  }
 
 
   private createPlayer() {
