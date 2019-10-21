@@ -9,8 +9,8 @@ import { Utils } from './Utils';
 import { Random, ModelManager, AfterLoadFunction, Frustum } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import * as Files from './Files';
-import {Int, roundToInt, toInt, checkIsInt, assertAsInt} from './Int';
-import {TileGrid} from './TileGrid';
+import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
+import { TileGrid, PlatformLevel, Cell, TileBlock } from './TileGrid';
 
 export class ImageResource {
   private _location: string = "";
@@ -99,7 +99,7 @@ export class SpriteFrame {
   //A sub-image of a texture.
   //Technically we should allow multiple textures and batching, but for now, just one texture.
   public debug_tile_x: number = 0;  //The Tile X/Y.  This is for information purposes only and may not actually be usd.
-  public debug_tile_y : number = 0;
+  public debug_tile_y: number = 0;
   public x: number = 0; //Texture X/Y (NOT tile index)
   public y: number = 0;
   public w: number = 0;
@@ -368,10 +368,10 @@ class Animation25D {
     let c: vec4 = null;
 
     if (keyB === null) {
-      p = keyA.Position;
-      s = keyA.Scale;
-      r = keyA.Rotation;
-      c = keyA.Color;
+      p = keyA.Position.clone();
+      s = keyA.Scale.clone();
+      r = keyA.Rotation.clone();
+      c = keyA.Color.clone();
     }
     else {
       if (keyB.TransformInterpolation === SpriteKeyFrameInterpolation.Linear) {
@@ -380,16 +380,16 @@ class Animation25D {
         r = keyA.Rotation.clone().slerp(keyB.Rotation, t01);
       }
       else if (keyB.TransformInterpolation === SpriteKeyFrameInterpolation.Step) {
-        p = keyA.Position;
-        s = keyA.Scale;
-        r = keyA.Rotation;
+        p = keyA.Position.clone();
+        s = keyA.Scale.clone();
+        r = keyA.Rotation.clone();
       }
 
       if (keyB.ColorInterpolation === SpriteKeyFrameInterpolation.Linear) {
         c = keyA.Color.clone().lerp(keyB.Color, t01);
       }
       else if (keyB.ColorInterpolation === SpriteKeyFrameInterpolation.Step) {
-        c = keyA.Color;
+        c = keyA.Color.clone();
       }
     }
 
@@ -512,14 +512,14 @@ class Animation25D {
     //If we are a sub-tile animation, then add the parent sprite's sub-tile coordinates to the input animation.
     let sub_x = 0;
     let sub_y = 0;
-    if(this.Sprite.SubTile){
+    if (this.Sprite.SubTile) {
       sub_x = this.Sprite.SubTile.x;
       sub_y = this.Sprite.SubTile.y;
     }
 
     //Create Tiles.
-    let sw : number = Number(atlas.TileWidth) / Number(atlas.ImageWidth);
-    let sh : number = Number(atlas.TileHeight) / Number(atlas.ImageHeight);
+    let sw: number = Number(atlas.TileWidth) / Number(atlas.ImageWidth);
+    let sh: number = Number(atlas.TileHeight) / Number(atlas.ImageHeight);
     for (let iframe = 0; iframe < frames.length; ++iframe) {
       let def: FDef = frames[iframe];
 
@@ -532,7 +532,7 @@ class Animation25D {
       kf.Frame.h = sh;
       kf.Frame.debug_tile_x = def.p.x + sub_x;
       kf.Frame.debug_tile_y = def.p.y + sub_y;
-      kf.Frame.shrink(0.0001);
+      kf.Frame.shrink(0.0004);
 
       kf.Color = def.c ? def.c : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
       kf.FlipH = def.h ? def.h : false;
@@ -976,8 +976,7 @@ export class TileBuffer extends THREE.BufferGeometry {
     }
   }
 }
-export class Viewport25D {
-}
+
 export class WorldView25D extends Object3D {
   // This class is a viewport into the 2D game world.  
   private _tilesWidth: number = 10;
@@ -1006,6 +1005,8 @@ export class WorldView25D extends Object3D {
   public get TileWidth(): number { return this._tileWidth; }
   public get TileHeight(): number { return this._tileHeight; }
 
+  private _platformLevel: PlatformLevel = null;
+
   public constructor(tilesw: number, tilesh: number, tilew: number, tileh: number, r: Atlas) {
     super();
 
@@ -1014,8 +1015,14 @@ export class WorldView25D extends Object3D {
     this._tileWidth = tilew;
     this._tileHeight = tileh;
 
-    //This is a default junk
     this.Atlas = r;
+
+    //6 high x 16 wide
+    this._viewport = new Viewport25D(256 as Int, 92 as Int);
+
+    //This is where the most of the level processing happens.
+    //hold onto your butts.
+    this._platformLevel = new PlatformLevel(g_atlas);
 
     this._buffer = new TileBuffer(this._tilesWidth * this._tilesHeight * 4, this);
 
@@ -1077,14 +1084,18 @@ export class WorldView25D extends Object3D {
     //     return 0;
     // });
 
+    this.updateViewport();
+
+    this.updatePostPhysics();
+
     //Copy Render Data
     this._buffer.beginCopy();
-    for (const [key, value] of this._objects) {
-      if (key.Visible) {
-        //There may be a faster way to do this. For instance, static objects don't update.
-        this.copyTile(key);
-      }
-    }
+
+    this.drawBackground();
+    this.drawMidground();
+    this.drawObjects();
+    this.drawForeground();
+
     this._buffer.endCopy();
 
     //Box
@@ -1119,6 +1130,118 @@ export class WorldView25D extends Object3D {
     this.Down = this.Right.clone().cross(this.Normal);
     this.Down.normalize();
   }
+  private getPlayerChar(): Sprite25D {
+    return g_playerchar;
+  }
+  private updateViewport() {
+    let p = this.getPlayerChar();
+    if (p == null) {
+      Globals.debugBreak();
+      //System.Diagnostics.Debugger.Break();
+    }
+    //Makes ure the viewport doesn't go past these values.
+    this._viewport.followObject(p);
+    this._viewport.limitScrollBounds(this._platformLevel.Grid.RootNode.Box);
+    this._viewport.calcBoundBox();
+  }
+  private _viewport: Viewport25D = null;
+  private _viewportCellsFrame: Array<Cell> = null;
+  private updatePostPhysics() {
+    this._viewportCellsFrame = this._platformLevel.Grid.GetCellManifoldForBox(this._viewport.Box)
+
+  }
+  private drawForeground() {
+
+  }
+  private drawMidground() {
+
+  }
+  private drawObjects() {
+    for (const [key, value] of this._objects) {
+      if (key.Visible) {
+        //There may be a faster way to do this. For instance, static objects don't update.
+        this.copyTile(key);
+      }
+    }
+  }
+  private drawBackground() {
+    // for (let c of this._viewportCellsFrame) {
+    //   let block: TileBlock = c.Layers[PlatformLevel.Background];
+    //   if (block == null || block.Tile == null) {
+    //     continue;
+    //   }
+    //   this.drawBlock(c, block);
+    // }
+  }
+  private drawBlock(c: Cell, block: TileBlock) {
+
+  }
+}
+export class Viewport25D {
+  private _widthPixels: Int = 0 as Int;
+  private _heightPixels: Int = 0 as Int;
+
+  private _pos: vec2 = new vec2(0, 0);
+  private _box: Box2f = new Box2f();
+
+  public get WidthPixels(): Int { return this._widthPixels; }
+  public get HeightPixels(): Int { return this._heightPixels; }
+
+  public get Pos(): vec2 { return this._pos; }
+  public set Pos(x: vec2) { this._pos = x; }
+
+  public get TilesWidth(): Int { return Math.floor(this._widthPixels / g_atlas.TileWidth) as Int; }
+  public get TilesHeight(): Int { return Math.floor(this._heightPixels / g_atlas.TileHeight) as Int; }
+
+  private _screenShakeOffset: vec2 = new vec2(0, 0);
+  public set ScreenShakeOffset(x: vec2) { this._screenShakeOffset = x; }
+  public get ScreenShakeOffset(): vec2 { return this._screenShakeOffset; }
+
+  public get Box(): Box2f {
+    return this._box;
+  }
+
+  public constructor(w: Int, h: Int) {
+    this._widthPixels = w;
+    this._heightPixels = h;
+  }
+  public followObject(ob: Sprite25D) {
+    //Follow a game object
+    //Call with LimitScrollBounds to limit scrolling in a region
+    this._pos = new vec2(
+      ob.Position.x - g_atlas.TileWidth * this.TilesWidth * 0.5 + g_atlas.TileWidth * 0.5
+      ,
+      ob.Position.y - g_atlas.TileHeight * this.TilesHeight * 0.5 + g_atlas.TileHeight * 0.5
+    ).add(this._screenShakeOffset);
+  }
+  public limitScrollBounds(box: Box2f) {
+    //Limit the viewport to scrolling box
+    if (box.Width() > this.WidthPixels) {
+      if (this._pos.x < box.Min.x) {
+        this._pos.x = box.Min.x;
+      }
+      if (this._pos.x + this.WidthPixels >= box.Max.x) {
+        this._pos.x = box.Max.x - this.WidthPixels;
+      }
+    }
+    if (box.Height() > this.HeightPixels) {
+      if (this._pos.y < box.Min.y) {
+        this._pos.y = box.Min.y;
+      }
+      if (this._pos.y + this.HeightPixels >= box.Max.y) {
+        this._pos.y = box.Max.y - this.HeightPixels;
+      }
+    }
+  }
+  public calcBoundBox() {
+    this._box = new Box2f();
+    this._box.Min.x = this._pos.x;
+    this._box.Min.y = this._pos.y;
+    this._box.Max.x = this._pos.x + this._widthPixels;
+    this._box.Max.y = this._pos.y + this._heightPixels;
+
+  }
+
 }
 export class WorldManager25D extends Object3D {
   private _views: Array<WorldView25D> = new Array<WorldView25D>();
@@ -1142,6 +1265,10 @@ let g_world: WorldManager25D = null;
 let axis: THREE.AxesHelper = null;
 let g_hand: THREE.Object3D = null;
 
+let g_atlas: Atlas = null;
+let g_playerchar: Sprite25D = null;
+let g_mainWorld: WorldView25D = null;
+
 $(document).ready(function () {
   Globals.setFlags(document.location);
 
@@ -1150,7 +1277,6 @@ $(document).ready(function () {
 
   loadResources();
 });
-let g_atlas: Atlas = null;
 function loadResources() {
 
   //https://threejs.org/docs/#manual/en/introduction/Animation-system
@@ -1191,26 +1317,25 @@ function initializeGame() {
   $('#outPopUp').hide();
   Globals.startGameEngine(gameLoop);
 }
-
-let g_playerchar: Sprite25D = null;
 function createWorld() {
   //Load Resources
 
   g_world = new WorldManager25D();
 
   //Addijng 2 just cuz
-  let world = new WorldView25D(10, 7, 1, 1, g_atlas);
-  world.position.z = -2;
-  g_world.addView(world);
+  g_mainWorld = new WorldView25D(10, 7, 1, 1, g_atlas);
+  g_mainWorld.position.z = -2;
+  g_world.addView(g_mainWorld);
   Globals.scene.add(g_world);
 
+  createPlayer();
+
+}
+function createPlayer() {
   function mfr(x: number, y: number): FDef {
     //make frame
     return new FDef(new vec2(x, y), false, false, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step);
   }
-
-  //g_testTile = new Sprite25D();
-  //world.addObject25(g_testTile);
 
   g_playerchar = new Sprite25D();
   g_playerchar.Animation.addTiledAnimation("walk_down",
@@ -1229,7 +1354,7 @@ function createWorld() {
     [mfr(6, 1), mfr(7, 1), mfr(6, 1), mfr(8, 1)],
     0.7, g_atlas,
     new vec2(1, 2));
-  world.addObject25(g_playerchar);
+  g_mainWorld.addObject25(g_playerchar);
 
 }
 function listenForGameStart() {
@@ -1266,10 +1391,10 @@ function gameLoop(dt: number) {
     Globals.input.keyboard.SmoothAxis = false;
     Globals.input.left.Axis.set(0, 0);
   }
-  if (Globals.input.mouse.Left.pressOrHold()) {
+  if (Globals.input.mouse.Right.pressOrHold()) {
     movePlayer(dt);
   } else {
-    movePlayerChar();
+    movePlayerChar(dt);
   }
 
   if (g_playerchar.Animation.CurrentAnimation === null) {
@@ -1312,23 +1437,26 @@ function movePlayer(dt: number) {
     player.position.add(n.multiplyScalar(amtfw));
   }
 }
-function movePlayerChar() {
+function movePlayerChar(dt:number) {
+  let speed : number = 1.7 * dt;
   if (Globals.input.left.MoveLeft) {
     g_playerchar.Animation.play("walk_left", true);
+    g_playerchar.Position.sub(g_mainWorld.Right.clone().multiplyScalar(speed));
   }
   else if (Globals.input.left.MoveRight) {
     g_playerchar.Animation.play("walk_right", true);
+    g_playerchar.Position.add(g_mainWorld.Right.clone().multiplyScalar(speed));
   }
   else if (Globals.input.left.MoveUp) {
     g_playerchar.Animation.play("walk_up", true);
+    g_playerchar.Position.add(g_mainWorld.Down.clone().multiplyScalar(speed));
   }
   else if (Globals.input.left.MoveDown) {
     g_playerchar.Animation.play("walk_down", true);
+    g_playerchar.Position.sub(g_mainWorld.Down.clone().multiplyScalar(speed));
   }
   else {
-
     g_playerchar.Animation.pause();
-
     g_playerchar.Animation.setKeyFrame(0, null, true);
   }
 }

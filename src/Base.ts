@@ -837,7 +837,6 @@ export class Mouse extends Vector3 {
     document.addEventListener('mousemove', function (e) {
       e.preventDefault();
       that.mouseMove(e.clientX, e.clientY);
-
     }, false);
   }
   private curView: vec3 = new vec3(0, 0, -1);

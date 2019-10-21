@@ -5,53 +5,108 @@ import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 import world_data from './game_world.json';
 
 
-class IVec2Map<K> {
-  private map: Map<string, K> = new Map<string, K>();
 
-  public constructor() {
-  }
-  public set(key: ivec2, val: K) {
-    this.map.set(key.x.toString() + key.y.toString(), val);
-  }
-  public get(key: ivec2): K {
-    return this.map.get(key.x.toString() + key.y.toString());
-  }
-  public has(key: ivec2): boolean {
-    return this.map.has(key.x.toString() + key.y.toString());
-  }
-}
-class IVec2Set {
-  private map: Map<string, string> = new Map<string, string>();
+class IVec2Map<K> {
+  private map: Map<Int, Map<Int, K>> = new Map<Int, Map<Int, K>>();
 
   public constructor() {
   }
   public get count(): Int {
-    return this.map.keys.length as Int;
+    return this.map.size as Int;
   }
-  public set(key: ivec2) {
-    let s = key.x.toString() + key.y.toString();
-    this.map.set(s, s);
+  public set(key: ivec2, value: K = null) {
+    let m: Map<Int, K> = null;
+    if (this.map.has(key.x)) {
+      m = this.map.get(key.x)
+    }
+    else {
+      m = new Map<Int, K>();
+      this.map.set(key.x, m);
+    }
+
+    m.set(key.y, value);
   }
-  // public get(key: ivec2): K {
-  //   return this.map.get(key.x.toString() + key.y.toString());
-  // }
   public has(key: ivec2): boolean {
-    return this.map.has(key.x.toString() + key.y.toString());
+    if (this.map.has(key.x)) {
+      let m: Map<Int, K> = this.map.get(key.x);
+      return m.has(key.y);
+    }
+    else {
+      return false;
+    }
   }
+  public get(key: ivec2): K {
+    if (this.map.has(key.x)) {
+      let m: Map<Int, K> = this.map.get(key.x);
+      return m.get(key.y);
+    }
+    return null;
+  }
+
+}
+class IVec2Set extends IVec2Map<Int> {
 }
 
-export class Res { 
-  public static readonly BorderTileId : Int = 0 as Int;
+export class Res {
+  public static readonly BorderTileId: Int = 0 as Int;
+  public static readonly GuyTileId: Int = 19 as Int;
+}
+class TmxTileset {
+  public columns: Int;//":6,
+  public firstgid: Int;//":1,
+  public image: Int; //"..\/..: Int;//\/miner\/Core\/Content\/mintiles-16x16.png",
+  public imageheight: Int;//":512,
+  public imagewidth: Int;//":103,
+  public margin: Int;//":1,
+  public name: Int;//:"WorldTiles",
+  public spacing: Int;//":1,
+  public tilecount: Int;//":180,
+  public tileheight: Int;//":16,
+  public tilewidth: Int;//":16
+}
+class TmxLayer {
+  public data: Array<Int>;//:[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  public height: Int;//":44,
+  public id: Int;//":6,
+  public name: string;//":"Border",
+  public opacity: number;//":1,
+  public type: string;//":"tilelayer",
+  public visible: boolean;//":true,
+  public width: Int;//":60,
+  public x: Int;//":0,
+  public y: Int;//":0
+}
+class TmxMap {
+  public width: Int; //":60    
+  public height: Int;
+  public infinite: boolean;
+  public nextlayerid: Int;//":9,
+  public nextobjectid: Int;//":1,
+  public orientation: string;//":"orthogonal",
+  public renderorder: string; //":"right-down",
+  public tiledversion: string;//":"1.2.0",
+  public tilewidth: Int; //":16,
+  public tileheight: Int;//":16,
+  public type: string; //":"map",
+  public version: string; //":1.2,\
+  public layers: Array<TmxLayer>;
+  public tilesets: Array<TmxTileset>;///":[
 }
 
 export class PlatformLevel {
-  public static readonly Background: Int = 0 as Int;
-  public static readonly Midback: Int = 1 as Int;
+  // public static readonly Background: Int = 0 as Int;
+  // public static readonly Midback: Int = 1 as Int;
+  // public static readonly Midground: Int = 2 as Int;
+  // public static readonly Foreground: Int = 3 as Int;
+  // public static readonly Liquid: Int = 4 as Int;
+  // public static readonly Conduit: Int = 5 as Int;
+  // public static readonly LayerCount: Int = 6 as Int;
+  public static readonly Border: Int = 0 as Int;
+  public static readonly Background: Int = 1 as Int;
   public static readonly Midground: Int = 2 as Int;
-  public static readonly Foreground: Int = 3 as Int;
-  public static readonly Liquid: Int = 4 as Int;
-  public static readonly Conduit: Int = 5 as Int;
-  public static readonly LayerCount: Int = 6 as Int;
+  public static readonly Objects: Int = 3 as Int;
+  public static readonly Foreground: Int = 4 as Int;
+  public static readonly LayerCount: Int = 5 as Int;
 
   public static readonly EMPTY_TILE: Int = -1 as Int;
 
@@ -63,7 +118,6 @@ export class PlatformLevel {
   public Grid: TileGrid = null;;
   //public List<GameObject> GameObjects { get; private set; } = new List<GameObject>();
   //public List<GameObject> Projectiles { get; private set; } = new List<GameObject>();
-  //public List<List<List<int>>> GenTiles;
   public Room: Room = null; //{ get; private set; }
   private NumFloodFill: Int = 0 as Int;
 
@@ -71,40 +125,146 @@ export class PlatformLevel {
 
   public MapWidthTiles: Int = 0 as Int; //{ get; private set; }
   public MapHeightTiles: Int = 0 as Int; //{ get; private set; }
-  private DoorTilesLUT : Array<Int> = new Array<Int>();
+  private DoorTilesLUT: Array<Int> = new Array<Int>();
 
-  public GenTiles : Array<Array<Array<Int>>> = new Array<Array<Array<Int>>>();
+  public GenTiles: Array<Array<Array<Int>>> = new Array<Array<Array<Int>>>();
+
+  public ParseTmxJson(json: string): TmxMap {
+    let ret: TmxMap = JSON.parse(json);
+    return ret;
+  }
 
   public constructor(atlas: Atlas) {
     this._atlas = atlas;
 
     //let map = new TmxMap("Content\\" + level_name + ".tmx");
 
-    this.MapWidthTiles = world_data.width as Int ; //map.Width;
-    this.MapHeightTiles = world_data.height as Int; //map.Height;
+    let map = this.ParseTmxJson(JSON.stringify(world_data));
+    this.MapWidthTiles = map.width as Int;
+    this.MapHeightTiles = map.height as Int;
 
     // //Create teh world data
     this.InitGenTileGrid();
-    // ParseGenTiles(map);
+
+    this.ParseGenTiles(map);
 
     this.MakeRoom(this.PlayerStartXY);
   }
-  public InitGenTileGrid()
-  {
-      this.GenTiles = new Array<Array<Array<Int>>>();
-      for (let iRow = 0 as Int; iRow < this.MapHeightTiles; ++iRow)
-      {
-        this.GenTiles.push(new Array<Array<Int>>());
+  public InitGenTileGrid() {
+    this.GenTiles = new Array<Array<Array<Int>>>();
+    for (let iRow = 0 as Int; iRow < this.MapHeightTiles; ++iRow) {
+      this.GenTiles.push(new Array<Array<Int>>());
 
-          for (let iCol = 0; iCol < this.MapWidthTiles; ++iCol)
-          {
-              let layers :Array<Int> = new Array<Int>();
-              for (let iLayer = 0; iLayer < PlatformLevel.LayerCount; ++iLayer) { 
-                layers.push(PlatformLevel.EMPTY_TILE);
-               }
-              this.GenTiles[iRow].push(layers);// 3 layers **0 is out of bounds** so -1 is unset/null
-          }
+      for (let iCol = 0; iCol < this.MapWidthTiles; ++iCol) {
+        let layers: Array<Int> = new Array<Int>();
+        for (let iLayer = 0; iLayer < PlatformLevel.LayerCount; ++iLayer) {
+          layers.push(PlatformLevel.EMPTY_TILE);
+        }
+        this.GenTiles[iRow].push(layers);// 3 layers **0 is out of bounds** so -1 is unset/null
       }
+    }
+  }
+  public ParseGenTiles(map: TmxMap) {
+    var version = map.version;
+
+    let KeyTiles: Array<Int> = new Array<Int>();
+    // List<int> KeyTiles = new List<int>
+    // {
+    //     World.Res.SlopeTile_BL               ,
+    //     World.Res.SlopeTile_BR               ,
+    //     World.Res.SlopeTile_TL               ,
+    //     World.Res.SlopeTile_TR               ,
+    //     World.Res.BorderTileId               ,
+    //     World.Res.Sun_20Percent              ,
+    //     World.Res.Sun_5Percent               ,
+    //     World.Res.SavePointTileId            ,
+    //     World.Res.Bombable_Tile_TileId       ,
+    //     World.Res.FallThrough_Tile_TileId    ,
+    //     World.Res.Water100TileId             ,
+    //     World.Res.Water50TileId              ,
+    //     World.Res.Lava100TileId              ,
+    //     World.Res.Lava50TileId               ,
+    //     World.Res.SavePointTileId,
+    //     World.Res.SwitchButtonTileId  ,
+    //     World.Res.SwitchDoorTileId   ,
+    //     World.Res.SwitchConduitTileId,
+    //     World.Res.Tar80TileId               ,
+    // };
+
+    for (let layer of map.layers) {
+      let layerId: Int = -1 as Int;
+
+      if (layer.name === ("Border")) { layerId = PlatformLevel.Border; }
+      else if (layer.name === ("Foreground")) { layerId = PlatformLevel.Foreground; }
+      else if (layer.name === ("Background")) { layerId = PlatformLevel.Background; }
+      else if (layer.name === ("Midground")) { layerId = PlatformLevel.Midground; }
+      else if (layer.name === ("Objects")) { layerId = PlatformLevel.Objects; }
+
+      if (layerId == -1) {
+        Globals.debugBreak();
+        //System.Diagnostics.Debugger.Break();
+      }
+      else {
+        let iTile
+        for (let iTile = 0; iTile < layer.data.length; iTile++) {
+          let tile: Int = layer.data[iTile];
+          let tile_x: Int = ((iTile as Int) % (layer.width as Int)) as Int;
+          let tile_y: Int = Math.floor(iTile / layer.width) as Int;
+
+          if (tile == Res.GuyTileId) {
+            //here is our start point, flood fill this area.
+            this.PlayerStartXY.x = tile_x;
+            this.PlayerStartXY.y = tile_y;
+          }
+
+          //Set to empty if we're not presetn.  Most tiles are 0, we use -1 for empty
+          let val: Int = tile;
+          if (tile === 0) {
+            val = PlatformLevel.EMPTY_TILE;
+          }
+          // else if (TileLUT.ContainsKey(tile.Gid))
+          // {
+          // }
+          // else if (KeyTiles.Contains(tile.Gid))
+          // {
+          // }
+          // else if (DoorTilesLUT.Contains(tile.Gid))
+          // {
+          // }
+          // else if (ObjLUT.ContainsKey(tile.Gid))
+          // {
+          // }
+          // else if (SpecialItemLUT.ContainsKey(tile.Gid))
+          // {
+          // }
+          // else if (SignLUT.ContainsKey(tile.Gid))
+          // {
+          // }
+          else {
+            val = PlatformLevel.EMPTY_TILE;
+          }
+          this.TrySetGenTile(tile_x, tile_y, layerId, val);
+        }
+      }
+
+    }
+
+  }
+  private TrySetGenTile(iCol: Int, iRow: Int, iLayer: Int, iTile: Int) {
+    if (iRow < 0 || iRow >= this.MapHeightTiles) {
+      return;
+    }
+    if (iCol < 0 || iCol >= this.MapWidthTiles) {
+      return;
+    }
+
+    try {
+
+      this.GenTiles[iRow][iCol][iLayer] = iTile;//already set, but debug here
+    }
+    catch (ex) {
+      Globals.debugBreak();
+    }
   }
   private MakeRoom(startxy: ivec2) {
     if (startxy.x != Number.MAX_SAFE_INTEGER as Int) {
@@ -153,7 +313,8 @@ export class PlatformLevel {
         return;
       }
 
-      let iTile: Int = this.TileXY(pt.x, pt.y, PlatformLevel.Midground);
+      //Get the tile from the BORDER tile layer.
+      let iTile: Int = this.TileXY(pt.x, pt.y, PlatformLevel.Border);
 
       if (room.Found.has(pt)) {
 
@@ -178,14 +339,16 @@ export class PlatformLevel {
         }
       }
       else {
+        //Add the found tile to the set of tiles.
         room.Found.set(pt);
 
+        //Increase the room's boundbox
         if (pt.x < room.Min.x) { room.Min.x = pt.x; }
         if (pt.y < room.Min.y) { room.Min.y = pt.y; }
         if (pt.x > room.Max.x) { room.Max.x = pt.x; }
         if (pt.y > room.Max.y) { room.Max.y = pt.y; }
 
-        //Were not a border.
+        //Were not a border, continue to search.
         toCheck.push(pt.clone().add(new ivec2(-1 as Int, 0 as Int)));
         toCheck.push(pt.clone().add(new ivec2(1 as Int, 0 as Int)));
         toCheck.push(pt.clone().add(new ivec2(0 as Int, -1 as Int)));
@@ -193,32 +356,25 @@ export class PlatformLevel {
       }
     }
   }
-  public FloodFillAddNeighborBorder(v : ivec2 ,  border : IVec2Set)
-  {
-      if(this.TileXY(v.x, v.y, PlatformLevel.Midground) == Res.BorderTileId)
-      {
-          if (!border.has(v))
-          {
-              border.set(v);
-          }
+  public FloodFillAddNeighborBorder(v: ivec2, border: IVec2Set) {
+    if (this.TileXY(v.x, v.y, PlatformLevel.Midground) == Res.BorderTileId) {
+      if (!border.has(v)) {
+        border.set(v);
       }
+    }
   }
-  public TileXY(col : Int, row : Int, layer : Int) : Int
-  {
-      //**RETURN 0 FOR OUT OF BOUNDS
-      if (row >= this.GenTiles.length || row < 0)
-      {
-          return 0 as Int;
-      }
-      if (col >= this.GenTiles[row].length || col < 0)
-      {
-          return 0 as Int;
-      }
-      if (layer >= this.GenTiles[row][col].length)
-      {
-          return 0 as Int;
-      }
-      return this.GenTiles[row][col][layer];
+  public TileXY(col: Int, row: Int, layer: Int): Int {
+    //**RETURN 0 FOR OUT OF BOUNDS
+    if (row >= this.GenTiles.length || row < 0) {
+      return 0 as Int;
+    }
+    if (col >= this.GenTiles[row].length || col < 0) {
+      return 0 as Int;
+    }
+    if (layer >= this.GenTiles[row][col].length) {
+      return 0 as Int;
+    }
+    return this.GenTiles[row][col][layer];
   }
 
 }
@@ -289,8 +445,8 @@ export class Cell {
   //public float LightValue = 0;    // 0 - 100 = 0 = black 100 = transparent
 
   public GetTilePosLocal(): ivec2 {
-    let dx: number = this.Parent.Box.Min.x / this.Parent.Level.Atlas.TileWidth;
-    let dy: number = this.Parent.Box.Min.y / this.Parent.Level.Atlas.TileHeight;
+    let dx: Int = Math.floor(this.Parent.Box.Min.x / this.Parent.Level.Atlas.TileWidth) as Int;
+    let dy: Int = Math.floor(this.Parent.Box.Min.y / this.Parent.Level.Atlas.TileHeight) as Int;
 
     let v = new ivec2(dx as Int, dy as Int);
 
@@ -338,8 +494,8 @@ export class Room {
     //Max.y += 1;
 
     //Subtract 1 for the outside border.
-    this.WidthTiles = this.Max.x - this.Min.x + 1 as Int;
-    this.HeightTiles = this.Max.y - this.Min.y + 1 as Int;
+    this.WidthTiles = (this.Max.x - this.Min.x + (1 as Int)) as Int;
+    this.HeightTiles = (this.Max.y - this.Min.y + (1 as Int)) as Int;
   }
 
 }
@@ -377,10 +533,13 @@ export class TileGrid {
     // this.CellDict = new Dictionary<ivec2, Cell>(new ivec2EqualityComparer());
 
     this.RootNode = new Node(level, this.GetGridExtents(tilesW, tilesH));
-    this.DivideGrid(this.RootNode);
+    this.DivideGrid(this.RootNode, 1 as Int);
   }
 
-  private DivideGrid(parent: Node) {
+  private DivideGrid(parent: Node, iCallstack: Int) {
+    if (iCallstack > 100) {
+      Globals.debugBreak();
+    }
     if (parent.Box.Width() <= 0) {
       Globals.debugBreak();
       //System.Diagnostics.Debugger.Break();
@@ -391,23 +550,26 @@ export class TileGrid {
     }
 
     //Double sanity - we must always be evenly divisible by tiles.
-    if (((parent.Box.Width()) as Int % this.Level.Atlas.TileWidth) != 0) {
+    let wwww = parent.Box.Width();
+    let test = (wwww % this.Level.Atlas.TileWidth) as Int;
+    if (test !== 0) {
       Globals.debugBreak();
     }
-    if ((parent.Box.Height() as Int % this.Level.Atlas.TileHeight) != 0) {
+    let test2 = (parent.Box.Height() % this.Level.Atlas.TileHeight) as Int;
+    if (test2 !== 0) {
       Globals.debugBreak();
     }
 
     let boxwh: vec2 = (parent.Box.Max.clone().sub(parent.Box.Min));
-    let tilesXParent: Int = ((boxwh.x / this.Level.Atlas.TileWidth)) as Int;
-    let tilesYParent: Int = ((boxwh.y / this.Level.Atlas.TileHeight)) as Int;
-    let tilesXMid: Int = ((boxwh.x / this.Level.Atlas.TileWidth) * 0.5) as Int;
-    let tilesYMid: Int = ((boxwh.y / this.Level.Atlas.TileHeight) * 0.5) as Int;
+    let tilesXParent: Int = Math.floor(boxwh.x / this.Level.Atlas.TileWidth) as Int;
+    let tilesYParent: Int = Math.floor(boxwh.y / this.Level.Atlas.TileHeight) as Int;
+    let tilesXMid: Int = Math.floor((boxwh.x / this.Level.Atlas.TileWidth) * 0.5) as Int;
+    let tilesYMid: Int = Math.floor((boxwh.y / this.Level.Atlas.TileHeight) * 0.5) as Int;
 
     if (tilesXParent === 1 as Int && tilesYParent === 1 as Int) {
       let cellPos: ivec2 = new ivec2(
-        (parent.Box.Min.x / this.Level.Atlas.TileWidth) as Int,
-        (parent.Box.Min.y / this.Level.Atlas.TileHeight) as Int
+        Math.floor(parent.Box.Min.x / this.Level.Atlas.TileWidth) as Int,
+        Math.floor(parent.Box.Min.y / this.Level.Atlas.TileHeight) as Int
       );
       parent.Cell = new Cell(parent, this.NumLayers);
 
@@ -426,13 +588,13 @@ export class TileGrid {
       let B: Box2f = null;
 
       if (tilesXParent > tilesYParent) {
-        let midx: number = parent.Box.Min.x + tilesXMid as number * this.Level.Atlas.TileWidth;
+        let midx: number = parent.Box.Min.x + (tilesXMid as number) * this.Level.Atlas.TileWidth;
 
         A = Box2f.construct(new vec2(parent.Box.Min.x, parent.Box.Min.y), new vec2(midx, parent.Box.Max.y));
         B = Box2f.construct(new vec2(midx, parent.Box.Min.y), new vec2(parent.Box.Max.x, parent.Box.Max.y));
       }
       else {
-        let midy: number = parent.Box.Min.y + tilesYMid as number * this.Level.Atlas.TileHeight;
+        let midy: number = parent.Box.Min.y + (tilesYMid as number) * this.Level.Atlas.TileHeight;
 
         A = Box2f.construct(new vec2(parent.Box.Min.x, parent.Box.Min.y), new vec2(parent.Box.Max.x, midy));
         B = Box2f.construct(new vec2(parent.Box.Min.x, midy), new vec2(parent.Box.Max.x, parent.Box.Max.y));
@@ -446,7 +608,7 @@ export class TileGrid {
 
       let i = 0;
       for (let n of parent.Children) {
-        this.DivideGrid(n);
+        this.DivideGrid(n, iCallstack + 1 as Int);
         i++;
       }
     }
@@ -492,10 +654,10 @@ export class TileGrid {
 
     return ret;
   }
-  public GetSurroundingCells(c: Cell, corners: boolean = false): Cell[] {
+  public GetSurroundingCells(c: Cell, corners: boolean = false): Array<Cell> {
     //If corners is false, you skip the corners of the 3x3 grid
 
-    let n: Cell[] = new Array<Cell>(9);
+    let n: Array<Cell> = new Array<Cell>(9);
     n[4] = c;
     if (c == null) { return n; }
 
@@ -524,8 +686,8 @@ export class TileGrid {
     return b;
   }
   public GetCellManifoldForBox(b: Box2f): Array<Cell> {
-    let x: Int = (b.Min.x / this.Level.Atlas.TileWidth) as Int;
-    let y: Int = (b.Min.y / this.Level.Atlas.TileHeight) as Int;
+    let x: Int = Math.floor(b.Min.x / this.Level.Atlas.TileWidth) as Int;
+    let y: Int = Math.floor(b.Min.y / this.Level.Atlas.TileHeight) as Int;
 
     let w: Int = Math.ceil(b.Width() / (this.Level.Atlas.TileWidth as number)) as Int;
     let h: Int = Math.ceil(b.Height() / (this.Level.Atlas.TileHeight as number)) as Int;
