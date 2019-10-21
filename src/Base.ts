@@ -16,6 +16,7 @@ import { vec4, vec3 } from './Math';
 
 export interface AfterLoadFunction { (x: any): void; };
 
+
 //https://stackoverflow.com/questions/38213926/interface-for-associative-object-array-in-typescript
 export interface Dictionary<T> {
   [key: string]: T;
@@ -262,7 +263,7 @@ export class AudioManager {
 
 export interface ModelCallback { (model: THREE.Mesh): void; };
 export interface ModelObjectCallback { (object: PhysicsObject3D, model: THREE.Mesh): void; };
-export interface AfterLoadModel { (success:boolean , arr:Array<Object3D>, gltf: any): Object3D; };
+export interface AfterLoadModel { (success: boolean, arr: Array<Object3D>, gltf: any): Object3D; };
 export class ModelManager {
 
   private _cache: Dictionary<THREE.Object3D> = {};
@@ -286,7 +287,7 @@ export class ModelManager {
       this._callbacks[szfile].push(callback);
     }
   }
-  public  loadModel(filename: Files.Model, obj_names_in_scene: Array<string>, afterLoad: AfterLoadModel) {
+  public loadModel(filename: Files.Model, obj_names_in_scene: Array<string>, afterLoad: AfterLoadModel) {
     Globals.logDebug('loading model "' + filename + '".')
     let that = this;
     let loader = new GLTFLoader_.GLTFLoader();
@@ -835,48 +836,80 @@ export class Mouse extends Vector3 {
     //var controls = new OrbitControls.default();
     document.addEventListener('mousemove', function (e) {
       e.preventDefault();
-
-      //animate arms based on cursor position.
-      e.preventDefault();
-      if (!that.moved) {
-        that.moved = true;
-      }
-
-      that.x = e.clientX;
-      that.y = e.clientY;
-      that.z = 0;
-
-      //Look at the point in the screen projected into 3D
-      let v2 = Globals.screen.getCanvasRelativeXY(e.clientX, e.clientY);
-
-      v2.x = (v2.x / Globals.screen.canvas.width) * 2 - 1;
-      v2.y = ((Globals.screen.canvas.height - v2.y) / Globals.screen.canvas.height) * 2 - 1;
-
-      let FOV = 0.6;//Increase to get more FOV 
-
-      let base = new Vector4(0, 0, -1, 1);
-      let ry: Matrix4 = new Matrix4();
-      ry.makeRotationAxis(new Vector3(0, -1, 0), Math.PI * FOV * v2.x);
-      let vy: Vector4 = base.clone().applyMatrix4(ry);
-
-      let rx: Matrix4 = new Matrix4();
-      rx.makeRotationAxis(new Vector3(1, 0, 0), Math.PI * FOV * v2.y);
-      let vxy: Vector4 = vy.clone().applyMatrix4(rx);
-
-      let vxy3: Vector3 = new Vector3(vxy.x, vxy.y, vxy.z);
-
-      vxy3.normalize().multiplyScalar(5);
-      let campos = new vec3();
-      Globals.camera.getWorldPosition(campos);
-      vxy3.add(campos);
-
-      Globals.camera.lookAt(new Vector3(vxy3.x, vxy3.y, vxy3.z));
-
-      that.debugDrawMousePos();
+      that.mouseMove(e.clientX, e.clientY);
 
     }, false);
   }
+  private curView: vec3 = new vec3(0, 0, -1);
+  private mouseMove(x:number,y:number){
+          
+    if (!this.moved) {
+      this.moved = true;
+    }
 
+    if(this.Left.down()){
+
+      this.flycamRotate(x, y);
+    }
+
+    this.x = x;
+    this.y = y;
+    this.z = 0;
+
+    this.debugDrawMousePos();
+
+  }
+  private flycamRotate(newx: number, newy: number) {
+    let dx = newx - this.x;
+    let dy = newy - this.y;
+
+    let maxPixel = 8;
+
+    if(Math.abs(dx) > maxPixel) { dx = Math.sign(dx) * maxPixel }
+    if(Math.abs(dy) > maxPixel) { dy = Math.sign(dy) * maxPixel }
+
+    let campos = new vec3();
+    Globals.camera.getWorldPosition(campos);
+    let camdir = new vec3();
+    Globals.camera.getWorldDirection(camdir);
+
+    let rot_speed = 0.01; // Change this to change rotation speed.
+
+    let right = camdir.clone().cross(Globals.camera.up).normalize();
+    let down = Globals.camera.up.clone().normalize().multiplyScalar(-1);
+
+    this.curView.add(right.multiplyScalar(dx*rot_speed));
+    this.curView.add(down.multiplyScalar(dy*rot_speed));
+
+    Globals.camera.lookAt(this.curView.clone().add(campos));
+  }
+  private shittyRotate() {
+    // //Look at the point in the screen projected into 3D
+    // let v2 = Globals.screen.getCanvasRelativeXY(e.clientX, e.clientY);
+
+    // v2.x = (v2.x / Globals.screen.canvas.width) * 2 - 1;
+    // v2.y = ((Globals.screen.canvas.height - v2.y) / Globals.screen.canvas.height) * 2 - 1;
+
+    // let FOV = 1;//Increase to get more FOV 
+
+    // let base = new Vector4(0, 0, -1, 1);
+    // let ry: Matrix4 = new Matrix4();
+    // ry.makeRotationAxis(new Vector3(0, -1, 0), Math.PI * FOV * v2.x);
+    // let vy: Vector4 = base.clone().applyMatrix4(ry);
+
+    // let rx: Matrix4 = new Matrix4();
+    // rx.makeRotationAxis(new Vector3(1, 0, 0), Math.PI * FOV * v2.y);
+    // let vxy: Vector4 = vy.clone().applyMatrix4(rx);
+
+    // let vxy3: Vector3 = new Vector3(vxy.x, vxy.y, vxy.z);
+
+    // vxy3.normalize().multiplyScalar(5);
+    // let campos = new vec3();
+    // Globals.camera.getWorldPosition(campos);
+    // vxy3.add(campos);
+    // Globals.camera.lookAt(new Vector3(vxy3.x, vxy3.y, vxy3.z));
+
+  }
   private debugDrawMousePos(): void {
     let that = this;
     if (Globals.isDebug()) {
@@ -901,7 +934,7 @@ export class VirtualController {
 
   private c_immMoveAmt: number = 0.1;
   public get MoveLeft(): boolean { return this.Axis.x < -this.c_immMoveAmt; }
-  public get MoveRight(): boolean { return  this.Axis.x > this.c_immMoveAmt; }
+  public get MoveRight(): boolean { return this.Axis.x > this.c_immMoveAmt; }
   public get MoveUp(): boolean { return this.Axis.y > this.c_immMoveAmt; }
   public get MoveDown(): boolean { return this.Axis.y < -this.c_immMoveAmt; }
 
@@ -1061,7 +1094,7 @@ export class Input {
         joy.Axis.y = Math.min(1, joy.Axis.y + speed * dt);
       }
       else {
-        if (joy.Axis.y < 0){
+        if (joy.Axis.y < 0) {
           joy.Axis.y = Math.min(0, joy.Axis.y + speed * dt);
         }
         else if (joy.Axis.y > 0) {
@@ -1077,7 +1110,7 @@ export class Input {
       else if (this._keyboard.s.pressOrHold()) {
         joy.Axis.y = -1;
       }
-      else{
+      else {
         joy.Axis.y = 0;
       }
       if (this._keyboard.a.pressOrHold()) {
@@ -1150,17 +1183,21 @@ export class Frustum {
       cam_pos = new vec3();
       Globals.camera.getWorldPosition(cam_pos);
     }
+    let camup = Globals.camera.up.clone().normalize();
 
     let nearCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.near));
     let farCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.far));
     let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
-    let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV()) ;
+    let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV());
     let tan_fov_2 = Math.tan(fov / 2.0);
-    let rightVec = cam_dir.clone().cross(Globals.camera.up);
+    
+
+    let rightVec = cam_dir.clone().cross(camup); //TODO: see if this changes things
+    rightVec.normalize();
 
     let w_far_2 = tan_fov_2 * Globals.camera.far;
     let h_far_2 = w_far_2 * ar;
-    let cup_far = Globals.camera.up.clone().multiplyScalar(h_far_2);
+    let cup_far = camup.clone().multiplyScalar(h_far_2);
     let crt_far = rightVec.clone().multiplyScalar(w_far_2);
     this._ftl = farCenter.clone().add(cup_far).sub(crt_far);
     this._ftr = farCenter.clone().add(cup_far).add(crt_far);
@@ -1168,7 +1205,7 @@ export class Frustum {
 
     let w_near_2 = tan_fov_2 * Globals.camera.near;
     let h_near_2 = w_near_2 * ar;
-    let cup_near = Globals.camera.up.clone().multiplyScalar(h_near_2);
+    let cup_near = camup.clone().multiplyScalar(h_near_2);
     let crt_near = rightVec.clone().multiplyScalar(w_near_2);
     this._ntl = nearCenter.clone().add(cup_near).sub(crt_near);
     this._ntr = nearCenter.clone().add(cup_near).add(crt_near);

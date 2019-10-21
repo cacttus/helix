@@ -11,10 +11,12 @@
     "maxNodeModuleJsDepth": 1,
      //Replaced none from es6
      //see: https://github.com/Microsoft/TypeScript/issues/11879
-    "module": "es6",
+    //Replaced 'esnext' from 'es6' due to BigInt
+     "module": "es6",
     // Needed to change this from es5 to es6
     //cuased issues: with Object.keys().find
     //https://github.com/Microsoft/TypeScript/issues/6945
+    //Replaced 'esnext' from 'es6' due to BigInt
     "target": "es6", 
     "jsx": "preserve",
     "allowJs": true ,

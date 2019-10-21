@@ -7,10 +7,10 @@ import { Globals, GameState } from './Globals';
 import { basename } from 'upath';
 import { Utils } from './Utils';
 import { Random, ModelManager, AfterLoadFunction, Frustum } from './Base';
-import { vec2, vec3, vec4, mat3, mat4 } from './Math';
+import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import * as Files from './Files';
-import world_data from './game_world.json';
-
+import {Int, roundToInt, toInt, checkIsInt, assertAsInt} from './Int';
+import {TileGrid} from './TileGrid';
 
 export class ImageResource {
   private _location: string = "";
@@ -42,44 +42,44 @@ export class Atlas extends ImageResource {
   So, once Monogame Toolkit is finished the textrue coords will be loaded manually from a packed texture.
   for now, we;re just using straight tiled textures.
   */
-  private _topPad: number = 1;
-  private _leftPad: number = 1;
-  private _rightPad: number = 1;
-  private _botPad: number = 1;
+  private _topPad: Int = 1 as Int;
+  private _leftPad: Int = 1 as Int;
+  private _rightPad: Int = 1 as Int;
+  private _botPad: Int = 1 as Int;
 
-  private _xSpace: number = 1;  //Pixel Space between frames.
-  private _ySpace: number = 1;
+  private _xSpace: Int = 1 as Int;  //Pixel Space between frames.
+  private _ySpace: Int = 1 as Int;
 
-  private _tileWidth: number = 16;
-  private _tileHeight: number = 16;
+  private _tileWidth: Int = 16 as Int;
+  private _tileHeight: Int = 16 as Int;
 
   //Number of frames across the atlas.
-  public get FramesWidth(): number {
-    return ((this.ImageWidth - this.RightPad - this.LeftPad + this.SpaceX) / (this.TileWidth + this.SpaceX)) | 0;
+  public get FramesWidth(): Int {
+    return ((this.ImageWidth - this.RightPad - this.LeftPad + this.SpaceX) / (this.TileWidth + this.SpaceX)) as Int;
   }
-  public get FramesHeight(): number {
-    return ((this.ImageHeight - this.BotPad - this.TopPad + this.SpaceY) / (this.TileHeight + this.SpaceY)) | 0;
+  public get FramesHeight(): Int {
+    return ((this.ImageHeight - this.BotPad - this.TopPad + this.SpaceY) / (this.TileHeight + this.SpaceY)) as Int;
   }
 
-  public get ImageWidth(): number {
+  public get ImageWidth(): Int {
     let w = this.Texture.image.width;
     return w;
   }
-  public get ImageHeight(): number {
+  public get ImageHeight(): Int {
     let h = this.Texture.image.height;
     return h;
   }
 
-  public get TopPad(): number { return this._topPad; }
-  public get LeftPad(): number { return this._leftPad; }
-  public get RightPad(): number { return this._rightPad; }
-  public get BotPad(): number { return this._botPad; }
-  public get SpaceX(): number { return this._xSpace; }
-  public get SpaceY(): number { return this._ySpace; }
-  public get TileWidth(): number { return this._tileWidth; }
-  public get TileHeight(): number { return this._tileHeight; }
+  public get TopPad(): Int { return this._topPad; }
+  public get LeftPad(): Int { return this._leftPad; }
+  public get RightPad(): Int { return this._rightPad; }
+  public get BotPad(): Int { return this._botPad; }
+  public get SpaceX(): Int { return this._xSpace; }
+  public get SpaceY(): Int { return this._ySpace; }
+  public get TileWidth(): Int { return this._tileWidth; }
+  public get TileHeight(): Int { return this._tileHeight; }
 
-  public constructor(top: number, left: number, right: number, bot: number, xSpace: number, ySpace: number, tile_w: number, tile_h: number, tex: string, afterLoad: AfterLoadFunction) {
+  public constructor(top: Int, left: Int, right: Int, bot: Int, xSpace: Int, ySpace: Int, tile_w: Int, tile_h: Int, tex: string, afterLoad: AfterLoadFunction) {
     super();
     this._topPad = top;
     this._leftPad = left;
@@ -98,7 +98,9 @@ export class Atlas extends ImageResource {
 export class SpriteFrame {
   //A sub-image of a texture.
   //Technically we should allow multiple textures and batching, but for now, just one texture.
-  public x: number = 0;
+  public debug_tile_x: number = 0;  //The Tile X/Y.  This is for information purposes only and may not actually be usd.
+  public debug_tile_y : number = 0;
+  public x: number = 0; //Texture X/Y (NOT tile index)
   public y: number = 0;
   public w: number = 0;
   public h: number = 0;
@@ -110,8 +112,7 @@ export class SpriteFrame {
     this.h -= amt * 2;
   }
 }
-
-class FDef {
+export class FDef {
   //Quick Sprite Keyframe Definition
   p: vec2 = null;
   h: boolean = false;
@@ -139,7 +140,6 @@ class FDef {
     this.image_interpolation = other.image_interpolation;
   }
 }
-
 export enum SpriteKeyFrameInterpolation { Linear, Step }
 export class SpriteKeyFrame {
   //Keyframe for animation
@@ -301,13 +301,16 @@ class Animation25D {
           let ob = this.getFrames(anim);
           let kflen = this._currentAnimation.KeyFrames.length;
           if (ob.frameA >= 0 &&
-            ob.frameA <= kflen &&
+            ob.frameA < kflen &&
             ob.frameB >= 0 &&
-            ob.frameB <= kflen) {
+            ob.frameB < kflen) {
 
             let keyA = anim.KeyFrames[ob.frameA];
             let keyB = anim.KeyFrames[ob.frameB];
             this.interpolateKeyFrames(keyA, keyB, ob.t01);
+          }
+          else {
+            Globals.logError("Animation keyframes out of bounds: " + anim.Name);
           }
 
         }//anim.keyframes.length > 0
@@ -420,20 +423,28 @@ class Animation25D {
     }
   }
 
-  public setKeyFrame(frameIndex: number, anim: SpriteAnimationData = null) {
-    if (anim === null) {
-      anim = this._currentAnimation;
+  public setKeyFrame(frameIndex: number, anim: SpriteAnimationData = null, recursive: boolean = true) {
+    let my_anim = anim;
+    if (my_anim === null) {
+      my_anim = this._currentAnimation;
     }
     //Sets the given keyframe data for the character.
-    if (anim) {
-      if (anim.KeyFrames.length > frameIndex) {
-        let key = anim.KeyFrames[frameIndex];
+    if (my_anim) {
+      if (my_anim.KeyFrames.length > frameIndex) {
+        let key = my_anim.KeyFrames[frameIndex];
         this.interpolateKeyFrames(key, null, 0);
       }
       else {
         Globals.logError("Tried to set invalid keyframe for obj " + this.Sprite.Name + " index : " + frameIndex);
       }
     }
+
+    if (recursive) {
+      for (const c of this.Sprite.Children) {
+        c.Animation.setKeyFrame(frameIndex, anim, recursive);
+      }
+    }
+
   }
   public pause() {
     this._playback = AnimationPlayback.Stopped;
@@ -441,7 +452,7 @@ class Animation25D {
       c.Animation.pause();
     }
   }
-  public play(animation_name: string = null, preventRestart: boolean = false) {
+  public play(animation_name: string = null, restart: boolean = true) {
     //if PreventRestart is true, then skip setting a new animation if the same animation is already playing.
     if (animation_name === null) {
       if (this._currentAnimation) {
@@ -449,8 +460,9 @@ class Animation25D {
       }
       this._currentAnimation = null;
     }
-    else if (this.CurrentAnimation !== null && (this.CurrentAnimation.Name === animation_name) && preventRestart) {
+    else if ((this.CurrentAnimation !== null) && (this.CurrentAnimation.Name === animation_name) && !restart) {
       //Do not play new animation.  It's already playing and we dont' want to interrupt.
+      this._playback = AnimationPlayback.Playing;
     }
     else {
       let d = this._animations.get(animation_name);
@@ -479,6 +491,7 @@ class Animation25D {
           this.addAnimation(animation_name, frames, duration, atlas);
         }
         else {
+          //Get the given sub-tile sprite, or create and add it to this sprite.
           let sp: Sprite25D = this.Sprite.getSubTile(itile, jtile);
           if (sp === null) {
             sp = new Sprite25D();
@@ -486,14 +499,7 @@ class Animation25D {
             this.Sprite.add(sp);
           }
 
-          let newframes: Array<FDef> = new Array<FDef>();
-          for (let ff of frames) {
-            let newfr = ff.clone();
-            newfr.p.x = (ff.p.x + itile) | 0;
-            newfr.p.y = (ff.p.y + jtile) | 0;
-            newframes.push(newfr);
-          }
-          sp.Animation.addAnimation(animation_name, newframes, duration, atlas);
+          sp.Animation.addAnimation(animation_name, frames, duration, atlas);
           sp.Position.set(this.Sprite.Position.x + itile * this.Sprite.Size.x, this.Sprite.Position.y + jtile * this.Sprite.Size.y, this.Sprite.Position.z);
         }
 
@@ -503,19 +509,29 @@ class Animation25D {
   public addAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas): SpriteAnimationData {
     let ret = new SpriteAnimationData(animation_name);
 
+    //If we are a sub-tile animation, then add the parent sprite's sub-tile coordinates to the input animation.
+    let sub_x = 0;
+    let sub_y = 0;
+    if(this.Sprite.SubTile){
+      sub_x = this.Sprite.SubTile.x;
+      sub_y = this.Sprite.SubTile.y;
+    }
+
     //Create Tiles.
-    let sw = atlas.TileWidth / atlas.ImageWidth;
-    let sh = atlas.TileHeight / atlas.ImageHeight;
+    let sw : number = Number(atlas.TileWidth) / Number(atlas.ImageWidth);
+    let sh : number = Number(atlas.TileHeight) / Number(atlas.ImageHeight);
     for (let iframe = 0; iframe < frames.length; ++iframe) {
       let def: FDef = frames[iframe];
 
       let kf = new SpriteKeyFrame(ret);
       kf.Frame = new SpriteFrame();
-      kf.Frame.x = (atlas.LeftPad + def.p.x * (atlas.TileWidth + atlas.SpaceX)) / atlas.ImageWidth;
+      kf.Frame.x = (Number(atlas.LeftPad) + (def.p.x + sub_x) * Number(atlas.TileWidth + atlas.SpaceX)) / Number(atlas.ImageWidth);
       //Tex is in gl coords from bot left corner. so 0,0 is actually 0,h-1
-      kf.Frame.y = 1 - (atlas.TopPad + def.p.y * (atlas.TileHeight + atlas.SpaceY)) / atlas.ImageHeight - sh;
+      kf.Frame.y = 1 - (Number(atlas.TopPad) + (def.p.y + sub_y) * Number(atlas.TileHeight + atlas.SpaceY)) / Number(atlas.ImageHeight) - sh;
       kf.Frame.w = sw;
       kf.Frame.h = sh;
+      kf.Frame.debug_tile_x = def.p.x + sub_x;
+      kf.Frame.debug_tile_y = def.p.y + sub_y;
       kf.Frame.shrink(0.0001);
 
       kf.Color = def.c ? def.c : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
@@ -566,6 +582,10 @@ class Sprite25D {
 
   public get Name(): string { return this._name; }
   public set Name(x: string) { this._name = x; }
+
+  //SubTile is used to make multi-tile animations.  In addTiledAnimation the subtile adds an x/y offset to the animation.
+  //The sub-tile is a tile relative to a "root" Sprite of 0,0 and adds the keyframe offsets to this location.  
+  //This is for multi-tiled sprite animations, for example a character that is 2 tiles high (ex. pokemon char sprite)
   public get SubTile(): vec2 { return this._subTile; }
   public set SubTile(x: vec2) { this._subTile = x; }
 
@@ -957,7 +977,6 @@ export class TileBuffer extends THREE.BufferGeometry {
   }
 }
 export class Viewport25D {
-
 }
 export class WorldView25D extends Object3D {
   // This class is a viewport into the 2D game world.  
@@ -1133,17 +1152,14 @@ $(document).ready(function () {
 });
 let g_atlas: Atlas = null;
 function loadResources() {
-  const word = (<any>world_data);
-  console.log(word); // output 'testing
-
 
   //https://threejs.org/docs/#manual/en/introduction/Animation-system
 
   // this should really be handled by a promise.
   g_atlas = new Atlas(
-    1, 1, 1, 1,
-    1, 1,
-    16, 16, './dat/img/tiles.png', function () {
+    1 as Int, 1 as Int, 1 as Int, 1 as Int,
+    1 as Int, 1 as Int,
+    16 as Int, 16 as Int, './dat/img/tiles.png', function () {
       Globals.models.loadModel(Files.Model.Hand, ['Armature', 'Action_Point'], function (success: boolean, arr: Array<Object3D>, gltf: any): THREE.Object3D {
         if (success) {
           if (arr.length === 2) {
@@ -1167,24 +1183,16 @@ function loadResources() {
 function initializeGame() {
   createWorld();
   createBackground();
-
   if (Globals.isDebug()) {
     axis = new THREE.AxesHelper(1);
     Globals.scene.add(axis);
   }
-
   Globals.prof.frameEnd();
-
   $('#outPopUp').hide();
-
   Globals.startGameEngine(gameLoop);
 }
 
-//Testing Yield / Async/Await & Promise
-//Generator returns value & boolean whehter done.
-
 let g_playerchar: Sprite25D = null;
-
 function createWorld() {
   //Load Resources
 
@@ -1221,7 +1229,6 @@ function createWorld() {
     [mfr(6, 1), mfr(7, 1), mfr(6, 1), mfr(8, 1)],
     0.7, g_atlas,
     new vec2(1, 2));
-
   world.addObject25(g_playerchar);
 
 }
@@ -1236,7 +1243,6 @@ function startGame() {
 function stopGame() {
   Globals.gameState = GameState.GameOver;
 }
-
 function gameLoop(dt: number) {
   Globals.prof.begin("main game loop");
   if (Globals.gameState === GameState.Title) {
@@ -1278,7 +1284,7 @@ function gameLoop(dt: number) {
     else {
       let handpos = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 4);
 
-      
+
       g_hand.position.copy(handpos);
       //g_hand.updateMatrix();
     }
@@ -1323,7 +1329,7 @@ function movePlayerChar() {
 
     g_playerchar.Animation.pause();
 
-    g_playerchar.Animation.setKeyFrame(0);
+    g_playerchar.Animation.setKeyFrame(0, null, true);
   }
 }
 function createBackground() {
@@ -1332,11 +1338,5 @@ function createBackground() {
 
   g_pointlight = new THREE.PointLight(0xffff99, 1, 2000);
   Globals.scene.add(g_pointlight);
-}
-
-//GetCellManifoldForBox
-class Level {
-
-
 }
 
