@@ -1,10 +1,10 @@
+import { Color } from 'three';
 import { ivec2, vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import { Globals } from './Globals';
-import { Atlas, Sprite25D, FDef } from './Main';
+import { Atlas, Sprite25D, FDef, SpriteFrame } from './Main';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 import world_data from './game_world.json';
-
-
+import { Random } from './Base';
 
 class IVec2Map<K> {
   private map: Map<Int, Map<Int, K>> = new Map<Int, Map<Int, K>>();
@@ -47,11 +47,12 @@ class IVec2Map<K> {
 class IVec2Set extends IVec2Map<Int> {
 }
 
-export class Res {
-  public static readonly BorderTileId: Int = 0 as Int;
-  public static readonly GuyTileId: Int = 19 as Int;
-}
+// export class Res {
+//   public static readonly BorderTileId: Int = 0 as Int;
+//   public static readonly GuyTileId: Int = 19 as Int;
+// }
 class TmxTileset {
+  //Tileset in Tiled.
   public columns: Int;//":6,
   public firstgid: Int;//":1,
   public image: Int; //"..\/..: Int;//\/miner\/Core\/Content\/mintiles-16x16.png",
@@ -65,6 +66,7 @@ class TmxTileset {
   public tilewidth: Int;//":16
 }
 class TmxLayer {
+  //Layer in Tiled
   public data: Array<Int>;//:[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   public height: Int;//":44,
   public id: Int;//":6,
@@ -77,6 +79,7 @@ class TmxLayer {
   public y: Int;//":0
 }
 class TmxMap {
+  //This is a map in Tiled
   public width: Int; //":60    
   public height: Int;
   public infinite: boolean;
@@ -104,8 +107,20 @@ export enum TiledSpriteId {
   Player = 19,
   Grass_Base = 46,
 }
+export enum TileLayer {
+  DebugBackground = -1,
+  Border = 0,
+  Background = 1,
+  Midground = 2,
+  Objects = 3,
+  Foreground = 4,
+  LayerCount = 5,
+  Unset = 6, // Special layer type indicating that the layer of this
+}
 interface MakeTileFn { (): Sprite25D }
 export class Tiles {
+  //This is the definitions for all tiles in the game.
+  //If we get Monogame Toolkit to work... we can eventually do away with this.
   private _tileMap: Map<TiledSpriteId, Sprite25D> = null;
   public getTile(id: TiledSpriteId): Sprite25D {
     return this._tileMap.get(id);
@@ -118,7 +133,7 @@ export class Tiles {
     this._tileMap = new Map<TiledSpriteId, Sprite25D>();
 
     this.addTile(function () {
-      let player = new Sprite25D("Player", TiledSpriteId.Player);
+      let player = new Sprite25D("Player", TiledSpriteId.Player, TileLayer.Objects);
       player.Animation.addMultiTileAnimation("walk_down",
         FDef.default([[0, 1], [1, 1], [0, 1], [2, 1]]),
         0.7, atlas,
@@ -140,7 +155,7 @@ export class Tiles {
 
     //Testing grass..
     this.addTile(function () {
-      let tile = new Sprite25D("Grass_Base", TiledSpriteId.Grass_Base);
+      let tile = new Sprite25D("Grass_Base", TiledSpriteId.Grass_Base, TileLayer.Unset);
       tile.Animation.addTileFrame(new ivec2(0, 0), atlas, new ivec2(1, 1));
       tile.Animation.addTileFrame(new ivec2(1, 0), atlas, new ivec2(1, 1));
 
@@ -152,17 +167,10 @@ export class Tiles {
 
   }
 }
-
-
-
-
-export class PlatformLevel {
-  public static readonly Border: Int = 0 as Int;
-  public static readonly Background: Int = 1 as Int;
-  public static readonly Midground: Int = 2 as Int;
-  public static readonly Objects: Int = 3 as Int;
-  public static readonly Foreground: Int = 4 as Int;
-  public static readonly LayerCount: Int = 5 as Int;
+export class MasterMap {
+  //The entire game world in one Tiled data file.  
+  //We flood fill rooms bounded by border tiles to create map areas.
+  //It's a fun way to make seamless game areas and makes it easy to connect areas since they're just right next to each other.
   public static readonly EMPTY_TILE: Int = -1 as Int;
 
   private _atlas: Atlas = null;
@@ -172,13 +180,10 @@ export class PlatformLevel {
   public Grid: TileGrid = null;;
   //public List<GameObject> GameObjects { get; private set; } = new List<GameObject>();
   //public List<GameObject> Projectiles { get; private set; } = new List<GameObject>();
-  public Room: Room = null; //{ get; private set; }
-  private NumFloodFill: Int = 0 as Int;
-
+  public Room: MapArea = null; //{ get; private set; }
 
   private _tiles: Tiles = null;
   public get Tiles(): Tiles { return this._tiles; }
-
 
   public PlayerStartXY: ivec2 = new ivec2(Number.MAX_SAFE_INTEGER as Int, Number.MAX_SAFE_INTEGER as Int);
   public MapWidthTiles: Int = 0 as Int; //{ get; private set; }
@@ -200,9 +205,33 @@ export class PlatformLevel {
 
     this.ParseGenTiles(map);
 
+    this.debugPrintGenTileInfo();
     this.MakeRoom(this.PlayerStartXY);
   }
-
+  private debugPrintGenTileInfo() {
+    if (Globals.isDebug()) {
+      //debug gent iles.
+      let mapFound: Map<Int, Int> = new Map<Int, Int>();
+      let s: string = "";
+      let del: string = "";
+      for (let iRow = 0 as Int; iRow < this.MapHeightTiles; ++iRow) {
+        for (let iCol = 0; iCol < this.MapWidthTiles; ++iCol) {
+          for (let iLayer = 0; iLayer < TileLayer.LayerCount; ++iLayer) {
+            let t = this.GenTiles[iRow][iCol][iLayer];
+            s += del + this.GenTiles[iRow][iCol][iLayer];
+            del = ",";
+            mapFound.set(t, t);
+          }
+        }
+      }
+      s = " >>>> " + s;
+      for (let [k, v] of mapFound) {
+        s = k + " " + s;
+      }
+      s = "tiles: " + s;
+      console.log(s);
+    }
+  }
   public InitGenTileGrid() {
     this.GenTiles = new Array<Array<Array<Int>>>();
     for (let iRow = 0 as Int; iRow < this.MapHeightTiles; ++iRow) {
@@ -210,61 +239,38 @@ export class PlatformLevel {
 
       for (let iCol = 0; iCol < this.MapWidthTiles; ++iCol) {
         let layers: Array<Int> = new Array<Int>();
-        for (let iLayer = 0; iLayer < PlatformLevel.LayerCount; ++iLayer) {
-          layers.push(PlatformLevel.EMPTY_TILE);
+        for (let iLayer = 0; iLayer < TileLayer.LayerCount; ++iLayer) {
+          layers.push(MasterMap.EMPTY_TILE);
         }
         this.GenTiles[iRow].push(layers);// 3 layers **0 is out of bounds** so -1 is unset/null
       }
     }
   }
   public ParseGenTiles(map: TmxMap) {
-    var version = map.version;
-
-    let KeyTiles: Array<Int> = new Array<Int>();
-    // List<int> KeyTiles = new List<int>
-    // {
-    //     World.Res.SlopeTile_BL               ,
-    //     World.Res.SlopeTile_BR               ,
-    //     World.Res.SlopeTile_TL               ,
-    //     World.Res.SlopeTile_TR               ,
-    //     World.Res.BorderTileId               ,
-    //     World.Res.Sun_20Percent              ,
-    //     World.Res.Sun_5Percent               ,
-    //     World.Res.SavePointTileId            ,
-    //     World.Res.Bombable_Tile_TileId       ,
-    //     World.Res.FallThrough_Tile_TileId    ,
-    //     World.Res.Water100TileId             ,
-    //     World.Res.Water50TileId              ,
-    //     World.Res.Lava100TileId              ,
-    //     World.Res.Lava50TileId               ,
-    //     World.Res.SavePointTileId,
-    //     World.Res.SwitchButtonTileId  ,
-    //     World.Res.SwitchDoorTileId   ,
-    //     World.Res.SwitchConduitTileId,
-    //     World.Res.Tar80TileId               ,
-    // };
+    //Parse the Tiled map and translate the Tile IDs into IDs we can use
+    //Basically all this does is set '0' to '-1' for empty tile.
+    //We don't use zero, just because it's likely to become confusing.
     let debug_invalid_tiles: Int = 0 as Int;
 
     for (let layer of map.layers) {
-      let layerId: Int = -1 as Int;
+      let layerId: Int = toInt(-1);
 
-      if (layer.name === ("Border")) { layerId = PlatformLevel.Border; }
-      else if (layer.name === ("Foreground")) { layerId = PlatformLevel.Foreground; }
-      else if (layer.name === ("Background")) { layerId = PlatformLevel.Background; }
-      else if (layer.name === ("Midground")) { layerId = PlatformLevel.Midground; }
-      else if (layer.name === ("Objects")) { layerId = PlatformLevel.Objects; }
+      if (layer.name === ("Border")) { layerId = toInt(TileLayer.Border); }
+      else if (layer.name === ("Foreground")) { layerId = toInt(TileLayer.Foreground); }
+      else if (layer.name === ("Background")) { layerId = toInt(TileLayer.Background); }
+      else if (layer.name === ("Midground")) { layerId = toInt(TileLayer.Midground); }
+      else if (layer.name === ("Objects")) { layerId = toInt(TileLayer.Objects); }
 
-      if (layerId == -1) {
+      if (layerId === -1) {
         Globals.debugBreak();
       }
       else {
-        let iTile
         for (let iTile = 0; iTile < layer.data.length; iTile++) {
           let tile: Int = layer.data[iTile];
-          let tile_x: Int = ((iTile as Int) % (layer.width as Int)) as Int;
-          let tile_y: Int = Math.floor(iTile / layer.width) as Int;
+          let tile_x: Int = toInt(toInt(iTile) % toInt(layer.width));
+          let tile_y: Int = toInt(iTile / layer.width);
 
-          if (tile === Res.GuyTileId) {
+          if (tile === TiledSpriteId.Player) {
             //here is our start point, flood fill this area.
             this.PlayerStartXY.x = tile_x;
             this.PlayerStartXY.y = tile_y;
@@ -273,16 +279,17 @@ export class PlatformLevel {
           //Set to empty if we're not presetn.  Most tiles are 0, we use -1 for empty
           let val: Int = tile;
           if (tile === 0) {
-            val = PlatformLevel.EMPTY_TILE;
+            val = MasterMap.EMPTY_TILE;
           }
-          else if (this._tiles.getTile(tile)) {
-            //The tile is valid.
-            let nnn = 0;
-            nnn += 1;
-          }
-          else {
-            val = PlatformLevel.EMPTY_TILE;
-          }
+          // else if (this._tiles.getTile(tile)) {
+          //   //The tile is valid.
+          //   let nnn = 0;
+          //   nnn += 1;
+          // }
+
+          // else {
+          //   val = MasterMap.EMPTY_TILE;
+          // }
           this.TrySetGenTile(tile_x, tile_y, layerId, val);
         }
       }
@@ -319,7 +326,7 @@ export class PlatformLevel {
       //this.GameObjects = new List<GameObject>();
 
       //Find the boundary x/y of the map so we can make a grid
-      this.Room = new Room();
+      this.Room = new MapArea();
       this.NumFloodFill = 0 as Int;
 
       this.FloodFillFromPointRecursive(startxy, this.Room);
@@ -327,7 +334,7 @@ export class PlatformLevel {
       this.Room.Validate();
 
       //Make the grid
-      this.Grid = new TileGrid(this, this.Room.WidthTiles, this.Room.HeightTiles, PlatformLevel.LayerCount);
+      this.Grid = new TileGrid(this, this.Room.WidthTiles, this.Room.HeightTiles, TileLayer.LayerCount as Int);
 
       //MUST COME BEFORE GENERATE GAME OBJECTS
       // GenerateDoors();
@@ -343,7 +350,8 @@ export class PlatformLevel {
       Globals.debugBreak();
     }
   }
-  public FloodFillFromPointRecursive(pt_origin: ivec2, room: Room) {
+  private NumFloodFill = 0;
+  public FloodFillFromPointRecursive(pt_origin: ivec2, room: MapArea) {
     //Flood fill an area demarcated by the boundary.
     let toCheck: Array<ivec2> = new Array<ivec2>();
     toCheck.push(pt_origin);
@@ -359,12 +367,12 @@ export class PlatformLevel {
       }
 
       //Get the tile from the BORDER tile layer.
-      let iTile: Int = this.TileXY(pt.x, pt.y, PlatformLevel.Border);
+      let iTile: Int = this.TileXY(pt.x, pt.y, TileLayer.Border as Int);
 
       if (room.Found.has(pt)) {
         //do nothing
       }
-      else if (iTile === Res.BorderTileId) {
+      else if (iTile === TiledSpriteId.Border) {
         if (!room.Border.has(pt)) {
           room.Border.set(pt);
 
@@ -402,7 +410,7 @@ export class PlatformLevel {
     }
   }
   public FloodFillAddNeighborBorder(v: ivec2, border: IVec2Set) {
-    if (this.TileXY(v.x, v.y, PlatformLevel.Midground) == Res.BorderTileId) {
+    if (this.TileXY(v.x, v.y, TileLayer.Midground as Int) == TiledSpriteId.Border) {
       if (!border.has(v)) {
         border.set(v);
       }
@@ -423,88 +431,8 @@ export class PlatformLevel {
   }
 
 }
-
-export class TileBlock {
-  public spriteRef: Sprite25D = null; //Reference to a Sprite25D, // Sprite for this block.  This also containst he TILE ID.  This is a REFERENCE to the tile.  Not a copy
-  public frameIndex: Int = 0 as Int;
-  //public float Health = 100; // Max Health is 100 for all blocks
-  // public bool Blocking = false;
-  // public bool CanMine = false;
-  //  public bool CanBomb = false;
-  //  public bool IsConduit = false;
-  //  public bool FallThrough = false;
-  // public SpriteEffects SpriteEffects = SpriteEffects.None;
-  public Box: Box2f;   // So we need custom boxes for things like ladders, &c
-  public get Pos(): vec2 { return this.Box.Min; }
-
-  public SlopeTileId: Int = -1 as Int;//One of 4 slopes TL TR BL BR
-  public IsSlope(): boolean { return this.SlopeTileId !== -1 as Int; }
-}
-export class Node {
-  public Level: PlatformLevel;//{ get; private set; }
-  //Node in a binary box tree - we don't use a quadtree because our grids are not square
-  // public bool IsLeaf = false;
-  public Box: Box2f;//{ get; set; } // Box, in Game-world pixels (not device pixels)
-  public constructor(level: PlatformLevel, box: Box2f) { this.Level = level; this.Box = box; }
-  public Children: Node[];
-  public Cell: Cell = null;
-}
-//public enum WaterType { Water, Lava, Tar }
-export class Cell {
-  public Layers: Array<TileBlock>;
-
-  //public vec4 WaterColor = new vec4(0.1f, 0.1f, 1.0f, 0.6f); 
-  //public Water : number = 0; //= 0.0f;
-  //public bool WaterTravelFrame = false;//
-  //public bool WaterOnRight = false;
-  //public bool WaterOnLeft = false;
-  //public WaterType WaterType = WaterType.Lava;
-
-  public Pos(): vec2 {
-    return this.Parent.Box.Min.clone();
-  }
-  public Box(): Box2f {
-    return this.Parent.Box;
-  }
-  // public DeviceBoundBox() : Box2f 
-  // {
-  //     let gridBox  : Box2f = new Box2f(
-  //         this.Parent.Level.World.Screen.Viewport.WorldToDevice(Parent.Box.Min),
-  //         this.Parent.Level.World.Screen.Viewport.WorldToDevice(Parent.Box.Max)
-  //         );
-  //     return gridBox;
-  // }
-  private _cellPos : ivec2;
-  public Parent: Node;//{ get; private set; }
-  public constructor(parent: Node, nLayers: number, cellPos : ivec2) {
-    this._cellPos = cellPos;
-    this.Parent = parent;
-    this.Layers = new Array<TileBlock>(0);
-    for (let i = 0; i < nLayers; ++i) {
-      this.Layers.push(null);
-    }
-  }
-
-  public LightColor: vec4 = new vec4(1, 1, 1, 1);   // the color
-  public MarchFrame: Int = 0 as Int;
-  public MarchFrameLight: Int = 0 as Int;
-  //public float LightValue = 0;    // 0 - 100 = 0 = black 100 = transparent
-
-  public GetTilePosLocal(): ivec2 {
-    let dx: Int = Math.floor(this.Parent.Box.Min.x / this.Parent.Level.Atlas.TileWidthPixels) as Int;
-    let dy: Int = Math.floor(this.Parent.Box.Min.y / this.Parent.Level.Atlas.TileHeightPixels) as Int;
-
-    let v = new ivec2(dx as Int, dy as Int);
-
-    return v;
-  }
-  // public  GetTilePosGlobal() : ivec2
-  // {
-  //     return this.Parent.Level.Room.Min + GetTilePosLocal();
-  // }
-}
-
-export class Room {
+export class MapArea {
+  //This is a piece of a platform map that was found by flood filling to border tiles.
   public RoomId: Int;
   public Min: ivec2 = new ivec2(0 as Int, 0 as Int);
   public Max: ivec2 = new ivec2(0 as Int, 0 as Int);
@@ -545,44 +473,26 @@ export class Room {
   }
 
 }
-
 export class TileGrid {
-  public Level: PlatformLevel = null; //  { get; private set; }
-  //  public Res Res { get; private set; }
-  public RootNode: Node = null;//{ get; set; }
+  //This is the node BVH tree of the Master Map
+  public Level: MasterMap = null; //  { get; private set; }
+  public RootNode: BvhNode = null;//{ get; set; }
   public CellDict: IVec2Map<Cell> = new IVec2Map<Cell>();//Dictionary..
   private dbg_numnodes: Int = 0 as Int;
   private dbg_numcells: Int = 0 as Int;
   private NumLayers: Int = 0 as Int;
 
-  // public TouchCell(c: Cell): boolean {
-  //   if (c === null) {
-  //     return false;
-  //   }
-
-  //   let gridBox: Box2f = new Box2f(
-  //     Level.World.Screen.Viewport.WorldToDevice(c.Parent.Box.Min),
-  //     Level.World.Screen.Viewport.WorldToDevice(c.Parent.Box.Max)
-  //   );
-
-  //   if (gridBox.ContainsPointInclusive(Level.World.Screen.Game.Input.LastTouch)) {
-  //     return true;
-  //   }
-
-  //   return false;
-  // }
-  public constructor(level: PlatformLevel, tilesW: Int, tilesH: Int, nLayers: Int) {
+  public constructor(level: MasterMap, tilesW: Int, tilesH: Int, nLayers: Int) {
     this.Level = level;
     //this.Res = Level.World.Res;
     this.NumLayers = nLayers;
 
     // this.CellDict = new Dictionary<ivec2, Cell>(new ivec2EqualityComparer());
 
-    this.RootNode = new Node(level, this.GetGridExtents(tilesW, tilesH));
+    this.RootNode = new BvhNode(level, this.GetGridExtents(tilesW, tilesH));
     this.DivideGrid(this.RootNode, 1 as Int);
   }
-
-  private DivideGrid(parent: Node, iCallstack: Int) {
+  private DivideGrid(parent: BvhNode, iCallstack: Int) {
     if (iCallstack > 100) {
       Globals.debugBreak();
     }
@@ -607,15 +517,15 @@ export class TileGrid {
     }
 
     let boxwh: vec2 = (parent.Box.Max.clone().sub(parent.Box.Min));
-    let tilesXParent: Int = Math.floor(boxwh.x / this.Level.Atlas.TileWidthPixels) as Int;
-    let tilesYParent: Int = Math.floor(boxwh.y / this.Level.Atlas.TileHeightPixels) as Int;
-    let tilesXMid: Int = Math.floor((boxwh.x / this.Level.Atlas.TileWidthPixels) * 0.5) as Int;
-    let tilesYMid: Int = Math.floor((boxwh.y / this.Level.Atlas.TileHeightPixels) * 0.5) as Int;
+    let tilesXParent: Int = toInt(boxwh.x / this.Level.Atlas.TileWidthPixels);
+    let tilesYParent: Int = toInt(boxwh.y / this.Level.Atlas.TileHeightPixels);
+    let tilesXMid: Int = toInt((boxwh.x / this.Level.Atlas.TileWidthPixels) * 0.5);
+    let tilesYMid: Int = toInt((boxwh.y / this.Level.Atlas.TileHeightPixels) * 0.5);
 
     if (tilesXParent === 1 as Int && tilesYParent === 1 as Int) {
       let cellPos: ivec2 = new ivec2(
-        Math.floor(parent.Box.Min.x / this.Level.Atlas.TileWidthPixels) as Int,
-        Math.floor(parent.Box.Min.y / this.Level.Atlas.TileHeightPixels) as Int
+        toInt(parent.Box.Min.x / this.Level.Atlas.TileWidthPixels),
+        toInt(parent.Box.Min.y / this.Level.Atlas.TileHeightPixels)
       );
       parent.Cell = new Cell(parent, this.NumLayers, cellPos);
 
@@ -648,9 +558,9 @@ export class TileGrid {
         B = Box2f.construct(new vec2(parent.Box.Min.x, midy), new vec2(parent.Box.Max.x, parent.Box.Max.y));
       }
 
-      parent.Children = new Array<Node>(2);
-      parent.Children[0] = new Node(this.Level, A);
-      parent.Children[1] = new Node(this.Level, B);
+      parent.Children = new Array<BvhNode>(2);
+      parent.Children[0] = new BvhNode(this.Level, A);
+      parent.Children[1] = new BvhNode(this.Level, B);
 
       this.dbg_numnodes = roundToInt(this.dbg_numnodes as number + 2);
 
@@ -661,25 +571,31 @@ export class TileGrid {
       }
     }
 
-
   }
   private setCellData(c: Cell, cellPos: ivec2) {
     //Set the Cell Data.  This is where the love happens.
-    for (let iLayer = 0; iLayer < PlatformLevel.LayerCount; iLayer++) {
+    for (let iLayer = 0; iLayer < TileLayer.LayerCount; iLayer++) {
       let iTileId: Int = this.Level.TileXY(cellPos.x, cellPos.y, iLayer as Int);
-      
-      if (iTileId !== PlatformLevel.EMPTY_TILE) {
+
+      if (iTileId !== MasterMap.EMPTY_TILE && iTileId !== TiledSpriteId.Border) {
         let tileSprite: Sprite25D = this.Level.Tiles.getTile(iTileId);
 
-        if (c.Layers[iLayer] !== null) {
-          //hmm... we already set this cell data. This shouldn't be ok.
-          Globals.debugBreak();
+        if (!tileSprite) {
+          Globals.logError("Could not find tiled sprite for tile ID " + iTileId);
+          //Globals.debugBreak();
         }
         else {
-          c.Layers[iLayer] = new TileBlock();
+          if (c.Layers[iLayer] !== null) {
+            //hmm... we already set this cell data. This shouldn't be ok.
+            Globals.debugBreak();
+          }
+          else {
+            c.Layers[iLayer] = new TileBlock();
 
-          if (tileSprite.IsCellTile) {
-            c.Layers[iLayer].spriteRef = tileSprite;
+            if (tileSprite.IsCellTile) {
+              c.Layers[iLayer].spriteRef = tileSprite;
+              tileSprite.Layer = iLayer;
+            }
           }
 
         }
@@ -701,7 +617,7 @@ export class TileGrid {
     return cell;
   }
   public GetCellForPoint(pos: vec2): Cell {
-    let parent: Node = this.RootNode;
+    let parent: BvhNode = this.RootNode;
     let ret: Cell = null;
 
     let nSanity: Int = 0 as Int;//Instead of using a while true loop we do this to prevent catastrophic failure
@@ -722,8 +638,6 @@ export class TileGrid {
 
       nSanity++;
     }
-
-
     return ret;
   }
   public GetSurroundingCells(c: Cell, corners: boolean = false): Array<Cell> {
@@ -792,4 +706,90 @@ export class TileGrid {
     let ret: Cell = this.GetCellForPoint(pt);
     return ret;
   }
+}
+export class TileBlock {
+  public spriteRef: Sprite25D = null; //Reference to a Sprite25D, // Sprite for this block.  This also containst he TILE ID.  This is a REFERENCE to the tile.  Not a copy
+  public frameIndex: Int = 0 as Int;
+  //public float Health = 100; // Max Health is 100 for all blocks
+  // public bool Blocking = false;
+  // public bool CanMine = false;
+  //  public bool CanBomb = false;
+  //  public bool IsConduit = false;
+  //  public bool FallThrough = false;
+  // public SpriteEffects SpriteEffects = SpriteEffects.None;
+  public Box: Box2f;   // So we need custom boxes for things like ladders, &c
+  public get Pos(): vec2 { return this.Box.Min; }
+
+  public SlopeTileId: Int = -1 as Int;//One of 4 slopes TL TR BL BR
+  public IsSlope(): boolean { return this.SlopeTileId !== -1 as Int; }
+}
+
+export class BvhNode {
+  //A BVH node in the Master Map
+  public Level: MasterMap;//{ get; private set; }
+  //Node in a binary box tree - we don't use a quadtree because our grids are not square
+  // public bool IsLeaf = false;
+  public Box: Box2f;//{ get; set; } // Box, in Game-world pixels (not device pixels)
+  public constructor(level: MasterMap, box: Box2f) { this.Level = level; this.Box = box; }
+  public Children: BvhNode[];
+  public Cell: Cell = null;
+}
+//public enum WaterType { Water, Lava, Tar }
+export class Cell {
+  //This is a leaf node of the MapArea class, a single cell with fixed w/h
+  private _cellPos: ivec2;
+  public Parent: BvhNode;//{ get; private set; }
+  public Layers: Array<TileBlock>;
+  public DebugColor: Color = null;
+  public DebugVerts: Array<vec3> = new Array<vec3>();
+  public static DebugFrame: SpriteFrame = null;
+
+  public get PixelPosR3(): vec2 {
+    //The pixel coordinate of this tile (in R2 pixels)
+    return this.Parent.Box.Min.clone();
+  }
+  public get Box(): Box2f {
+    return this.Parent.Box;
+  }
+  public get TilePosR2(): ivec2 {
+    //The position in R2 Tile Space
+    let dx: Int = toInt(this.Parent.Box.Min.x / this.Parent.Level.Atlas.TileWidthPixels);
+    let dy: Int = toInt(this.Parent.Box.Min.y / this.Parent.Level.Atlas.TileHeightPixels);
+
+    let v = new ivec2(dx as Int, dy as Int);
+
+    return v;
+  }
+  public get TilePosR3(): vec3 {
+    //The position in R2 Tile Space
+    let v = this.TilePosR2;
+    let dx = v.x;
+    let dy = v.y;
+    let dz = 0;
+    return new vec3(dx, dy, dz);
+  }
+  public constructor(parent: BvhNode, nLayers: number, cellPos: ivec2) {
+    this._cellPos = cellPos;
+    this.Parent = parent;
+    this.DebugColor = Random.randomColor(0.4, 1.0);
+
+    this.Layers = new Array<TileBlock>(0);
+    for (let i = 0; i < nLayers; ++i) {
+      this.Layers.push(null);
+    }
+  }
+
+  // public  GetTilePosGlobal() : ivec2
+  // {
+  //     return this.Parent.Level.Room.Min + GetTilePosLocal();
+  // }
+  // public DeviceBoundBox() : Box2f 
+  // {
+  //     let gridBox  : Box2f = new Box2f(
+  //         this.Parent.Level.World.Screen.Viewport.WorldToDevice(Parent.Box.Min),
+  //         this.Parent.Level.World.Screen.Viewport.WorldToDevice(Parent.Box.Max)
+  //         );
+  //     return gridBox;
+  // }
+
 }

@@ -13,6 +13,7 @@ import { Globals } from './Globals';
 import { Utils } from './Utils';
 import * as Files from './Files';
 import { vec4, vec3, vec2 } from './Math';
+import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 
 export interface AfterLoadFunction { (x: any): void; };
 
@@ -38,12 +39,11 @@ export class Random {
     let n2 = min + (max - min) * f01;
     return n2;
   }
-  public static randomColor(): Color {
+  public static randomColor(min: number = 0, max: number = 1): Color {
     let c: Color = new Color();
-    let v: Vector3 = this.randomNormal().multiplyScalar(2).subScalar(1);
-    c.r = v.x;
-    c.g = v.y;
-    c.b = v.z;
+    c.r = this.float(min, max);
+    c.g = this.float(min, max);
+    c.b = this.float(min, max);
     return c;
   }
   public static randomVec4(min: number, max: number): vec4 {
@@ -720,18 +720,24 @@ export class Screen2D {
  * Keyboard Input class
  */
 enum KeyboardEventType { Up, Down }
+class KbEvent {
+  public evt: KeyboardEvent;
+  public type: KeyboardEventType;
+  public constructor(e: KeyboardEvent, t: KeyboardEventType) {
+    this.evt = e;
+    this.type = t;
+  }
+}
 export class Keyboard {
-  private _w: VirtualButton = new VirtualButton();
-  private _s: VirtualButton = new VirtualButton();
-  private _a: VirtualButton = new VirtualButton();
-  private _d: VirtualButton = new VirtualButton();
-  private _buttons: Array<VirtualButton> = new Array<VirtualButton>();
+  private _keys: Map<Int, VirtualButton> = new Map<Int, VirtualButton>();
 
-  get w(): VirtualButton { return this._w; }
-  get s(): VirtualButton { return this._s; }
-  get a(): VirtualButton { return this._a; }
-  get d(): VirtualButton { return this._d; }
-  get buttons() { return this._buttons; }
+  get w(): VirtualButton { return this.getKey(87 as Int); }
+  get s(): VirtualButton { return this.getKey(83 as Int); }
+  get a(): VirtualButton { return this.getKey(65 as Int); }
+  get d(): VirtualButton { return this.getKey(68 as Int); }
+
+  public get Shift(): VirtualButton { return this.getKey(16 as Int); }
+  public get Control(): VirtualButton { return this.getKey(17 as Int); }
 
   private _smoothAxis: boolean = false;  // Whether the X or Y axis smoothly transitions from -1, 0, 1.
   public get SmoothAxis(): boolean { return this._smoothAxis; }
@@ -741,77 +747,45 @@ export class Keyboard {
   public get SmoothAxisSpeed(): number { return this._smoothAxisSpeed; }
   public set SmoothAxisSpeed(x: number) { this._smoothAxisSpeed = x; }
 
-  public controlDown: boolean = false;
-  private _events: Map<KeyboardEvent, KeyboardEventType> = new Map<KeyboardEvent, KeyboardEventType>();
+  private _events: Array<KbEvent> = new Array<KbEvent>();
 
   constructor() {
-    this._buttons.push(this.w);
-    this._buttons.push(this.s);
-    this._buttons.push(this.a);
-    this._buttons.push(this.d);
     let that = this;
     window.addEventListener("keydown", function (e: KeyboardEvent) {
-      that._events.set(e, KeyboardEventType.Down);
+      that._events.push(new KbEvent(e, KeyboardEventType.Down));
     });
     window.addEventListener("keyup", function (e: KeyboardEvent) {
-      that._events.set(e, KeyboardEventType.Up);
+      that._events.push(new KbEvent(e, KeyboardEventType.Up));
     });
   }
   public update() {
-    //**This is obviously a problem, really we should store & pump these events each frame to reduce missed events.
-    for (let [evt, k] of this._events) {
-      if (k === KeyboardEventType.Down) {
-        if (evt.ctrlKey) {
-          this.controlDown = true;
-        }
-        if (evt.keyCode === 87) {//w
-          this.w.update(true);
-        }
-        if (evt.keyCode === 83) { //s
-          this.s.update(true);
-        }
-        if (evt.keyCode === 65) {//a
-          this.a.update(true);
-        }
-        if (evt.keyCode === 68) {//d
-          this.d.update(true);
-        }
-        //TESTS
-        //if (Globals.isDebug()) 
-        {
-          if (this.controlDown) {
-            //f1/2
-            if (evt.keyCode === 112) { }
-            if (evt.keyCode === 113) { }
-            //f3
-            if (evt.keyCode === 114) { }
-            //f4
-          }
-        }
-      }
-      else if (k === KeyboardEventType.Up) {
-        if (evt.ctrlKey) {
-          this.controlDown = false;
-        }
-        if (evt.keyCode === 87) {//w
-          this.w.update(false);
-        }
-        if (evt.keyCode === 83) { //s
-          this.s.update(false);
-        }
-        if (evt.keyCode === 65) {  //a
-          this.a.update(false);
-        }
-        if (evt.keyCode === 68) {    //d
-          this.d.update(false);
-        }
-      }
+    //Pump Events
+    for (let kb of this._events) {
+      let down: boolean = (kb.type === KeyboardEventType.Down);
+
+      this.getKey(kb.evt.keyCode as Int, true).update(down);
     }
-    this._events.clear();
+    this._events = new Array<KbEvent>();
+  }
+  public getKey(ord: Int, add: boolean = false): VirtualButton {
+    let key: VirtualButton = this._keys.get(ord);;
+    if (!key) {
+      key = new VirtualButton();
+      this._keys.set(ord, key);
+    }
+    return key;
   }
 
 }
 enum MouseEventType { MouseUp, MouseDown, MouseMove };
+class MsEvent {
+  public evt: MouseEvent;
+  public type: MouseEventType;
+  public constructor(e: MouseEvent, t: MouseEventType) {
+    this.evt = e;
+    this.type = t;
+  }
+}
 export class Mouse extends Vector3 {
   public moved: boolean = false;
   public mousePoint: PointGeo = null;
@@ -825,17 +799,15 @@ export class Mouse extends Vector3 {
   public get Left(): VirtualButton { return this._left; }
   public get Right(): VirtualButton { return this._right; }
 
-  private _events: Map<MouseEvent, MouseEventType> = new Map<MouseEvent, MouseEventType>();
-
+  private _events:Array<MsEvent> = new Array<MsEvent>();
   private _mousewheel_evt: Array<MouseWheelEvent> = new Array<MouseWheelEvent>();
-
   private curView: vec3 = new vec3(0, 0, -1);
 
   public constructor() {
     super();
     this.registerDocumentCallbacks();
   }
-  public postUpdate(){
+  public postUpdate() {
     this._wheel = 0;
   }
   public update() {
@@ -849,11 +821,11 @@ export class Mouse extends Vector3 {
     let that = this;
     document.addEventListener('mouseup', function (e: MouseEvent) {
       e.preventDefault();
-      that._events.set(e, MouseEventType.MouseUp);
+      that._events.push(new MsEvent(e, MouseEventType.MouseUp));
     });
     document.addEventListener('mousedown', function (e: MouseEvent) {
       e.preventDefault();
-      that._events.set(e, MouseEventType.MouseDown);
+      that._events.push(new MsEvent(e, MouseEventType.MouseDown));
     });
     document.addEventListener('contextmenu', function (e: MouseEvent) {
       e.preventDefault();
@@ -865,7 +837,7 @@ export class Mouse extends Vector3 {
     //var controls = new OrbitControls.default();
     document.addEventListener('mousemove', function (e: MouseEvent) {
       e.preventDefault();
-      that._events.set(e, MouseEventType.MouseMove);
+      that._events.push(new MsEvent(e, MouseEventType.MouseMove));
     }, false);
   }
   private mouseMove(x: number, y: number) {
@@ -949,36 +921,36 @@ export class Mouse extends Vector3 {
     }
   }
   private updateEventsSynchronously() {
-    for (let [evt, k] of this._events) {
-      if (k === MouseEventType.MouseMove) {
-        this.mouseMove(evt.clientX, evt.clientY);
+    for (let ms of this._events) {
+      if (ms.type === MouseEventType.MouseMove) {
+        this.mouseMove(ms.evt.clientX, ms.evt.clientY);
       }
-      else if (k === MouseEventType.MouseUp) {
+      else if (ms.type === MouseEventType.MouseUp) {
         // e.preventDefault();
-        if (evt.button == 0) {
+        if (ms.evt.button == 0) {
           this._lmbDown = false;
         }
-        if (evt.button == 1) {
+        if (ms.evt.button == 1) {
           //middle
         }
-        if (evt.button == 2) {
+        if (ms.evt.button == 2) {
           this._rmbDown = false;
         }
       }
-      else if (k === MouseEventType.MouseDown) {
+      else if (ms.type === MouseEventType.MouseDown) {
         //e.preventDefault();
-        if (evt.button == 0) {
+        if (ms.evt.button == 0) {
           this._lmbDown = true;
         }
-        if (evt.button == 1) {
+        if (ms.evt.button == 1) {
           //middle
         }
-        if (evt.button == 2) {
+        if (ms.evt.button == 2) {
           this._rmbDown = true;
         }
       }
     }
-    this._events.clear();
+    this._events = new Array<MsEvent>();
 
     for (let evt of this._mousewheel_evt) {
       this._wheel += Math.sign(evt.deltaY);
@@ -991,7 +963,7 @@ export class VirtualController {
   public A: VirtualButton = new VirtualButton();
   public B: VirtualButton = new VirtualButton();
   public Trigger: VirtualButton = new VirtualButton();
-  private _axis : vec2 = new vec2();
+  private _axis: vec2 = new vec2();
 
   public get Axis(): vec2 { return this._axis; }
 
@@ -1102,8 +1074,8 @@ export class Input {
       }
     }
   }
-  public postUpdate(){
-    if(this._mouse){
+  public postUpdate() {
+    if (this._mouse) {
       this._mouse.postUpdate();
     }
   }

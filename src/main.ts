@@ -10,7 +10,7 @@ import { Random, ModelManager, AfterLoadFunction, Frustum } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
-import { TileGrid, PlatformLevel, Cell, TileBlock, TiledSpriteId } from './TileGrid';
+import { TileGrid, MasterMap, Cell, TileBlock, TiledSpriteId, TileLayer } from './TileGrid';
 import { PhysicsObject3D } from 'Physics3D';
 
 export class ImageResource {
@@ -51,8 +51,13 @@ export class Atlas extends ImageResource {
   private _xSpace: Int = 1 as Int;  //Pixel Space between frames.
   private _ySpace: Int = 1 as Int;
 
-  private _tileWidth: Int = 16 as Int;
-  private _tileHeight: Int = 16 as Int;
+  private _tileWidthPixels: Int = 16 as Int;
+  private _tileHeightPixels: Int = 16 as Int;
+
+  private static _tileWidthR3: number = 1;
+  private static _tileHeightR3: number = 1;
+  public static get TileWidthR3() { return this._tileWidthR3; }
+  public static get TileHeightR3() { return this._tileHeightR3; }
 
   //Number of frames across the atlas.
   public get FramesWidth(): Int {
@@ -77,8 +82,8 @@ export class Atlas extends ImageResource {
   public get BotPad(): Int { return this._botPad; }
   public get SpaceX(): Int { return this._xSpace; }
   public get SpaceY(): Int { return this._ySpace; }
-  public get TileWidthPixels(): Int { return this._tileWidth; }
-  public get TileHeightPixels(): Int { return this._tileHeight; }
+  public get TileWidthPixels(): Int { return this._tileWidthPixels; }
+  public get TileHeightPixels(): Int { return this._tileHeightPixels; }
 
   public constructor(top: Int, left: Int, right: Int, bot: Int, xSpace: Int, ySpace: Int, tile_w: Int, tile_h: Int, tex: string, afterLoad: AfterLoadFunction) {
     super();
@@ -90,8 +95,8 @@ export class Atlas extends ImageResource {
     this._xSpace = xSpace;
     this._ySpace = ySpace;
 
-    this._tileWidth = tile_w;
-    this._tileHeight = tile_h;
+    this._tileWidthPixels = tile_w;
+    this._tileHeightPixels = tile_h;
 
     this.load(tex, afterLoad);
   }
@@ -111,6 +116,53 @@ export class SpriteFrame {
     this.y += amt;
     this.w -= amt * 2;
     this.h -= amt * 2;
+  }
+  public static fromAtlasTile(atlas: Atlas, tx: Int, ty: Int, margin: number = 0.0004): SpriteFrame {
+    //Margin will shrink or grow the image to reduce texel border artifacts
+    let sw: number = Number(atlas.TileWidthPixels) / Number(atlas.ImageWidth);
+    let sh: number = Number(atlas.TileHeightPixels) / Number(atlas.ImageHeight);
+    let f: SpriteFrame = new SpriteFrame();
+    f.x = (Number(atlas.LeftPad) + tx * Number(atlas.TileWidthPixels + atlas.SpaceX)) / Number(atlas.ImageWidth);
+    //Tex is in gl coords from bot left corner. so 0,0 is actually 0,h-1
+    f.y = 1 - (Number(atlas.TopPad) + ty * Number(atlas.TileHeightPixels + atlas.SpaceY)) / Number(atlas.ImageHeight) - sh;
+    f.w = sw;
+    f.h = sh;
+    f.debug_tile_x = tx;
+    f.debug_tile_y = ty;
+
+    if (margin !== 0) {
+      f.shrink(margin);
+    }
+
+    return f;
+  }
+  public static createQuadVerts(verts: Array<vec3> /*out*/, origin: vec3, width: number, height: number, layer: Int, layerDepth: number = 0.01, scale: vec2 = new vec2(1, 1)) {
+    //Returns verts filled with the 4 quad vertexes
+    let right: vec3 = WorldView25D.Right;
+    let down: vec3 = WorldView25D.Down;
+    let normal: vec3 = WorldView25D.Normal;
+
+    //Position the image relative to the world grid's basis
+    let tilepos_local: vec3 = right.clone().multiplyScalar(origin.x);
+    tilepos_local.add(down.clone().multiplyScalar(origin.y /** -1*/ /*NOTE: we are multiplying by -1 here */));
+    tilepos_local.add(normal.clone().multiplyScalar(origin.z + (layerDepth * (layer as number))));
+
+    if (layer === TileLayer.Unset) {
+      Globals.logWarn("Tile layer was unset.");
+    }
+
+
+    if (verts.length !== 4) {
+      while (verts.length < 4) {
+        verts.push(new vec3());
+      }
+    }
+
+    verts[0] = tilepos_local;
+    verts[1] = verts[0].clone().add(right.clone().multiplyScalar(width * scale.x));
+    verts[2] = verts[0].clone().add(down.clone().multiplyScalar(height * scale.y));
+    verts[3] = verts[2].clone().add(right.clone().multiplyScalar(width * scale.x));
+
   }
 }
 export class FDef {
@@ -527,6 +579,7 @@ class Animation25D {
           let sp: Sprite25D = this.Sprite.getSubTile(itile, jtile);
           if (sp === null) {
             sp = new Sprite25D();
+            sp.Layer = this.Sprite.Layer;
             sp.SubTile = new vec2(itile, jtile);
             this.Sprite.add(sp);
           }
@@ -578,21 +631,13 @@ class Animation25D {
     }
 
     //Create Tiles.
-    let sw: number = Number(atlas.TileWidthPixels) / Number(atlas.ImageWidth);
-    let sh: number = Number(atlas.TileHeightPixels) / Number(atlas.ImageHeight);
+
     for (let iframe = 0; iframe < frames.length; ++iframe) {
       let def: FDef = frames[iframe];
 
       let kf = new SpriteKeyFrame(ret);
-      kf.Frame = new SpriteFrame();
-      kf.Frame.x = (Number(atlas.LeftPad) + (def.p.x + sub_x) * Number(atlas.TileWidthPixels + atlas.SpaceX)) / Number(atlas.ImageWidth);
-      //Tex is in gl coords from bot left corner. so 0,0 is actually 0,h-1
-      kf.Frame.y = 1 - (Number(atlas.TopPad) + (def.p.y + sub_y) * Number(atlas.TileHeightPixels + atlas.SpaceY)) / Number(atlas.ImageHeight) - sh;
-      kf.Frame.w = sw;
-      kf.Frame.h = sh;
-      kf.Frame.debug_tile_x = def.p.x + sub_x;
-      kf.Frame.debug_tile_y = def.p.y + sub_y;
-      kf.Frame.shrink(0.0004);
+
+      kf.Frame = SpriteFrame.fromAtlasTile(atlas, (def.p.x + sub_x) as Int, (def.p.y + sub_y) as Int);
 
       kf.Color = def.c ? def.c : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
       kf.FlipH = def.h ? def.h : false;
@@ -637,7 +682,7 @@ export class Sprite25D {
   private _rotation: Quaternion = new Quaternion(0, 0, 0, 0);
   private _scale: vec2 = new vec2(1, 1);
 
-  private _size: vec2 = new vec2(1, 1); // this is actual size of geometry
+  private _size: vec2 = new vec2(Atlas.TileWidthR3, Atlas.TileHeightR3); // this is actual size of rendered geometry.  This is initially set by Atlas.TileWidthR3
   private _origin: vec3 = new vec3(0, 0, 0);
   private _children: Array<Sprite25D> = new Array<Sprite25D>();
   private _parent: Sprite25D = null; // Do not clone
@@ -649,12 +694,19 @@ export class Sprite25D {
   public _flipV: boolean = false;
   public _animation: Animation25D = null;
 
+
   private _boundBox: Box2f = new Box2f();// The animated bounds of the sprite.
 
   private _quadVerts: Array<vec3> = new Array<vec3>(4);  //Quad Verts - do not clone
   private _quadNormal: vec3 = new vec3(0, 0, 1); // do not clone
 
   private _isCellTile: boolean = false;
+
+  public _layer: TileLayer = TileLayer.Unset;
+
+  public get Layer(): TileLayer { return this._layer; }
+  public set Layer(x: TileLayer) { this._layer = x; }
+
   public get IsCellTile(): boolean { return this._isCellTile; }
   public set IsCellTile(x: boolean) { this._isCellTile = x; }
 
@@ -714,14 +766,18 @@ export class Sprite25D {
 
   private _debugBox: THREE.Box3Helper = null;
 
-  public constructor(name: string = null, spriteId: TiledSpriteId = TiledSpriteId.None) {
+  public constructor(name: string = null, spriteId: TiledSpriteId = TiledSpriteId.None, layer: TileLayer = null) {
     if (name) {
       this._name = name;
+    }
+    if (layer) {
+      this._layer = layer;
     }
     this._tiledSpriteId = spriteId;
 
     this._uniqueId = Sprite25D._idGen++;
     this._animation = new Animation25D(this);
+
   }
 
   public copy(other: Sprite25D) {
@@ -747,6 +803,8 @@ export class Sprite25D {
     this._boundBox = other._boundBox.clone();
     this._tiledSpriteId = other._tiledSpriteId;
     this._isCellTile = other._isCellTile;
+
+    this._layer = other._layer;
   }
   public clone(): Sprite25D {
     let ret = new Sprite25D();
@@ -850,26 +908,10 @@ export class Sprite25D {
   }
   public updateQuadVerts() {
     let tile = this;
-
-    let right: vec3 = g_mainWorld.Right;
-    let down: vec3 = g_mainWorld.Down;
-    let normal: vec3 = g_mainWorld.Normal;
-
-    let parent_pos: vec3 = new vec3(0, 0, 0);
-
     //Translate tile with origin.
     let tilepos_translated: vec3 = tile.Position.clone().add(tile.Animation.AnimatedPosition).add(tile.Origin);
 
-    //Position the image relative to the world grid's basis
-    let tilepos_local: vec3 = right.clone().multiplyScalar(tilepos_translated.x);
-    tilepos_local.add(down.clone().multiplyScalar(tilepos_translated.y /** -1*/ /*NOTE: we are multiplying by -1 here */));
-    tilepos_local.add(normal.clone().multiplyScalar(tilepos_translated.z));
-
-    this.QuadVerts[0] = parent_pos.clone().add(tilepos_local);
-    this.QuadVerts[1] = this.QuadVerts[0].clone().add(right.clone().multiplyScalar(tile.Width * tile.Scale.x * tile.Animation.AnimatedScale.x));
-    this.QuadVerts[2] = this.QuadVerts[0].clone().add(down.clone().multiplyScalar(tile.Height * tile.Scale.y * tile.Animation.AnimatedScale.y));
-    this.QuadVerts[3] = this.QuadVerts[2].clone().add(right.clone().multiplyScalar(tile.Width * tile.Scale.x * tile.Animation.AnimatedScale.x));
-
+    SpriteFrame.createQuadVerts(this.QuadVerts, tilepos_translated, tile.Width, tile.Height, this.Layer as Int, WorldView25D.LayerDepth, tile.Scale.clone().multiply(tile.Animation.AnimatedScale))
   }
   public markDirty(flags: number = DirtyFlag.All) {
     this._dirty = true;
@@ -975,11 +1017,11 @@ export class TileBuffer extends THREE.BufferGeometry {
   public copyObjectTile(tile: Sprite25D) {
     if (tile.Animation.Frame) {
       if (tile.Animation.Frame2 && tile.Animation.FrameBlend > 0.0001) {
-        this.copyFrame(tile, tile.Animation.Frame, tile.Animation.FrameBlend);
-        this.copyFrame(tile, tile.Animation.Frame2, 1 - tile.Animation.FrameBlend);
+        this.copyTileFrame(tile, tile.Animation.Frame, tile.Animation.FrameBlend);
+        this.copyTileFrame(tile, tile.Animation.Frame2, 1 - tile.Animation.FrameBlend);
       }
       else {
-        this.copyFrame(tile, tile.Animation.Frame);
+        this.copyTileFrame(tile, tile.Animation.Frame);
       }
     }
     else {
@@ -990,17 +1032,15 @@ export class TileBuffer extends THREE.BufferGeometry {
   public copyCellTile(cell: Cell, tile: Sprite25D, frame: Int) {
     //Copy a static Tile Sprite
     if (tile.Animation.TileData && tile.Animation.TileData.KeyFrames.length > frame) {
-      this.copyFrame(tile, tile.Animation.TileData.KeyFrames[frame].Frame, 1, cell);
+      this.copyTileFrame(tile, tile.Animation.TileData.KeyFrames[frame].Frame, 1, cell);
     }
     else {
       //Error.
       Globals.debugBreak();
     }
   }
-  public copyFrame(tile: Sprite25D, frame: SpriteFrame, blend: number = 1, cell: Cell = null) {
+  public copyTileFrame(tile: Sprite25D, frame: SpriteFrame, blend: number = 1, cell: Cell = null) {
     let v: Array<vec3> = new Array<vec3>(4);
-    let t: Array<vec2> = new Array<vec2>(4);
-    let off = this._usedBufferLengthTiles * 4;
     let flags = tile.DirtyFlags;
     if (blend) {
       flags |= DirtyFlag.Colors;
@@ -1010,8 +1050,6 @@ export class TileBuffer extends THREE.BufferGeometry {
       flags |= DirtyFlag.Normals;
       flags |= DirtyFlag.Colors;
     }
-    this._updFlags |= flags;
-
     /*
     0 --- 1
     |     |
@@ -1024,7 +1062,7 @@ export class TileBuffer extends THREE.BufferGeometry {
 
     if (cell) {
       //If we pass a cell in here, then add the cell parent as an absolute offset.
-      let cp: vec2 = cell.Pos();
+      let cp: vec2 = cell.PixelPosR3;
       cp.x /= g_atlas.TileWidthPixels;
       cp.y /= g_atlas.TileHeightPixels;
       for (let vi = 0; vi < 4; ++vi) {
@@ -1033,6 +1071,13 @@ export class TileBuffer extends THREE.BufferGeometry {
         v[vi].y += cp.y;
       }
     }
+
+    this.copyFrameQuad(frame, v, tile.QuadNormal, tile.Color, blend, tile.FlipH, tile.FlipV, flags);
+  }
+  public copyFrameQuad(frame: SpriteFrame, v: Array<vec3>, normal: vec3, color: vec4, blend: number, fliph: boolean, flipv: boolean, flags: number = DirtyFlag.All) {
+    let off = this._usedBufferLengthTiles * 4;
+
+    this._updFlags |= flags;
 
     let verts: Float32Array = (this._attrPosition.array as Float32Array);
     let norms: Float32Array = (this._attrNormal.array as Float32Array);
@@ -1047,21 +1092,21 @@ export class TileBuffer extends THREE.BufferGeometry {
       verts[vv * this._vsiz + 2] = v[vi].z;
 
       if (flags & DirtyFlag.Normals) {
-        norms[vv * this._nsiz + 0] = tile.QuadNormal.x;//this._view.Normal.x;
-        norms[vv * this._nsiz + 1] = tile.QuadNormal.y;
-        norms[vv * this._nsiz + 2] = tile.QuadNormal.z;
+        norms[vv * this._nsiz + 0] = normal.x;//this._view.Normal.x;
+        norms[vv * this._nsiz + 1] = normal.y;
+        norms[vv * this._nsiz + 2] = normal.z;
       }
       if (flags & DirtyFlag.Colors) {
-        colors[vv * this._csiz + 0] = tile.Color.x;
-        colors[vv * this._csiz + 1] = tile.Color.y;
-        colors[vv * this._csiz + 2] = tile.Color.z;
-        colors[vv * this._csiz + 3] = tile.Color.w * blend;
+        colors[vv * this._csiz + 0] = color.x;
+        colors[vv * this._csiz + 1] = color.y;
+        colors[vv * this._csiz + 2] = color.z;
+        colors[vv * this._csiz + 3] = color.w * blend;
       }
     }
 
     if (flags & DirtyFlag.UVs) {
       if (frame) {
-        this.copyFrameUVs(uvs, frame, tile.FlipH, tile.FlipV, off);
+        this.copyFrameUVs(uvs, frame, fliph, flipv, off);
       }
     }
 
@@ -1143,19 +1188,14 @@ export class TileBuffer extends THREE.BufferGeometry {
 }
 
 export class WorldView25D extends Object3D {
-  // This class is a viewport into the 2D game world.  
-  private _tilesWidth: number = 10;
-  private _tilesHeight: number = 10;
-  private _tileWidth: number = 1;
-  private _tileHeight: number = 1;
+  public static readonly Normal: vec3 = new vec3(0, 0, 1);
+  public static readonly Right: vec3 = new vec3(1, 0, 0);
+  public static readonly Down: vec3 = new vec3(0, -1, 0);
+  public static readonly LayerDepth: number = 0.01;
 
   public Atlas: Atlas = null;
 
   private _buffer: TileBuffer = null;
-
-  public Normal: vec3 = new vec3(0, 0, 1);
-  public Right: vec3 = new vec3(1, 0, 0);
-  public Down: vec3 = new vec3(0, -1, 0);
 
   private _boxHelper: THREE.BoxHelper = null;
   private _mesh: THREE.Mesh = null;
@@ -1164,49 +1204,42 @@ export class WorldView25D extends Object3D {
   private _destroyed: Map<Sprite25D, Sprite25D> = new Map<Sprite25D, Sprite25D>();
 
   public get Buffer(): TileBuffer { return this._buffer; }
-  public get TilesWidth(): number { return this._tilesWidth; }
-  public get TilesHeight(): number { return this._tilesHeight; }
-  public get TileWidth(): number { return this._tileWidth; }
-  public get TileHeight(): number { return this._tileHeight; }
 
-  private _platformLevel: PlatformLevel = null;
-  public get PlatformLevel(): PlatformLevel { return this._platformLevel; }
+  private _platformLevel: MasterMap = null;
+  public get PlatformLevel(): MasterMap { return this._platformLevel; }
 
   private _playerchar: Sprite25D = null;
 
   public set Player(p: Sprite25D) { this._playerchar = p; }
   public get Player(): Sprite25D { return this._playerchar; }
 
-  public constructor(tilesw: number, tilesh: number, tilew: number, tileh: number, r: Atlas) {
+  public get Viewport() : Viewport25D { return this._viewport; }
+
+  public constructor(r: Atlas) {
     super();
-
-    this._tilesWidth = tilesw;
-    this._tilesHeight = tilesh;
-    this._tileWidth = tilew;
-    this._tileHeight = tileh;
-
     this.Atlas = r;
   }
-  public init() {
+  public init(bufSizeTiles: Int) {
     //6 high x 16 wide
     this._viewport = new Viewport25D(256 as Int, 92 as Int);
 
     //This is where the most of the level processing happens.
     //hold onto your butts.
-    this._platformLevel = new PlatformLevel(g_atlas);
+    this._platformLevel = new MasterMap(g_atlas);
 
-    this._buffer = new TileBuffer(this._tilesWidth * this._tilesHeight * 4, this);
+    this._buffer = new TileBuffer(bufSizeTiles * 4, this);
 
     let mat = new THREE.MeshBasicMaterial({
       color: 0xffffff
       , side: THREE.DoubleSide
       , map: this.Atlas.Texture
       , vertexColors: THREE.VertexColors
-      , flatShading: true
+      , flatShading: false
       , transparent: false //Adds this to the transparency step of the rasterizer.
       , wireframe: false
       , alphaTest: 0.01 // Quickly cut out shitty transparency
-      , blending: THREE.MultiplyBlending // or Normalblending (unsure)
+      //blending - if we really do end up with blended keyframes we can add this, but right now it's messing stuff up
+      //, blending: THREE.MultiplyBlending // or Normalblending (unsure)
     });
 
     this._mesh = new THREE.Mesh(this._buffer, mat);
@@ -1244,6 +1277,10 @@ export class WorldView25D extends Object3D {
     //Copy Render Data
     this._buffer.beginCopy();
 
+    if (Globals.isDebug()) {
+      this.debug_DrawCells();
+    }
+
     this.drawBackground();
     this.drawMidground();
     this.drawObjects();
@@ -1278,12 +1315,9 @@ export class WorldView25D extends Object3D {
     }
   }
   private updateViewport() {
-    if (this.Player == null) {
+    if (!this.Player) {
       Globals.debugBreak();
     }
-    //Makes ure the viewport doesn't go past these values.
-    this._viewport.followObject(this.Player);
-    //this._viewport.limitScrollBounds(this._platformLevel.Grid.RootNode.Box);
     this._viewport.calcBoundBox();
   }
   private _viewport: Viewport25D = null;
@@ -1292,6 +1326,29 @@ export class WorldView25D extends Object3D {
     this._viewportCellsFrame = this._platformLevel.Grid.GetCellManifoldForBox(this._viewport.Box)
 
   }
+  private debug_DrawCells() {
+    for (let c of this._viewportCellsFrame) {
+      if (c) {
+        this.drawCell(c);
+      }
+    }
+    
+    for (let c of this._viewportCellsFrame) {
+      if (c) {
+        this.drawCell(c);
+      }
+    }
+  }
+  private drawCell(c: Cell) {
+    if (Cell.DebugFrame === null) {
+      Cell.DebugFrame = SpriteFrame.fromAtlasTile(this.Atlas, 2 as Int, 0 as Int);
+    }
+    if (c.DebugVerts === null || c.DebugVerts.length < 4) {
+      SpriteFrame.createQuadVerts(c.DebugVerts, c.TilePosR3, Atlas.TileWidthR3, Atlas.TileHeightR3, -1 as Int, WorldView25D.LayerDepth);
+    }
+    this._buffer.copyFrameQuad(Cell.DebugFrame, c.DebugVerts, WorldView25D.Normal, new vec4(c.DebugColor.r, c.DebugColor.g, c.DebugColor.b, 1), 1, false, false, DirtyFlag.All);
+  }
+
   private drawForeground() {
 
   }
@@ -1309,8 +1366,11 @@ export class WorldView25D extends Object3D {
   private drawBackground() {
     for (let c of this._viewportCellsFrame) {
       if (c) {
-        let block: TileBlock = c.Layers[PlatformLevel.Midground];
-        if (!block || !block.spriteRef) {
+        let block: TileBlock = c.Layers[TileLayer.Midground];
+        if (!block) {
+          continue;
+        }
+        if (!block.spriteRef) {
           continue;
         }
         this.drawBlock(c, block);
@@ -1325,71 +1385,77 @@ export class Viewport25D {
   private _widthPixels: Int = 0 as Int;
   private _heightPixels: Int = 0 as Int;
 
-  private _pos: vec2 = new vec2(0, 0);
+  // private _pos: vec2 = new vec2(0, 0);
   private _box: Box2f = new Box2f();
+
+  public Center: vec3 = new vec3(0, 0, 0);
+  public Campos: vec3 = new vec3(0, 0, 0);
 
   public get WidthPixels(): Int { return this._widthPixels; }
   public get HeightPixels(): Int { return this._heightPixels; }
 
-  public get Pos(): vec2 { return this._pos; }
-  public set Pos(x: vec2) { this._pos = x; }
+  // public get Pos(): vec2 { return this._pos; }
+  // public set Pos(x: vec2) { this._pos = x; }
 
   public get TilesWidth(): Int { return Math.floor(this._widthPixels / g_atlas.TileWidthPixels) as Int; }
   public get TilesHeight(): Int { return Math.floor(this._heightPixels / g_atlas.TileHeightPixels) as Int; }
 
-  private _screenShakeOffset: vec2 = new vec2(0, 0);
-  public set ScreenShakeOffset(x: vec2) { this._screenShakeOffset = x; }
-  public get ScreenShakeOffset(): vec2 { return this._screenShakeOffset; }
+  // private _screenShakeOffset: vec2 = new vec2(0, 0);
+  // public set ScreenShakeOffset(x: vec2) { this._screenShakeOffset = x; }
+  // public get ScreenShakeOffset(): vec2 { return this._screenShakeOffset; }
 
   public get Box(): Box2f { return this._box; }
 
-  public constructor(w: Int, h: Int) {
-    this._widthPixels = w;
-    this._heightPixels = h;
+  public constructor(width_pixels: Int, height_pixels: Int) {
+    this._widthPixels = width_pixels;
+    this._heightPixels = height_pixels;
   }
-  public followObject(ob: Sprite25D) {
-    //Follow a game object
-    //Call with LimitScrollBounds to limit scrolling in a region
-    this._pos = new vec2(
-      ob.Position.x - g_atlas.TileWidthPixels * this.TilesWidth * 0.5 + g_atlas.TileWidthPixels * 0.5,
-      ob.Position.y - g_atlas.TileHeightPixels * this.TilesHeight * 0.5 + g_atlas.TileHeightPixels * 0.5
-    ).add(this._screenShakeOffset);
-  }
-  public limitScrollBounds(box: Box2f) {
-    //Limit the viewport to scrolling box
-    if (box.Width() > this.WidthPixels) {
-      if (this._pos.x < box.Min.x) {
-        this._pos.x = box.Min.x;
-      }
-      if (this._pos.x + this.WidthPixels >= box.Max.x) {
-        this._pos.x = box.Max.x - this.WidthPixels;
-      }
-    }
-    if (box.Height() > this.HeightPixels) {
-      if (this._pos.y < box.Min.y) {
-        this._pos.y = box.Min.y;
-      }
-      if (this._pos.y + this.HeightPixels >= box.Max.y) {
-        this._pos.y = box.Max.y - this.HeightPixels;
-      }
-    }
-  }
+  // public followObject(ob: Sprite25D) {
+  //   //Follow a game object
+  //   //Call with LimitScrollBounds to limit scrolling in a region
+  //   this._pos = new vec2(
+  //     ob.Position.x - g_atlas.TileWidthPixels * this.TilesWidth * 0.5 + g_atlas.TileWidthPixels * 0.5,
+  //     ob.Position.y - g_atlas.TileHeightPixels * this.TilesHeight * 0.5 + g_atlas.TileHeightPixels * 0.5
+  //   ).add(this._screenShakeOffset);
+  // }
+  // public limitScrollBounds(box: Box2f) {
+  //   //Limit the viewport to scrolling box
+  //   if (box.Width() > this.WidthPixels) {
+  //     if (this._pos.x < box.Min.x) {
+  //       this._pos.x = box.Min.x;
+  //     }
+  //     if (this._pos.x + this.WidthPixels >= box.Max.x) {
+  //       this._pos.x = box.Max.x - this.WidthPixels;
+  //     }
+  //   }
+  //   if (box.Height() > this.HeightPixels) {
+  //     if (this._pos.y < box.Min.y) {
+  //       this._pos.y = box.Min.y;
+  //     }
+  //     if (this._pos.y + this.HeightPixels >= box.Max.y) {
+  //       this._pos.y = box.Max.y - this.HeightPixels;
+  //     }
+  //   }
+  // }
   public calcBoundBox() {
+    let tw = this.TilesWidth;
+    let th = this.TilesHeight;
     this._box = new Box2f();
-    this._box.Min.x = this._pos.x;
-    this._box.Min.y = this._pos.y;
-    this._box.Max.x = this._pos.x + this._widthPixels;
-    this._box.Max.y = this._pos.y + this._heightPixels;
-
+    this._box.Min.x = this.Center.x - tw;
+    this._box.Min.y = this.Center.y - th;
+    this._box.Max.x = this.Center.x + tw;
+    this._box.Max.y = this.Center.y + th;
   }
 }
-
 class InputControls {
   private _playerChar: Sprite25D = null;
   private _playerCharZoom: number = 6;
 
-  public constructor(playerChar: Sprite25D) {
+  private _viewport: Viewport25D = null;
+
+  public constructor(playerChar: Sprite25D, viewport: Viewport25D) {
     this._playerChar = playerChar;
+    this._viewport = viewport;
   }
   public update(dt: number) {
 
@@ -1447,40 +1513,57 @@ class InputControls {
     let c: vec2 = this._playerChar.BoundBox.Center();
     let center = new vec3(c.x, c.y, this._playerChar.Position.z);
 
-    center.add(g_mainWorld.position);
+    center.add(g_mainWorld.position);//Not sure if we're actually going to move the world but it's possible i guess
 
     let position = center.clone().add(this._playerChar.QuadNormal.clone().multiplyScalar(this._playerCharZoom));
+
     Globals.player.position.copy(position);
+
+    //If in VR the user may not have to look at this exact thing.
     Globals.camera.lookAt(center);
+
+    this._viewport.Center = center;
+    this._viewport.Campos = position;
   }
   private zoomPlayerChar() {
     let zoomPerWheel = 0.1;
+    let maxZoom: number = 8;
+    let minZoom: number = 3;
+
+    if (Globals.isDebug()) {
+      maxZoom = 9999;
+    }
+
     if (Globals.input.mouse.Wheel !== 0) {
       this._playerCharZoom += Globals.input.mouse.Wheel * zoomPerWheel;
-      this._playerCharZoom = Math.max(3, Math.min(8, this._playerCharZoom));
+      this._playerCharZoom = Math.max(minZoom, Math.min(maxZoom, this._playerCharZoom));
       this.lookAtPlayerChar();
     }
   }
   private movePlayerChar(dt: number) {
-    let speed: number = 1.7 * dt;
+    let base_speed: number = 1.7;
+    let speed = base_speed * dt;
+    if (Globals.input.keyboard.Shift.pressOrHold()) {
+      speed = (20) * dt;
+    }
     if (Globals.input.left.MoveLeft) {
       this._playerChar.Animation.play("walk_left", true);
-      this._playerChar.Position.sub(g_mainWorld.Right.clone().multiplyScalar(speed));
+      this._playerChar.Position.sub(WorldView25D.Right.clone().multiplyScalar(speed));
       this.lookAtPlayerChar();
     }
     else if (Globals.input.left.MoveRight) {
       this._playerChar.Animation.play("walk_right", true);
-      this._playerChar.Position.add(g_mainWorld.Right.clone().multiplyScalar(speed));
+      this._playerChar.Position.add(WorldView25D.Right.clone().multiplyScalar(speed));
       this.lookAtPlayerChar();
     }
     else if (Globals.input.left.MoveUp) {
       this._playerChar.Animation.play("walk_up", true);
-      this._playerChar.Position.add(g_mainWorld.Down.clone().multiplyScalar(speed));
+      this._playerChar.Position.add(WorldView25D.Down.clone().multiplyScalar(speed));
       this.lookAtPlayerChar();
     }
     else if (Globals.input.left.MoveDown) {
       this._playerChar.Animation.play("walk_down", true);
-      this._playerChar.Position.sub(g_mainWorld.Down.clone().multiplyScalar(speed));
+      this._playerChar.Position.sub(WorldView25D.Down.clone().multiplyScalar(speed));
       this.lookAtPlayerChar();
     }
     else {
@@ -1530,6 +1613,8 @@ function loadResources() {
     //Note: We might be able to swap left/right here.
     g_hand.rotateY(Math.PI);
     //g_hand.scale.set(-1,0,0);
+
+
     Globals.scene.add(g_hand);
 
     initializeGame();
@@ -1555,19 +1640,19 @@ function initializeGame() {
 }
 function createWorld() {
   //Load Resources
-  g_mainWorld = new WorldView25D(10, 7, 1, 1, g_atlas);
-  g_mainWorld.init();
+  g_mainWorld = new WorldView25D(g_atlas);
+  g_mainWorld.init(2048 as Int);
   Globals.scene.add(g_mainWorld);
 
   let player = g_mainWorld.PlatformLevel.Tiles.getTile(TiledSpriteId.Player);
 
-  g_inputControls = new InputControls(player);
+  g_inputControls = new InputControls(player, g_mainWorld.Viewport);
   g_mainWorld.addObject25(player);
   g_mainWorld.Player = player;
 
   //Drop player
-  player.Position.x = g_mainWorld.PlatformLevel.PlayerStartXY.x * g_atlas.TileWidthPixels;
-  player.Position.y = g_mainWorld.PlatformLevel.PlayerStartXY.y * g_atlas.TileHeightPixels;
+  player.Position.x = g_mainWorld.PlatformLevel.PlayerStartXY.x;
+  player.Position.y = g_mainWorld.PlatformLevel.PlayerStartXY.y;
 
   player.update(0.0001);
   g_inputControls.lookAtPlayerChar();
