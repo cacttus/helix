@@ -12,12 +12,12 @@ export class ivec2 {
   public x: Int = 0 as Int;
   public y: Int = 0 as Int;
 
-  public constructor(dx: Int = null, dy: Int = null) {
+  public constructor(dx: number = null, dy: number = null) {
     if (dx !== null) {
-      this.x = dx;
+      this.x = Math.floor(dx) as Int;
     }
     if (dy !== null) {
-      this.y = dy;
+      this.y = Math.floor(dy) as Int;
     }
   }
   public clone(): ivec2 {
@@ -122,6 +122,18 @@ export class Box2f {
   Min: vec2;
   Max: vec2;
 
+  public clone() : Box2f {
+    let ret:Box2f = new Box2f();
+    ret.copy(this);
+    return ret;
+  }
+  public copy(other:Box2f) : this {
+    this.Min = other.Min.clone();
+    this.Max = other.Max.clone();
+    return this;
+  }
+
+
   public Width(): number { return this.Max.x - this.Min.x; }
   public Height(): number { return this.Max.y - this.Min.y; }
 
@@ -146,7 +158,9 @@ export class Box2f {
   //     Max = max;
   // }
   public Center(): vec2 {
-    return this.Min.clone().add(this.Max.clone().sub(this.Min)).multiplyScalar(0.5);
+    let dai : vec2 = this.Max.clone().sub(this.Min).multiplyScalar(0.5);
+    let ret : vec2 = this.Min.clone().add(dai);
+    return ret;
   }
   // public static  FlipBoxH(b : Box2f, float w) : Box2f
   // {
@@ -218,17 +232,18 @@ export class Box2f {
     }
     return ret;
   }
-
-  // public void GenResetExtents()
-  // {
-  //     Min = new vec2(Single.MaxValue, Single.MaxValue);
-  //     Max = new vec2(-Single.MaxValue, -Single.MaxValue);
-  // }
-  // public void ExpandByPoint(vec2 v)
-  // {
-  //     Min = vec2.Minv(Min, v);
-  //     Max = vec2.Maxv(Max, v);
-  // }
+  public GenResetExtents()
+  {
+      this.Min = new vec2(Number.MAX_VALUE,Number.MAX_VALUE);
+      this.Max = new vec2(-Number.MAX_VALUE, -Number.MAX_VALUE);
+  }
+  public ExpandByPoint(  v : vec2)
+  {
+    this.Min.x = Math.min(this.Min.x, v.x);
+    this.Min.y = Math.min(this.Min.y, v.y);
+    this.Max.x = Math.max(this.Max.x, v.x);
+    this.Max.y = Math.max(this.Max.y, v.y);
+  }
   public BoxIntersect_EasyOut_Inclusive(cc: Box2f): boolean {
     return cc.Min.x <= this.Max.x && cc.Min.y <= this.Max.y && this.Min.x <= cc.Max.x && this.Min.y <= cc.Max.y;
   }

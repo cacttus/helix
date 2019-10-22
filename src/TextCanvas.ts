@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Globals } from './Globals';
 import { LineBasicMaterial, Vector3 } from 'three';
-//import * as Main from './main';
+//import * as Main from './Main';
 import { Frustum } from './Base';
 
 export class TextCanvasOptions {

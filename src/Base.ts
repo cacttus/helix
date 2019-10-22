@@ -12,7 +12,7 @@ import { PhysicsObject3D, PhysicsManager3D } from './Physics3D';
 import { Globals } from './Globals';
 import { Utils } from './Utils';
 import * as Files from './Files';
-import { vec4, vec3 } from './Math';
+import { vec4, vec3, vec2 } from './Math';
 
 export interface AfterLoadFunction { (x: any): void; };
 
@@ -719,6 +719,7 @@ export class Screen2D {
 /**
  * Keyboard Input class
  */
+enum KeyboardEventType { Up, Down }
 export class Keyboard {
   private _w: VirtualButton = new VirtualButton();
   private _s: VirtualButton = new VirtualButton();
@@ -741,6 +742,7 @@ export class Keyboard {
   public set SmoothAxisSpeed(x: number) { this._smoothAxisSpeed = x; }
 
   public controlDown: boolean = false;
+  private _events: Map<KeyboardEvent, KeyboardEventType> = new Map<KeyboardEvent, KeyboardEventType>();
 
   constructor() {
     this._buttons.push(this.w);
@@ -748,45 +750,68 @@ export class Keyboard {
     this._buttons.push(this.a);
     this._buttons.push(this.d);
     let that = this;
-    window.addEventListener("keydown", function (e) {
-      if (e.ctrlKey) { that.controlDown = true; }
-      //w
-      if (e.keyCode === 87) { that.w.update(true); }
-      //s
-      if (e.keyCode === 83) { that.s.update(true); }
-      //a
-      if (e.keyCode === 65) { that.a.update(true); }
-      //d
-      if (e.keyCode === 68) { that.d.update(true); }
-
-      //TESTS
-      //if (Globals.isDebug()) 
-      {
-        if (that.controlDown) {
-
-          //f1/2
-          if (e.keyCode === 112) { }
-          if (e.keyCode === 113) { }
-          //f3
-          if (e.keyCode === 114) { }
-          //f4
-        }
-      }
-
+    window.addEventListener("keydown", function (e: KeyboardEvent) {
+      that._events.set(e, KeyboardEventType.Down);
     });
-    window.addEventListener("keyup", function (e) {
-      if (e.ctrlKey) { that.controlDown = false; }
-      //w
-      if (e.keyCode === 87) { that.w.update(false); }
-      //s
-      if (e.keyCode === 83) { that.s.update(false); }
-      //a
-      if (e.keyCode === 65) { that.a.update(false); }
-      //d
-      if (e.keyCode === 68) { that.d.update(false); }
+    window.addEventListener("keyup", function (e: KeyboardEvent) {
+      that._events.set(e, KeyboardEventType.Up);
     });
   }
+  public update() {
+    //**This is obviously a problem, really we should store & pump these events each frame to reduce missed events.
+    for (let [evt, k] of this._events) {
+      if (k === KeyboardEventType.Down) {
+        if (evt.ctrlKey) {
+          this.controlDown = true;
+        }
+        if (evt.keyCode === 87) {//w
+          this.w.update(true);
+        }
+        if (evt.keyCode === 83) { //s
+          this.s.update(true);
+        }
+        if (evt.keyCode === 65) {//a
+          this.a.update(true);
+        }
+        if (evt.keyCode === 68) {//d
+          this.d.update(true);
+        }
+        //TESTS
+        //if (Globals.isDebug()) 
+        {
+          if (this.controlDown) {
+            //f1/2
+            if (evt.keyCode === 112) { }
+            if (evt.keyCode === 113) { }
+            //f3
+            if (evt.keyCode === 114) { }
+            //f4
+          }
+        }
+      }
+      else if (k === KeyboardEventType.Up) {
+        if (evt.ctrlKey) {
+          this.controlDown = false;
+        }
+        if (evt.keyCode === 87) {//w
+          this.w.update(false);
+        }
+        if (evt.keyCode === 83) { //s
+          this.s.update(false);
+        }
+        if (evt.keyCode === 65) {  //a
+          this.a.update(false);
+        }
+        if (evt.keyCode === 68) {    //d
+          this.d.update(false);
+        }
+      }
+    }
+    this._events.clear();
+  }
+
 }
+enum MouseEventType { MouseUp, MouseDown, MouseMove };
 export class Mouse extends Vector3 {
   public moved: boolean = false;
   public mousePoint: PointGeo = null;
@@ -794,60 +819,61 @@ export class Mouse extends Vector3 {
   private _lmbDown: boolean = false;
   private _left: VirtualButton = new VirtualButton();
   private _right: VirtualButton = new VirtualButton();
+  private _wheel: number = 0;//Returns a number of mouse wheeel clicks.
 
-  get Left(): VirtualButton { return this._left; }
-  get Right(): VirtualButton { return this._right; }
+  public get Wheel(): number { return this._wheel; }
+  public get Left(): VirtualButton { return this._left; }
+  public get Right(): VirtualButton { return this._right; }
+
+  private _events: Map<MouseEvent, MouseEventType> = new Map<MouseEvent, MouseEventType>();
+
+  private _mousewheel_evt: Array<MouseWheelEvent> = new Array<MouseWheelEvent>();
+
+  private curView: vec3 = new vec3(0, 0, -1);
 
   public constructor() {
     super();
+    this.registerDocumentCallbacks();
+  }
+  public postUpdate(){
+    this._wheel = 0;
+  }
+  public update() {
+    this.updateEventsSynchronously();
+    this.Left.update(this._lmbDown);
+    this.Right.update(this._rmbDown);
+  }
+  private registerDocumentCallbacks() {
+    //Here we just set the mouse information either last, or this frame in order to update the mouse
+    //at the same synchronous position in every browser.
     let that = this;
-
-    setInterval(function () {
-      that.Left.update(that._lmbDown);
-      that.Right.update(that._rmbDown);
-    }, 100);
-    document.addEventListener('mouseup', function (e) {
-      // e.preventDefault();
-      if (e.button == 0) {
-        that._lmbDown = false;
-      }
-      if (e.button == 1) {
-        //middle
-      }
-      if (e.button == 2) {
-        that._rmbDown = false;
-      }
-    });
-    document.addEventListener('mousedown', function (e) {
-      //e.preventDefault();
-      if (e.button == 0) {
-        that._lmbDown = true;
-      }
-      if (e.button == 1) {
-        //middle
-      }
-      if (e.button == 2) {
-        that._rmbDown = true;
-      }
-    });
-    document.addEventListener('contextmenu', function (e) {
+    document.addEventListener('mouseup', function (e: MouseEvent) {
       e.preventDefault();
+      that._events.set(e, MouseEventType.MouseUp);
+    });
+    document.addEventListener('mousedown', function (e: MouseEvent) {
+      e.preventDefault();
+      that._events.set(e, MouseEventType.MouseDown);
+    });
+    document.addEventListener('contextmenu', function (e: MouseEvent) {
+      e.preventDefault();
+    });
+    document.addEventListener('wheel', function (e: MouseWheelEvent) {
+      e.preventDefault();
+      that._mousewheel_evt.push(e);
     });
     //var controls = new OrbitControls.default();
-    document.addEventListener('mousemove', function (e) {
+    document.addEventListener('mousemove', function (e: MouseEvent) {
       e.preventDefault();
-      that.mouseMove(e.clientX, e.clientY);
+      that._events.set(e, MouseEventType.MouseMove);
     }, false);
   }
-  private curView: vec3 = new vec3(0, 0, -1);
-  private mouseMove(x:number,y:number){
-          
+  private mouseMove(x: number, y: number) {
     if (!this.moved) {
       this.moved = true;
     }
 
-    if(this.Left.down()){
-
+    if (this.Left.down()) {
       this.flycamRotate(x, y);
     }
 
@@ -856,7 +882,6 @@ export class Mouse extends Vector3 {
     this.z = 0;
 
     this.debugDrawMousePos();
-
   }
   private flycamRotate(newx: number, newy: number) {
     let dx = newx - this.x;
@@ -864,8 +889,8 @@ export class Mouse extends Vector3 {
 
     let maxPixel = 8;
 
-    if(Math.abs(dx) > maxPixel) { dx = Math.sign(dx) * maxPixel }
-    if(Math.abs(dy) > maxPixel) { dy = Math.sign(dy) * maxPixel }
+    if (Math.abs(dx) > maxPixel) { dx = Math.sign(dx) * maxPixel }
+    if (Math.abs(dy) > maxPixel) { dy = Math.sign(dy) * maxPixel }
 
     let campos = new vec3();
     Globals.camera.getWorldPosition(campos);
@@ -877,8 +902,8 @@ export class Mouse extends Vector3 {
     let right = camdir.clone().cross(Globals.camera.up).normalize();
     let down = Globals.camera.up.clone().normalize().multiplyScalar(-1);
 
-    this.curView.add(right.multiplyScalar(dx*rot_speed));
-    this.curView.add(down.multiplyScalar(dy*rot_speed));
+    this.curView.add(right.multiplyScalar(dx * rot_speed));
+    this.curView.add(down.multiplyScalar(dy * rot_speed));
 
     Globals.camera.lookAt(this.curView.clone().add(campos));
   }
@@ -923,13 +948,52 @@ export class Mouse extends Vector3 {
       that.mousePoint.updateMatrix();
     }
   }
+  private updateEventsSynchronously() {
+    for (let [evt, k] of this._events) {
+      if (k === MouseEventType.MouseMove) {
+        this.mouseMove(evt.clientX, evt.clientY);
+      }
+      else if (k === MouseEventType.MouseUp) {
+        // e.preventDefault();
+        if (evt.button == 0) {
+          this._lmbDown = false;
+        }
+        if (evt.button == 1) {
+          //middle
+        }
+        if (evt.button == 2) {
+          this._rmbDown = false;
+        }
+      }
+      else if (k === MouseEventType.MouseDown) {
+        //e.preventDefault();
+        if (evt.button == 0) {
+          this._lmbDown = true;
+        }
+        if (evt.button == 1) {
+          //middle
+        }
+        if (evt.button == 2) {
+          this._rmbDown = true;
+        }
+      }
+    }
+    this._events.clear();
+
+    for (let evt of this._mousewheel_evt) {
+      this._wheel += Math.sign(evt.deltaY);
+    }
+    this._mousewheel_evt = new Array<MouseWheelEvent>();
+  }
 }
 export class VirtualController {
   public Position: Vector3 = new Vector3(0, 0, 0);
   public A: VirtualButton = new VirtualButton();
   public B: VirtualButton = new VirtualButton();
   public Trigger: VirtualButton = new VirtualButton();
-  public Axis: Vector2 = new Vector2(); // a 
+  private _axis : vec2 = new vec2();
+
+  public get Axis(): vec2 { return this._axis; }
 
   private c_immMoveAmt: number = 0.1;
   public get MoveLeft(): boolean { return this.Axis.x < -this.c_immMoveAmt; }
@@ -1020,6 +1084,10 @@ export class Input {
 
         let lookat: Vector3 = cam_w.add(cam_n);
 
+        this._mouse.update();
+        this._keyboard.update();
+
+        //Update WSAD the movement and other keyboard things
         this.updateAxis_Keyboard(dt, this.left);
         this.right.Axis.copy(this.left.Axis);
 
@@ -1032,6 +1100,11 @@ export class Input {
         this.left.A.update(this.mouse.Right.pressOrHold());
         this.left.Position.copy(lookat);
       }
+    }
+  }
+  public postUpdate(){
+    if(this._mouse){
+      this._mouse.postUpdate();
     }
   }
   private updateGamepads_VR(dt: number) {
@@ -1189,7 +1262,7 @@ export class Frustum {
     let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
     let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV());
     let tan_fov_2 = Math.tan(fov / 2.0);
-    
+
 
     let rightVec = cam_dir.clone().cross(camup); //TODO: see if this changes things
     rightVec.normalize();

@@ -76,7 +76,7 @@ export class _Globals {
     this._physics3d = new PhysicsManager3D();
     this._prof = new Prof();
 
-    if (this._debug) {
+    if (this._prof) {
       this._statsFps = new Stats();
       this._statsFps.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
       this._statsFps.dom.style.cssText = 'position:absolute;top:0px;left:0px;';
@@ -255,7 +255,8 @@ export class _Globals {
 
         Globals.audio._listener.position.copy(Globals.player.WorldPosition);
 
-
+        //Reset mouse wheel.
+        that.input.postUpdate();
 
         if (that._statsFps) {
           that._statsFps.update();

@@ -1,6 +1,6 @@
 import { ivec2, vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import { Globals } from './Globals';
-import { Atlas } from './Main';
+import { Atlas, Sprite25D, FDef } from './Main';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 import world_data from './game_world.json';
 
@@ -93,23 +93,77 @@ class TmxMap {
   public tilesets: Array<TmxTileset>;///":[
 }
 
+export enum TiledSpriteId {
+  //Note: the actual exported Tiled ID is +1 greater than the 0 based offset in the program.
+  None = 0,
+  Border = 1,
+  Door = 2,
+  House = 3,
+  Tree = 15,
+  Monster_Grass = 17,
+  Player = 19,
+  Grass_Base = 46,
+}
+interface MakeTileFn { (): Sprite25D }
+export class Tiles {
+  private _tileMap: Map<TiledSpriteId, Sprite25D> = null;
+  public getTile(id: TiledSpriteId): Sprite25D {
+    return this._tileMap.get(id);
+  }
+  private addTile(x: MakeTileFn) {
+    let tile = x();
+    this._tileMap.set(tile.TiledSpriteId, tile);
+  }
+  public constructor(atlas: Atlas) {
+    this._tileMap = new Map<TiledSpriteId, Sprite25D>();
+
+    this.addTile(function () {
+      let player = new Sprite25D("Player", TiledSpriteId.Player);
+      player.Animation.addMultiTileAnimation("walk_down",
+        FDef.default([[0, 1], [1, 1], [0, 1], [2, 1]]),
+        0.7, atlas,
+        new ivec2(1, 2));
+      player.Animation.addMultiTileAnimation("walk_right",
+        FDef.default([[3, 1], [4, 1], [3, 1], [5, 1]]),
+        0.7, atlas,
+        new ivec2(1, 2));
+      player.Animation.addMultiTileAnimation("walk_left",
+        FDef.default([[0, 3], [1, 3], [0, 3], [2, 3]]),
+        0.7, atlas,
+        new ivec2(1, 2));
+      player.Animation.addMultiTileAnimation("walk_up",
+        FDef.default([[6, 1], [7, 1], [6, 1], [8, 1]]),
+        0.7, atlas,
+        new ivec2(1, 2));
+      return player;
+    });
+
+    //Testing grass..
+    this.addTile(function () {
+      let tile = new Sprite25D("Grass_Base", TiledSpriteId.Grass_Base);
+      tile.Animation.addTileFrame(new ivec2(0, 0), atlas, new ivec2(1, 1));
+      tile.Animation.addTileFrame(new ivec2(1, 0), atlas, new ivec2(1, 1));
+
+      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+      tile.updateQuadVerts();
+      return tile;
+    });
+
+
+  }
+}
+
+
+
+
 export class PlatformLevel {
-  // public static readonly Background: Int = 0 as Int;
-  // public static readonly Midback: Int = 1 as Int;
-  // public static readonly Midground: Int = 2 as Int;
-  // public static readonly Foreground: Int = 3 as Int;
-  // public static readonly Liquid: Int = 4 as Int;
-  // public static readonly Conduit: Int = 5 as Int;
-  // public static readonly LayerCount: Int = 6 as Int;
   public static readonly Border: Int = 0 as Int;
   public static readonly Background: Int = 1 as Int;
   public static readonly Midground: Int = 2 as Int;
   public static readonly Objects: Int = 3 as Int;
   public static readonly Foreground: Int = 4 as Int;
   public static readonly LayerCount: Int = 5 as Int;
-
   public static readonly EMPTY_TILE: Int = -1 as Int;
-
 
   private _atlas: Atlas = null;
   public get Atlas(): Atlas { return this._atlas; }
@@ -121,35 +175,34 @@ export class PlatformLevel {
   public Room: Room = null; //{ get; private set; }
   private NumFloodFill: Int = 0 as Int;
 
-  public PlayerStartXY: ivec2 = new ivec2(Number.MAX_SAFE_INTEGER as Int, Number.MAX_SAFE_INTEGER as Int);
 
+  private _tiles: Tiles = null;
+  public get Tiles(): Tiles { return this._tiles; }
+
+
+  public PlayerStartXY: ivec2 = new ivec2(Number.MAX_SAFE_INTEGER as Int, Number.MAX_SAFE_INTEGER as Int);
   public MapWidthTiles: Int = 0 as Int; //{ get; private set; }
   public MapHeightTiles: Int = 0 as Int; //{ get; private set; }
   private DoorTilesLUT: Array<Int> = new Array<Int>();
-
   public GenTiles: Array<Array<Array<Int>>> = new Array<Array<Array<Int>>>();
-
-  public ParseTmxJson(json: string): TmxMap {
-    let ret: TmxMap = JSON.parse(json);
-    return ret;
-  }
 
   public constructor(atlas: Atlas) {
     this._atlas = atlas;
-
-    //let map = new TmxMap("Content\\" + level_name + ".tmx");
 
     let map = this.ParseTmxJson(JSON.stringify(world_data));
     this.MapWidthTiles = map.width as Int;
     this.MapHeightTiles = map.height as Int;
 
-    // //Create teh world data
+    //Create Tiles.
+    this._tiles = new Tiles(atlas);
+
     this.InitGenTileGrid();
 
     this.ParseGenTiles(map);
 
     this.MakeRoom(this.PlayerStartXY);
   }
+
   public InitGenTileGrid() {
     this.GenTiles = new Array<Array<Array<Int>>>();
     for (let iRow = 0 as Int; iRow < this.MapHeightTiles; ++iRow) {
@@ -190,6 +243,7 @@ export class PlatformLevel {
     //     World.Res.SwitchConduitTileId,
     //     World.Res.Tar80TileId               ,
     // };
+    let debug_invalid_tiles: Int = 0 as Int;
 
     for (let layer of map.layers) {
       let layerId: Int = -1 as Int;
@@ -202,7 +256,6 @@ export class PlatformLevel {
 
       if (layerId == -1) {
         Globals.debugBreak();
-        //System.Diagnostics.Debugger.Break();
       }
       else {
         let iTile
@@ -211,7 +264,7 @@ export class PlatformLevel {
           let tile_x: Int = ((iTile as Int) % (layer.width as Int)) as Int;
           let tile_y: Int = Math.floor(iTile / layer.width) as Int;
 
-          if (tile == Res.GuyTileId) {
+          if (tile === Res.GuyTileId) {
             //here is our start point, flood fill this area.
             this.PlayerStartXY.x = tile_x;
             this.PlayerStartXY.y = tile_y;
@@ -222,24 +275,11 @@ export class PlatformLevel {
           if (tile === 0) {
             val = PlatformLevel.EMPTY_TILE;
           }
-          // else if (TileLUT.ContainsKey(tile.Gid))
-          // {
-          // }
-          // else if (KeyTiles.Contains(tile.Gid))
-          // {
-          // }
-          // else if (DoorTilesLUT.Contains(tile.Gid))
-          // {
-          // }
-          // else if (ObjLUT.ContainsKey(tile.Gid))
-          // {
-          // }
-          // else if (SpecialItemLUT.ContainsKey(tile.Gid))
-          // {
-          // }
-          // else if (SignLUT.ContainsKey(tile.Gid))
-          // {
-          // }
+          else if (this._tiles.getTile(tile)) {
+            //The tile is valid.
+            let nnn = 0;
+            nnn += 1;
+          }
           else {
             val = PlatformLevel.EMPTY_TILE;
           }
@@ -249,6 +289,13 @@ export class PlatformLevel {
 
     }
 
+    if (debug_invalid_tiles > 0) {
+      Globals.logWarn("Found " + debug_invalid_tiles + " invalid tiles..");
+    }
+  }
+  private ParseTmxJson(json: string): TmxMap {
+    let ret: TmxMap = JSON.parse(json);
+    return ret;
   }
   private TrySetGenTile(iCol: Int, iRow: Int, iLayer: Int, iTile: Int) {
     if (iRow < 0 || iRow >= this.MapHeightTiles) {
@@ -257,9 +304,7 @@ export class PlatformLevel {
     if (iCol < 0 || iCol >= this.MapWidthTiles) {
       return;
     }
-
     try {
-
       this.GenTiles[iRow][iCol][iLayer] = iTile;//already set, but debug here
     }
     catch (ex) {
@@ -317,7 +362,7 @@ export class PlatformLevel {
       let iTile: Int = this.TileXY(pt.x, pt.y, PlatformLevel.Border);
 
       if (room.Found.has(pt)) {
-
+        //do nothing
       }
       else if (iTile === Res.BorderTileId) {
         if (!room.Border.has(pt)) {
@@ -380,9 +425,8 @@ export class PlatformLevel {
 }
 
 export class TileBlock {
-  // public Tile Tile = null; // Sprite for this block.  This also containst he TILE ID.  This is a REFERENCE to the tile.  Not a copy
-  // public Sprite Sprite = null;
-  // public int FrameIndex = 0;
+  public spriteRef: Sprite25D = null; //Reference to a Sprite25D, // Sprite for this block.  This also containst he TILE ID.  This is a REFERENCE to the tile.  Not a copy
+  public frameIndex: Int = 0 as Int;
   //public float Health = 100; // Max Health is 100 for all blocks
   // public bool Blocking = false;
   // public bool CanMine = false;
@@ -417,7 +461,7 @@ export class Cell {
   //public WaterType WaterType = WaterType.Lava;
 
   public Pos(): vec2 {
-    return this.Parent.Box.Min;
+    return this.Parent.Box.Min.clone();
   }
   public Box(): Box2f {
     return this.Parent.Box;
@@ -430,10 +474,12 @@ export class Cell {
   //         );
   //     return gridBox;
   // }
+  private _cellPos : ivec2;
   public Parent: Node;//{ get; private set; }
-  public constructor(parent: Node, nLayers: number) {
+  public constructor(parent: Node, nLayers: number, cellPos : ivec2) {
+    this._cellPos = cellPos;
     this.Parent = parent;
-    this.Layers = new Array<TileBlock>(nLayers);
+    this.Layers = new Array<TileBlock>(0);
     for (let i = 0; i < nLayers; ++i) {
       this.Layers.push(null);
     }
@@ -445,8 +491,8 @@ export class Cell {
   //public float LightValue = 0;    // 0 - 100 = 0 = black 100 = transparent
 
   public GetTilePosLocal(): ivec2 {
-    let dx: Int = Math.floor(this.Parent.Box.Min.x / this.Parent.Level.Atlas.TileWidth) as Int;
-    let dy: Int = Math.floor(this.Parent.Box.Min.y / this.Parent.Level.Atlas.TileHeight) as Int;
+    let dx: Int = Math.floor(this.Parent.Box.Min.x / this.Parent.Level.Atlas.TileWidthPixels) as Int;
+    let dy: Int = Math.floor(this.Parent.Box.Min.y / this.Parent.Level.Atlas.TileHeightPixels) as Int;
 
     let v = new ivec2(dx as Int, dy as Int);
 
@@ -551,27 +597,27 @@ export class TileGrid {
 
     //Double sanity - we must always be evenly divisible by tiles.
     let wwww = parent.Box.Width();
-    let test = (wwww % this.Level.Atlas.TileWidth) as Int;
+    let test = (wwww % this.Level.Atlas.TileWidthPixels) as Int;
     if (test !== 0) {
       Globals.debugBreak();
     }
-    let test2 = (parent.Box.Height() % this.Level.Atlas.TileHeight) as Int;
+    let test2 = (parent.Box.Height() % this.Level.Atlas.TileHeightPixels) as Int;
     if (test2 !== 0) {
       Globals.debugBreak();
     }
 
     let boxwh: vec2 = (parent.Box.Max.clone().sub(parent.Box.Min));
-    let tilesXParent: Int = Math.floor(boxwh.x / this.Level.Atlas.TileWidth) as Int;
-    let tilesYParent: Int = Math.floor(boxwh.y / this.Level.Atlas.TileHeight) as Int;
-    let tilesXMid: Int = Math.floor((boxwh.x / this.Level.Atlas.TileWidth) * 0.5) as Int;
-    let tilesYMid: Int = Math.floor((boxwh.y / this.Level.Atlas.TileHeight) * 0.5) as Int;
+    let tilesXParent: Int = Math.floor(boxwh.x / this.Level.Atlas.TileWidthPixels) as Int;
+    let tilesYParent: Int = Math.floor(boxwh.y / this.Level.Atlas.TileHeightPixels) as Int;
+    let tilesXMid: Int = Math.floor((boxwh.x / this.Level.Atlas.TileWidthPixels) * 0.5) as Int;
+    let tilesYMid: Int = Math.floor((boxwh.y / this.Level.Atlas.TileHeightPixels) * 0.5) as Int;
 
     if (tilesXParent === 1 as Int && tilesYParent === 1 as Int) {
       let cellPos: ivec2 = new ivec2(
-        Math.floor(parent.Box.Min.x / this.Level.Atlas.TileWidth) as Int,
-        Math.floor(parent.Box.Min.y / this.Level.Atlas.TileHeight) as Int
+        Math.floor(parent.Box.Min.x / this.Level.Atlas.TileWidthPixels) as Int,
+        Math.floor(parent.Box.Min.y / this.Level.Atlas.TileHeightPixels) as Int
       );
-      parent.Cell = new Cell(parent, this.NumLayers);
+      parent.Cell = new Cell(parent, this.NumLayers, cellPos);
 
       if (this.CellDict.has(cellPos)) {
         //Error: cell already found
@@ -581,6 +627,8 @@ export class TileGrid {
         this.CellDict.set(cellPos, parent.Cell);
       }
 
+      this.setCellData(parent.Cell, cellPos);
+
       this.dbg_numcells++;
     }
     else {
@@ -588,13 +636,13 @@ export class TileGrid {
       let B: Box2f = null;
 
       if (tilesXParent > tilesYParent) {
-        let midx: number = parent.Box.Min.x + (tilesXMid as number) * this.Level.Atlas.TileWidth;
+        let midx: number = parent.Box.Min.x + (tilesXMid as number) * this.Level.Atlas.TileWidthPixels;
 
         A = Box2f.construct(new vec2(parent.Box.Min.x, parent.Box.Min.y), new vec2(midx, parent.Box.Max.y));
         B = Box2f.construct(new vec2(midx, parent.Box.Min.y), new vec2(parent.Box.Max.x, parent.Box.Max.y));
       }
       else {
-        let midy: number = parent.Box.Min.y + (tilesYMid as number) * this.Level.Atlas.TileHeight;
+        let midy: number = parent.Box.Min.y + (tilesYMid as number) * this.Level.Atlas.TileHeightPixels;
 
         A = Box2f.construct(new vec2(parent.Box.Min.x, parent.Box.Min.y), new vec2(parent.Box.Max.x, midy));
         B = Box2f.construct(new vec2(parent.Box.Min.x, midy), new vec2(parent.Box.Max.x, parent.Box.Max.y));
@@ -615,10 +663,34 @@ export class TileGrid {
 
 
   }
+  private setCellData(c: Cell, cellPos: ivec2) {
+    //Set the Cell Data.  This is where the love happens.
+    for (let iLayer = 0; iLayer < PlatformLevel.LayerCount; iLayer++) {
+      let iTileId: Int = this.Level.TileXY(cellPos.x, cellPos.y, iLayer as Int);
+      
+      if (iTileId !== PlatformLevel.EMPTY_TILE) {
+        let tileSprite: Sprite25D = this.Level.Tiles.getTile(iTileId);
+
+        if (c.Layers[iLayer] !== null) {
+          //hmm... we already set this cell data. This shouldn't be ok.
+          Globals.debugBreak();
+        }
+        else {
+          c.Layers[iLayer] = new TileBlock();
+
+          if (tileSprite.IsCellTile) {
+            c.Layers[iLayer].spriteRef = tileSprite;
+          }
+
+        }
+      }
+    }
+
+  }
   public GetCellForPointi(gridpos: ivec2): Cell {
     let v: vec2 = new vec2(
-      (gridpos.x as number) * (this.Level.Atlas.TileWidth as number) + (this.Level.Atlas.TileWidth as number) * 0.5,
-      (gridpos.y as number) * (this.Level.Atlas.TileHeight as number) + (this.Level.Atlas.TileHeight as number) * 0.5
+      (gridpos.x as number) * (this.Level.Atlas.TileWidthPixels as number) + (this.Level.Atlas.TileWidthPixels as number) * 0.5,
+      (gridpos.y as number) * (this.Level.Atlas.TileHeightPixels as number) + (this.Level.Atlas.TileHeightPixels as number) * 0.5
     );
     return this.GetCellForPoint(v);
   }
@@ -682,15 +754,15 @@ export class TileGrid {
   public GetGridExtents(tilesW: Int, tilesH: Int): Box2f {
     let b: Box2f = Box2f.construct(
       new vec2(0, 0),
-      new vec2(tilesW * this.Level.Atlas.TileWidth, tilesH * this.Level.Atlas.TileHeight));
+      new vec2(tilesW * this.Level.Atlas.TileWidthPixels, tilesH * this.Level.Atlas.TileHeightPixels));
     return b;
   }
   public GetCellManifoldForBox(b: Box2f): Array<Cell> {
-    let x: Int = Math.floor(b.Min.x / this.Level.Atlas.TileWidth) as Int;
-    let y: Int = Math.floor(b.Min.y / this.Level.Atlas.TileHeight) as Int;
+    let x: Int = Math.floor(b.Min.x / this.Level.Atlas.TileWidthPixels) as Int;
+    let y: Int = Math.floor(b.Min.y / this.Level.Atlas.TileHeightPixels) as Int;
 
-    let w: Int = Math.ceil(b.Width() / (this.Level.Atlas.TileWidth as number)) as Int;
-    let h: Int = Math.ceil(b.Height() / (this.Level.Atlas.TileHeight as number)) as Int;
+    let w: Int = Math.ceil(b.Width() / (this.Level.Atlas.TileWidthPixels as number)) as Int;
+    let h: Int = Math.ceil(b.Height() / (this.Level.Atlas.TileHeightPixels as number)) as Int;
 
     let ret: Array<Cell> = new Array<Cell>();
 
@@ -698,21 +770,8 @@ export class TileGrid {
     for (let iy: Int = y; iy <= (y + h); ++iy) {
       for (let ix: Int = x; ix <= (x + w); ++ix) {
         vtmp = new ivec2(ix, iy);
-        let c: Cell = null;
-        if (this.CellDict.get(vtmp)) {
-          // #if DEBUG
-          //           if (ret.Contains(c)) {
-
-          //     //SANITY CHEC
-          //     System.Diagnostics.Debugger.Break();
-          //   }
-          // #endif
-          ret.push(c);
-        }
-        else {
-          // int n = 0;
-          // n++;
-        }
+        let c: Cell = this.CellDict.get(vtmp);
+        ret.push(c);
       }
     }
 
@@ -728,8 +787,8 @@ export class TileGrid {
       return null;
     }
     let pt: vec2 = new vec2(
-      c.Parent.Box.Min.x + this.Level.Atlas.TileWidth * (x as number) + this.Level.Atlas.TileWidth * 0.5,
-      c.Parent.Box.Min.y + this.Level.Atlas.TileHeight * (y as number) + this.Level.Atlas.TileHeight * 0.5);
+      c.Parent.Box.Min.x + this.Level.Atlas.TileWidthPixels * (x as number) + this.Level.Atlas.TileWidthPixels * 0.5,
+      c.Parent.Box.Min.y + this.Level.Atlas.TileHeightPixels * (y as number) + this.Level.Atlas.TileHeightPixels * 0.5);
     let ret: Cell = this.GetCellForPoint(pt);
     return ret;
   }
