@@ -46,11 +46,6 @@ class IVec2Map<K> {
 }
 class IVec2Set extends IVec2Map<Int> {
 }
-
-// export class Res {
-//   public static readonly BorderTileId: Int = 0 as Int;
-//   public static readonly GuyTileId: Int = 19 as Int;
-// }
 class TmxTileset {
   //Tileset in Tiled.
   public columns: Int;//":6,
@@ -100,12 +95,13 @@ export enum TiledSpriteId {
   //Note: the actual exported Tiled ID is +1 greater than the 0 based offset in the program.
   None = 0,
   Border = 1,
-  Door = 2,
+  Tree = 2,
   House = 3,
-  Tree = 15,
-  Monster_Grass = 17,
-  Player = 19,
-  Grass_Base = 46,
+  Player = 4,
+  Monster_Grass = 5,
+  Grass_Base = 6,
+  Rock =7,
+  Door = 8,
 }
 export enum TileLayer {
   DebugBackground = -1,
@@ -122,18 +118,12 @@ export class Tiles {
   //This is the definitions for all tiles in the game.
   //If we get Monogame Toolkit to work... we can eventually do away with this.
   private _tileMap: Map<TiledSpriteId, Sprite25D> = null;
-  public getTile(id: TiledSpriteId): Sprite25D {
-    return this._tileMap.get(id);
-  }
-  private addTile(x: MakeTileFn) {
-    let tile = x();
-    this._tileMap.set(tile.TiledSpriteId, tile);
-  }
+
   public constructor(atlas: Atlas) {
     this._tileMap = new Map<TiledSpriteId, Sprite25D>();
 
     this.addTile(function () {
-      let player = new Sprite25D("Player", TiledSpriteId.Player, TileLayer.Objects);
+      let player = new Sprite25D(atlas, "Player", TiledSpriteId.Player, TileLayer.Objects);
       player.Animation.addMultiTileAnimation("walk_down",
         FDef.default([[0, 1], [1, 1], [0, 1], [2, 1]]),
         0.7, atlas,
@@ -155,7 +145,7 @@ export class Tiles {
 
     //Testing grass..
     this.addTile(function () {
-      let tile = new Sprite25D("Grass_Base", TiledSpriteId.Grass_Base, TileLayer.Unset);
+      let tile = new Sprite25D(atlas, "Grass_Base", TiledSpriteId.Grass_Base, TileLayer.Unset);
       tile.Animation.addTileFrame(new ivec2(0, 0), atlas, new ivec2(1, 1));
       tile.Animation.addTileFrame(new ivec2(1, 0), atlas, new ivec2(1, 1));
 
@@ -164,8 +154,15 @@ export class Tiles {
       return tile;
     });
 
-
   }
+  public getTile(id: TiledSpriteId): Sprite25D {
+    return this._tileMap.get(id);
+  }
+  private addTile(x: MakeTileFn) {
+    let tile = x();
+    this._tileMap.set(tile.TiledSpriteId, tile);
+  }
+
 }
 export class MasterMap {
   //The entire game world in one Tiled data file.  
@@ -323,7 +320,6 @@ export class MasterMap {
       //Cleanup
       this.Room = null;
       this.Grid = null;
-      //this.GameObjects = new List<GameObject>();
 
       //Find the boundary x/y of the map so we can make a grid
       this.Room = new MapArea();
@@ -368,6 +364,7 @@ export class MasterMap {
 
       //Get the tile from the BORDER tile layer.
       let iTile: Int = this.TileXY(pt.x, pt.y, TileLayer.Border as Int);
+      let iTile_Door: Int = this.TileXY(pt.x, pt.y, TileLayer.Objects as Int);
 
       if (room.Found.has(pt)) {
         //do nothing
@@ -385,7 +382,7 @@ export class MasterMap {
           this.FloodFillAddNeighborBorder(pt.clone().add(new ivec2(0 as Int, 1 as Int)), room.Border);
         }
       }
-      else if (this.DoorTilesLUT.indexOf(iTile) >= 0) {
+      else if (iTile_Door === TiledSpriteId.Door) {//this.DoorTilesLUT.indexOf(iTile) >= 0) {  Old method
         ///So the TODO here is to be able to figure out which side of the border the door is on
         if (!room.Border.has(pt)) {
           room.Doors.set(pt);
@@ -443,7 +440,7 @@ export class MapArea {
   public WidthTiles: Int = -1 as Int;
   public HeightTiles: Int = -1 as Int;
 
-  public Room() {
+  public constructor() {
     this.Min.x = this.Min.y = Number.MAX_SAFE_INTEGER as Int;
     this.Max.x = this.Max.y = -Number.MAX_SAFE_INTEGER as Int;
   }
@@ -507,25 +504,25 @@ export class TileGrid {
 
     //Double sanity - we must always be evenly divisible by tiles.
     let wwww = parent.Box.Width();
-    let test = (wwww % this.Level.Atlas.TileWidthPixels) as Int;
+    let test = (wwww % this.Level.Atlas.TileWidthR3) as Int;
     if (test !== 0) {
       Globals.debugBreak();
     }
-    let test2 = (parent.Box.Height() % this.Level.Atlas.TileHeightPixels) as Int;
+    let test2 = (parent.Box.Height() % this.Level.Atlas.TileHeightR3) as Int;
     if (test2 !== 0) {
       Globals.debugBreak();
     }
 
     let boxwh: vec2 = (parent.Box.Max.clone().sub(parent.Box.Min));
-    let tilesXParent: Int = toInt(boxwh.x / this.Level.Atlas.TileWidthPixels);
-    let tilesYParent: Int = toInt(boxwh.y / this.Level.Atlas.TileHeightPixels);
-    let tilesXMid: Int = toInt((boxwh.x / this.Level.Atlas.TileWidthPixels) * 0.5);
-    let tilesYMid: Int = toInt((boxwh.y / this.Level.Atlas.TileHeightPixels) * 0.5);
+    let tilesXParent: Int = toInt(boxwh.x / this.Level.Atlas.TileWidthR3);
+    let tilesYParent: Int = toInt(boxwh.y / this.Level.Atlas.TileHeightR3);
+    let tilesXMid: Int = toInt((boxwh.x / this.Level.Atlas.TileWidthR3) * 0.5);
+    let tilesYMid: Int = toInt((boxwh.y / this.Level.Atlas.TileHeightR3) * 0.5);
 
     if (tilesXParent === 1 as Int && tilesYParent === 1 as Int) {
       let cellPos: ivec2 = new ivec2(
-        toInt(parent.Box.Min.x / this.Level.Atlas.TileWidthPixels),
-        toInt(parent.Box.Min.y / this.Level.Atlas.TileHeightPixels)
+        toInt(parent.Box.Min.x / this.Level.Atlas.TileWidthR3),
+        toInt(parent.Box.Min.y / this.Level.Atlas.TileHeightR3)
       );
       parent.Cell = new Cell(parent, this.NumLayers, cellPos);
 
@@ -546,13 +543,13 @@ export class TileGrid {
       let B: Box2f = null;
 
       if (tilesXParent > tilesYParent) {
-        let midx: number = parent.Box.Min.x + (tilesXMid as number) * this.Level.Atlas.TileWidthPixels;
+        let midx: number = parent.Box.Min.x + (tilesXMid as number) * this.Level.Atlas.TileWidthR3;
 
         A = Box2f.construct(new vec2(parent.Box.Min.x, parent.Box.Min.y), new vec2(midx, parent.Box.Max.y));
         B = Box2f.construct(new vec2(midx, parent.Box.Min.y), new vec2(parent.Box.Max.x, parent.Box.Max.y));
       }
       else {
-        let midy: number = parent.Box.Min.y + (tilesYMid as number) * this.Level.Atlas.TileHeightPixels;
+        let midy: number = parent.Box.Min.y + (tilesYMid as number) * this.Level.Atlas.TileHeightR3;
 
         A = Box2f.construct(new vec2(parent.Box.Min.x, parent.Box.Min.y), new vec2(parent.Box.Max.x, midy));
         B = Box2f.construct(new vec2(parent.Box.Min.x, midy), new vec2(parent.Box.Max.x, parent.Box.Max.y));
@@ -605,8 +602,8 @@ export class TileGrid {
   }
   public GetCellForPointi(gridpos: ivec2): Cell {
     let v: vec2 = new vec2(
-      (gridpos.x as number) * (this.Level.Atlas.TileWidthPixels as number) + (this.Level.Atlas.TileWidthPixels as number) * 0.5,
-      (gridpos.y as number) * (this.Level.Atlas.TileHeightPixels as number) + (this.Level.Atlas.TileHeightPixels as number) * 0.5
+      (gridpos.x as number) * (this.Level.Atlas.TileWidthR3 as number) + (this.Level.Atlas.TileWidthR3 as number) * 0.5,
+      (gridpos.y as number) * (this.Level.Atlas.TileHeightR3 as number) + (this.Level.Atlas.TileHeightR3 as number) * 0.5
     );
     return this.GetCellForPoint(v);
   }
@@ -668,15 +665,15 @@ export class TileGrid {
   public GetGridExtents(tilesW: Int, tilesH: Int): Box2f {
     let b: Box2f = Box2f.construct(
       new vec2(0, 0),
-      new vec2(tilesW * this.Level.Atlas.TileWidthPixels, tilesH * this.Level.Atlas.TileHeightPixels));
+      new vec2(tilesW * this.Level.Atlas.TileWidthR3, tilesH * this.Level.Atlas.TileHeightR3));
     return b;
   }
   public GetCellManifoldForBox(b: Box2f): Array<Cell> {
-    let x: Int = Math.floor(b.Min.x / this.Level.Atlas.TileWidthPixels) as Int;
-    let y: Int = Math.floor(b.Min.y / this.Level.Atlas.TileHeightPixels) as Int;
+    let x: Int = Math.floor(b.Min.x) as Int;
+    let y: Int = Math.floor(b.Min.y) as Int;
 
-    let w: Int = Math.ceil(b.Width() / (this.Level.Atlas.TileWidthPixels as number)) as Int;
-    let h: Int = Math.ceil(b.Height() / (this.Level.Atlas.TileHeightPixels as number)) as Int;
+    let w: Int = Math.ceil(b.Width()) as Int;
+    let h: Int = Math.ceil(b.Height()) as Int;
 
     let ret: Array<Cell> = new Array<Cell>();
 
@@ -701,8 +698,8 @@ export class TileGrid {
       return null;
     }
     let pt: vec2 = new vec2(
-      c.Parent.Box.Min.x + this.Level.Atlas.TileWidthPixels * (x as number) + this.Level.Atlas.TileWidthPixels * 0.5,
-      c.Parent.Box.Min.y + this.Level.Atlas.TileHeightPixels * (y as number) + this.Level.Atlas.TileHeightPixels * 0.5);
+      c.Parent.Box.Min.x + this.Level.Atlas.TileWidthR3 * (x as number) + this.Level.Atlas.TileWidthR3 * 0.5,
+      c.Parent.Box.Min.y + this.Level.Atlas.TileHeightR3 * (y as number) + this.Level.Atlas.TileHeightR3 * 0.5);
     let ret: Cell = this.GetCellForPoint(pt);
     return ret;
   }
@@ -726,13 +723,16 @@ export class TileBlock {
 
 export class BvhNode {
   //A BVH node in the Master Map
-  public Level: MasterMap;//{ get; private set; }
   //Node in a binary box tree - we don't use a quadtree because our grids are not square
-  // public bool IsLeaf = false;
-  public Box: Box2f;//{ get; set; } // Box, in Game-world pixels (not device pixels)
-  public constructor(level: MasterMap, box: Box2f) { this.Level = level; this.Box = box; }
+  public Level: MasterMap;//{ get; private set; }
   public Children: BvhNode[];
   public Cell: Cell = null;
+  public Box: Box2f;//{ get; set; } // Box, in Game-world pixels (not device pixels)
+  public constructor(level: MasterMap, box: Box2f) { 
+    this.Level = level; 
+    this.Box = box; 
+  }
+
 }
 //public enum WaterType { Water, Lava, Tar }
 export class Cell {
@@ -744,7 +744,7 @@ export class Cell {
   public DebugVerts: Array<vec3> = new Array<vec3>();
   public static DebugFrame: SpriteFrame = null;
 
-  public get PixelPosR3(): vec2 {
+  public get PosR3(): vec2 {
     //The pixel coordinate of this tile (in R2 pixels)
     return this.Parent.Box.Min.clone();
   }
@@ -753,8 +753,8 @@ export class Cell {
   }
   public get TilePosR2(): ivec2 {
     //The position in R2 Tile Space
-    let dx: Int = toInt(this.Parent.Box.Min.x / this.Parent.Level.Atlas.TileWidthPixels);
-    let dy: Int = toInt(this.Parent.Box.Min.y / this.Parent.Level.Atlas.TileHeightPixels);
+    let dx: Int = toInt(this.Parent.Box.Min.x / this.Parent.Level.Atlas.TileWidthR3);
+    let dy: Int = toInt(this.Parent.Box.Min.y / this.Parent.Level.Atlas.TileHeightR3);
 
     let v = new ivec2(dx as Int, dy as Int);
 

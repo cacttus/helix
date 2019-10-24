@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D,
-  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute, NormalBlending, WrapAroundEnding, InvertStencilOp
+  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute, NormalBlending, WrapAroundEnding, InvertStencilOp, Box3Helper
 } from 'three';
 import { Globals, GameState } from './Globals';
 import { basename } from 'upath';
@@ -54,10 +54,8 @@ export class Atlas extends ImageResource {
   private _tileWidthPixels: Int = 16 as Int;
   private _tileHeightPixels: Int = 16 as Int;
 
-  private static _tileWidthR3: number = 1;
-  private static _tileHeightR3: number = 1;
-  public static get TileWidthR3() { return this._tileWidthR3; }
-  public static get TileHeightR3() { return this._tileHeightR3; }
+  private _tileWidthR3: number = 1;
+  private _tileHeightR3: number = 1;
 
   //Number of frames across the atlas.
   public get FramesWidth(): Int {
@@ -84,6 +82,8 @@ export class Atlas extends ImageResource {
   public get SpaceY(): Int { return this._ySpace; }
   public get TileWidthPixels(): Int { return this._tileWidthPixels; }
   public get TileHeightPixels(): Int { return this._tileHeightPixels; }
+  public get TileWidthR3() { return this._tileWidthR3; }
+  public get TileHeightR3() { return this._tileHeightR3; }
 
   public constructor(top: Int, left: Int, right: Int, bot: Int, xSpace: Int, ySpace: Int, tile_w: Int, tile_h: Int, tex: string, afterLoad: AfterLoadFunction) {
     super();
@@ -578,7 +578,7 @@ class Animation25D {
           //Get the given sub-tile sprite, or create and add it to this sprite.
           let sp: Sprite25D = this.Sprite.getSubTile(itile, jtile);
           if (sp === null) {
-            sp = new Sprite25D();
+            sp = new Sprite25D(atlas);
             sp.Layer = this.Sprite.Layer;
             sp.SubTile = new vec2(itile, jtile);
             this.Sprite.add(sp);
@@ -682,7 +682,7 @@ export class Sprite25D {
   private _rotation: Quaternion = new Quaternion(0, 0, 0, 0);
   private _scale: vec2 = new vec2(1, 1);
 
-  private _size: vec2 = new vec2(Atlas.TileWidthR3, Atlas.TileHeightR3); // this is actual size of rendered geometry.  This is initially set by Atlas.TileWidthR3
+  private _size: vec2 = new vec2(1,1); // this is actual size of rendered geometry.  This is initially set by Atlas.TileWidthR3
   private _origin: vec3 = new vec3(0, 0, 0);
   private _children: Array<Sprite25D> = new Array<Sprite25D>();
   private _parent: Sprite25D = null; // Do not clone
@@ -694,7 +694,7 @@ export class Sprite25D {
   public _flipV: boolean = false;
   public _animation: Animation25D = null;
 
-
+ 
   private _boundBox: Box2f = new Box2f();// The animated bounds of the sprite.
 
   private _quadVerts: Array<vec3> = new Array<vec3>(4);  //Quad Verts - do not clone
@@ -703,6 +703,7 @@ export class Sprite25D {
   private _isCellTile: boolean = false;
 
   public _layer: TileLayer = TileLayer.Unset;
+  private _atlas :Atlas = null;
 
   public get Layer(): TileLayer { return this._layer; }
   public set Layer(x: TileLayer) { this._layer = x; }
@@ -766,7 +767,9 @@ export class Sprite25D {
 
   private _debugBox: THREE.Box3Helper = null;
 
-  public constructor(name: string = null, spriteId: TiledSpriteId = TiledSpriteId.None, layer: TileLayer = null) {
+
+  public constructor(atlas:Atlas, name: string = null, spriteId: TiledSpriteId = TiledSpriteId.None, layer: TileLayer = null) {
+    this._atlas = atlas;
     if (name) {
       this._name = name;
     }
@@ -778,6 +781,8 @@ export class Sprite25D {
     this._uniqueId = Sprite25D._idGen++;
     this._animation = new Animation25D(this);
 
+    this._size.x = atlas.TileWidthR3;
+    this._size.y = atlas.TileHeightR3;
   }
 
   public copy(other: Sprite25D) {
@@ -805,9 +810,10 @@ export class Sprite25D {
     this._isCellTile = other._isCellTile;
 
     this._layer = other._layer;
+    this._atlas = other._atlas;
   }
   public clone(): Sprite25D {
-    let ret = new Sprite25D();
+    let ret = new Sprite25D(this._atlas);
     ret.copy(this);
     return ret;
   }
@@ -1062,9 +1068,7 @@ export class TileBuffer extends THREE.BufferGeometry {
 
     if (cell) {
       //If we pass a cell in here, then add the cell parent as an absolute offset.
-      let cp: vec2 = cell.PixelPosR3;
-      cp.x /= g_atlas.TileWidthPixels;
-      cp.y /= g_atlas.TileHeightPixels;
+      let cp: vec2 = cell.PosR3;
       for (let vi = 0; vi < 4; ++vi) {
         v[vi] = v[vi].clone();
         v[vi].x += cp.x;
@@ -1193,31 +1197,27 @@ export class WorldView25D extends Object3D {
   public static readonly Down: vec3 = new vec3(0, -1, 0);
   public static readonly LayerDepth: number = 0.01;
 
-  public Atlas: Atlas = null;
-
+  private _atlas: Atlas = null;
   private _buffer: TileBuffer = null;
-
   private _boxHelper: THREE.BoxHelper = null;
   private _mesh: THREE.Mesh = null;
-
   private _objects: Map<Sprite25D, Sprite25D> = new Map<Sprite25D, Sprite25D>(); // Objects that do not update.
   private _destroyed: Map<Sprite25D, Sprite25D> = new Map<Sprite25D, Sprite25D>();
-
-  public get Buffer(): TileBuffer { return this._buffer; }
-
-  private _platformLevel: MasterMap = null;
-  public get PlatformLevel(): MasterMap { return this._platformLevel; }
-
   private _playerchar: Sprite25D = null;
+  private _viewport: Viewport25D = null;
+  private _viewportCellsFrame: Array<Cell> = null;
+  private _platformLevel: MasterMap = null;
 
+  public get Atlas(): Atlas { return this._atlas; }
+  public get Buffer(): TileBuffer { return this._buffer; }
+  public get PlatformLevel(): MasterMap { return this._platformLevel; }
   public set Player(p: Sprite25D) { this._playerchar = p; }
   public get Player(): Sprite25D { return this._playerchar; }
-
-  public get Viewport() : Viewport25D { return this._viewport; }
+  public get Viewport(): Viewport25D { return this._viewport; }
 
   public constructor(r: Atlas) {
     super();
-    this.Atlas = r;
+    this._atlas = r;
   }
   public init(bufSizeTiles: Int) {
     //6 high x 16 wide
@@ -1297,7 +1297,6 @@ export class WorldView25D extends Object3D {
       this.add(this._boxHelper);
     }
   }
-
   private copyObjectTiles(ob: Sprite25D) {
     this._buffer.copyObjectTile(ob);
     ob.clearDirty();
@@ -1318,13 +1317,11 @@ export class WorldView25D extends Object3D {
     if (!this.Player) {
       Globals.debugBreak();
     }
-    this._viewport.calcBoundBox();
+    this._viewport.update();
   }
-  private _viewport: Viewport25D = null;
-  private _viewportCellsFrame: Array<Cell> = null;
+
   private updatePostPhysics() {
     this._viewportCellsFrame = this._platformLevel.Grid.GetCellManifoldForBox(this._viewport.Box)
-
   }
   private debug_DrawCells() {
     for (let c of this._viewportCellsFrame) {
@@ -1332,7 +1329,7 @@ export class WorldView25D extends Object3D {
         this.drawCell(c);
       }
     }
-    
+
     for (let c of this._viewportCellsFrame) {
       if (c) {
         this.drawCell(c);
@@ -1344,7 +1341,7 @@ export class WorldView25D extends Object3D {
       Cell.DebugFrame = SpriteFrame.fromAtlasTile(this.Atlas, 2 as Int, 0 as Int);
     }
     if (c.DebugVerts === null || c.DebugVerts.length < 4) {
-      SpriteFrame.createQuadVerts(c.DebugVerts, c.TilePosR3, Atlas.TileWidthR3, Atlas.TileHeightR3, -1 as Int, WorldView25D.LayerDepth);
+      SpriteFrame.createQuadVerts(c.DebugVerts, c.TilePosR3, this.Atlas.TileWidthR3, this.Atlas.TileHeightR3, -1 as Int, WorldView25D.LayerDepth);
     }
     this._buffer.copyFrameQuad(Cell.DebugFrame, c.DebugVerts, WorldView25D.Normal, new vec4(c.DebugColor.r, c.DebugColor.g, c.DebugColor.b, 1), 1, false, false, DirtyFlag.All);
   }
@@ -1366,7 +1363,7 @@ export class WorldView25D extends Object3D {
   private drawBackground() {
     for (let c of this._viewportCellsFrame) {
       if (c) {
-        let block: TileBlock = c.Layers[TileLayer.Midground];
+        let block: TileBlock = c.Layers[TileLayer.Background];
         if (!block) {
           continue;
         }
@@ -1406,9 +1403,13 @@ export class Viewport25D {
 
   public get Box(): Box2f { return this._box; }
 
+  private _box3helper: Box3Helper = null;
+
   public constructor(width_pixels: Int, height_pixels: Int) {
     this._widthPixels = width_pixels;
     this._heightPixels = height_pixels;
+
+
   }
   // public followObject(ob: Sprite25D) {
   //   //Follow a game object
@@ -1437,7 +1438,7 @@ export class Viewport25D {
   //     }
   //   }
   // }
-  public calcBoundBox() {
+  public update() {
     let tw = this.TilesWidth;
     let th = this.TilesHeight;
     this._box = new Box2f();
@@ -1445,6 +1446,20 @@ export class Viewport25D {
     this._box.Min.y = this.Center.y - th;
     this._box.Max.x = this.Center.x + tw;
     this._box.Max.y = this.Center.y + th;
+
+
+    if (Globals.isDebug()) {
+      if (this._box3helper !== null) {
+        Globals.scene.remove(this._box3helper);
+      }
+      let zzz = 1;
+      let b:Box3 = new Box3(new vec3(this._box.Min.x, this._box.Min.y, zzz), new vec3(this._box.Max.x, this._box.Max.y, zzz));
+      this._box3helper = new Box3Helper(b, new THREE.Color(1, 0, 1));
+      Globals.scene.add(this._box3helper);
+
+    }
+
+
   }
 }
 class InputControls {
