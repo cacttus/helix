@@ -54,6 +54,10 @@ export class _Globals {
   // public get cameraWorldDirection() : Vector3 { return this._cameraCachedDir;}
   // public get cameraWorldPosition() : Vector3 { return this._cameraCachedPos;}
 
+  public isNotNullorUndefined(x: any) {
+    return (x !== null) && (x !== undefined);
+  }
+
   public init() {
     this._canvas = document.querySelector('#page_canvas');
     this._screen = new Screen2D(this._canvas);
@@ -76,7 +80,7 @@ export class _Globals {
     this._physics3d = new PhysicsManager3D();
     this._prof = new Prof();
 
-    if (this._prof) {
+    if (this._isprof) {
       this._statsFps = new Stats();
       this._statsFps.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
       this._statsFps.dom.style.cssText = 'position:absolute;top:0px;left:0px;';
@@ -88,7 +92,6 @@ export class _Globals {
       document.body.appendChild(this._statsMb.dom);
 
     }
-
 
     this.createPlayer();
   }
@@ -279,7 +282,7 @@ export class _Globals {
       this._composer.render();
     }
   }
-  public debugBreak(){
+  public debugBreak() {
     debugger;
   }
 

@@ -245,7 +245,7 @@ export class Box2f {
     this.Max.y = Math.max(this.Max.y, v.y);
   }
   public BoxIntersect_EasyOut_Inclusive(cc: Box2f): boolean {
-    return cc.Min.x <= this.Max.x && cc.Min.y <= this.Max.y && this.Min.x <= cc.Max.x && this.Min.y <= cc.Max.y;
+    return (cc.Min.x <= this.Max.x) && (cc.Min.y <= this.Max.y) && (this.Min.x <= cc.Max.x) && (this.Min.y <= cc.Max.y);
   }
   public ContainsPointInclusive(point: vec2): boolean {
     if (point.x < this.Min.x) {

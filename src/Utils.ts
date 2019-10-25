@@ -1,8 +1,16 @@
 import * as THREE from 'three';
-import { Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D, AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material } from 'three';
+import { Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D, AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, BoxHelper } from 'three';
 import { Dictionary } from './Base';
+import { vec4 } from 'Math';
 
 export class Utils {
+  public static multiplyVec4(a: vec4, b: vec4) : vec4 {
+    a.x *= b.x;
+    a.y *= b.y;
+    a.z *= b.z;
+    a.w *= b.w;
+    return a;
+  }
   public static getWorldPosition(x: Object3D): Vector3 {
     let v: Vector3 = new Vector3();
     x.getWorldPosition(v);

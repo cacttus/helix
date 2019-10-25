@@ -4,6 +4,8 @@
 
 export type Int = number & { __int__: void };
 export const roundToInt = (num: number): Int => Math.round(num) as Int;
+
+//** This toInt is in anticipation of BigInt, so we should be able to regex replace all toInt(X) with Xn
 export const toInt = (value: number): Int => {
   return (value | 0) as Int;//Math.floor(value) as Int;
 };

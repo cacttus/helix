@@ -39,6 +39,11 @@ export class Random {
     let n2 = min + (max - min) * f01;
     return n2;
   }
+  public static int(min: number, max: number): Int {
+    let f01 = this.float(min, max);
+    f01 = Math.round(f01) | 0;
+    return f01 as Int;
+  }
   public static randomColor(min: number = 0, max: number = 1): Color {
     let c: Color = new Color();
     c.r = this.float(min, max);
@@ -767,6 +772,11 @@ export class Keyboard {
     }
     this._events = new Array<KbEvent>();
   }
+  public reset() {
+    for (let [k, v] of this._keys) {
+      v.update(false);
+    }
+  }
   public getKey(ord: Int, add: boolean = false): VirtualButton {
     let key: VirtualButton = this._keys.get(ord);;
     if (!key) {
@@ -799,7 +809,7 @@ export class Mouse extends Vector3 {
   public get Left(): VirtualButton { return this._left; }
   public get Right(): VirtualButton { return this._right; }
 
-  private _events:Array<MsEvent> = new Array<MsEvent>();
+  private _events: Array<MsEvent> = new Array<MsEvent>();
   private _mousewheel_evt: Array<MouseWheelEvent> = new Array<MouseWheelEvent>();
   private curView: vec3 = new vec3(0, 0, -1);
 
@@ -814,6 +824,10 @@ export class Mouse extends Vector3 {
     this.updateEventsSynchronously();
     this.Left.update(this._lmbDown);
     this.Right.update(this._rmbDown);
+  }
+  public reset() {
+    this.Left.update(false);
+    this.Right.update(false);
   }
   private registerDocumentCallbacks() {
     //Here we just set the mouse information either last, or this frame in order to update the mouse
@@ -984,6 +998,7 @@ export class VirtualController {
 //  * @brief Manages both VR and Desktop input devices 
 //  *  TODO: tablet + phone input.
 //  */
+export enum Hand { None, Left, Right, Both }
 export class Input {
   private _keyboard: Keyboard = null;
   private _vr: VRInputManager = null;
@@ -992,6 +1007,7 @@ export class Input {
   //The left and right controllers, these are also used to synergize kb/mouse input.
   private _right: VirtualController = new VirtualController();
   private _left: VirtualController = new VirtualController();
+  private _movementHand: Hand = Hand.Left;
 
   get right(): VirtualController { return this._right; }
   get left(): VirtualController { return this._left; }
@@ -999,6 +1015,34 @@ export class Input {
   get keyboard(): Keyboard { return this._keyboard; }
   get vr(): VRInputManager { return this._vr; }
   get mouse(): Mouse { return this._mouse; }
+
+  public get MovementHand(): Hand { return this._movementHand; }
+  public set MovementHand(x: Hand) { this._movementHand = x; }
+
+  public get MovementController(): VirtualController {
+    if (this.MovementHand === Hand.Right) {
+      return this.right;
+    }
+    else if (this.MovementHand === Hand.Left) {
+      return this.left;
+    }
+    else if (this.MovementHand === Hand.Both) {
+      return this.right;
+    }
+    return null;
+  }
+  public get ActionController(): VirtualController {
+    if (this.MovementHand === Hand.Right) {
+      return this.left;
+    }
+    else if (this.MovementHand === Hand.Left) {
+      return this.right;
+    }
+    else if (this.MovementHand === Hand.Both) {
+      return this.left;
+    }
+    return null;
+  }
 
   constructor() {
     if (Globals.userIsInVR()) {
@@ -1059,9 +1103,22 @@ export class Input {
         this._mouse.update();
         this._keyboard.update();
 
-        //Update WSAD the movement and other keyboard things
-        this.updateAxis_Keyboard(dt, this.left);
-        this.right.Axis.copy(this.left.Axis);
+        if (!document.hasFocus()) {
+          this._mouse.reset();
+          this._keyboard.reset();
+        }
+
+        //Update WSAD the movement and other keyboard things for the configured controller.
+        let move: VirtualController = this.MovementController;
+        let act: VirtualController = this.ActionController;
+
+        if (move) {
+          this.updateAxis_Keyboard(dt, move);
+          if (act && this.MovementHand === Hand.Both) {
+            //Copy the movement to the other controller.
+            move.Axis.copy(act.Axis);
+          }
+        }
 
         //Update the positions of the VR controllers.
         this.right.Trigger.update(this.mouse.Left.pressOrHold());
