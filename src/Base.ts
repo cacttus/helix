@@ -647,6 +647,7 @@ export class VirtualButton {
   public released(): boolean { return this.state === ButtonState.Release; }
   public down(): boolean { return this.state === ButtonState.Hold; }
   public pressOrHold(): boolean { return this.state === ButtonState.Hold || this.state == ButtonState.Press; }
+  public releaseOrUp(): boolean { return this.state === ButtonState.Release || this.state == ButtonState.Up; }
   public update(pressed: boolean) {
     if (pressed) {
       if (this._state === ButtonState.Press) {

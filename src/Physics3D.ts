@@ -241,7 +241,6 @@ export class PhysicsObject3D extends THREE.Object3D {
   }
 
 }
-
 interface CollisionHandler { (me: PhysicsObject3D, other: PhysicsObject3D): void; }
 enum ColliderClass { Active = 2, Passive = 1, None = 0 }
 class CollisionManifold {
@@ -429,8 +428,6 @@ class CollisionManifold {
   }
 
 }
-
-
 interface DestroyAllObjectsFunction { (ob: PhysicsObject3D): boolean; }
 interface FindAllObjectsFunction { (ob: PhysicsObject3D): boolean; }
 export class PhysicsManager3D {

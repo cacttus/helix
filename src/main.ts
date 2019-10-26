@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import {
   Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D,
-  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute, NormalBlending, WrapAroundEnding, InvertStencilOp, Box3Helper
+  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute, NormalBlending, WrapAroundEnding, InvertStencilOp, Box3Helper, Int8BufferAttribute
 } from 'three';
-import { Globals, GameState } from './Globals';
+import { Globals, GameState, ResizeMode } from './Globals';
 import { basename } from 'upath';
 import { Utils } from './Utils';
 import { Random, ModelManager, AfterLoadFunction, Frustum } from './Base';
@@ -11,7 +11,7 @@ import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } 
 import * as Files from './Files';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 import { TileGrid, MasterMap, Cell, TileBlock, TiledSpriteId, TileLayer } from './TileGrid';
-import { PhysicsObject3D } from 'Physics3D';
+import { PhysicsObject3D } from './Physics3D';
 
 export class ImageResource {
   private _location: string = "";
@@ -144,11 +144,10 @@ export class SpriteFrame {
 
     //Position the image relative to the world grid's basis
     let tilepos_local: vec3 = right.clone().multiplyScalar(origin.x);
-    tilepos_local.add(down.clone().multiplyScalar(origin.y /** -1*/ /*NOTE: we are multiplying by -1 here */));
+    tilepos_local.add(down.clone().multiplyScalar(origin.y));
     tilepos_local.add(normal.clone().multiplyScalar(origin.z));
 
     //Force add 4 verts
-
     if (verts.length !== 4) {
       while (verts.length < 4) {
         verts.push(new vec3());
@@ -293,6 +292,7 @@ export enum CollisionHandling { None, CollideWithLayerObjects }
 export enum AnimationPlayback { Playing, Pauseed, Stopped }
 class Animation25D {
   //Separate class to deal with animations and transitinos.  Just because Sprite25D was getting big.
+  private static readonly c_strDefaultTileAnimation: string = "_default";
 
   private _animated_location: vec3 = new vec3(0, 0, 0); // Animated attributes.  These are applied if there is animation on the object.
   private _animated_rotation: Quaternion = new Quaternion(0, 0, 0, 0);
@@ -313,11 +313,9 @@ class Animation25D {
   private _sprite: Sprite25D = null;
 
   //Tileblock Data - static tile data used by background sprites & such.
-  private _tileData: SpriteAnimationData = null;
+  // private _tileData: SpriteAnimationData = null;
 
-
-  public isStaticTile() { return this.TileData !== null; }
-  public get TileData(): SpriteAnimationData { return this._tileData; }
+  // public get TileData(): SpriteAnimationData { return this._tileData; }
 
   public get Playback(): AnimationPlayback { return this._playback; }
 
@@ -375,7 +373,6 @@ class Animation25D {
     this._frameBlend = other._frameBlend;
 
     this._sprite = other._sprite;
-    this._tileData = other._tileData; // shallow copy
   }
   public clone(parent: Sprite25D): Animation25D {
     let ret: Animation25D = new Animation25D(parent);
@@ -479,13 +476,17 @@ class Animation25D {
 
   public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1)) {
     //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
-    this.addTiledAnimation("_default", FDef.default([[tile.x, tile.y]]), 0, atlas, imageSize, true, true);
+    this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]]), 0, atlas, imageSize, true);
   }
-  public getTileAnimation(): SpriteAnimationData {
-    return this._tileData;
+  private _tileData_Cached: SpriteAnimationData = null;//Store it for easier retrieval.
+  public get TileData(): SpriteAnimationData {
+    if (!this._tileData_Cached) {
+      this._tileData_Cached = this.Animations.get(Animation25D.c_strDefaultTileAnimation);
+    }
+    return this._tileData_Cached;
   }
   public addTiledAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, imageSize:
-    ivec2 = null, append: boolean = false, isTileFrame: boolean = false, props: Array<SpriteProp> = null) {
+    ivec2 = null, append: boolean = false, props: Array<SpriteProp> = null) {
     //This sets 'real' frame-by-frame animation for a multiple tiled sprite, OR can be used to set static tiled animations.
     //if Append is true, we append the given FDef keys to the input animation
     //Frames should reference from the top left corner (root) of the animated image.
@@ -508,7 +509,7 @@ class Animation25D {
           this.Sprite.SubTile = new vec2(itile, jtile);
           //Root tile is tile 0,0
           //Add the animation to THIS sprite.
-          this.addAnimation(animation_name, frames, duration, atlas, append, isTileFrame);
+          this.addAnimation(animation_name, frames, duration, atlas, append);
 
           if (prop) {
             this.Sprite.applyProp(prop);
@@ -525,7 +526,7 @@ class Animation25D {
             this.Sprite.add(sp);
           }
 
-          sp.Animation.addAnimation(animation_name, frames, duration, atlas, append, isTileFrame);
+          sp.Animation.addAnimation(animation_name, frames, duration, atlas, append);
           sp.Position.set(
             this.Sprite.Position.x + itile * this.Sprite.Size.x,
             this.Sprite.Position.y + jtile * this.Sprite.Size.y,
@@ -542,29 +543,29 @@ class Animation25D {
     //if Append is true, we append the given FDef keys to the input animation
     let ret: SpriteAnimationData = null;
 
-    if (isTileFrame) {
-      //We are static tileframe frame(s)
-      if (this._tileData === null) {
-        this._tileData = new SpriteAnimationData(animation_name);
-      }
-      ret = this._tileData;
-    }
-    else {
-      ret = this.Animations.get(animation_name);
-      if (ret) {
-        if (append === false) {
-          Globals.logError("Tried to add another animation " + animation_name + " -- already added.");
-          Globals.debugBreak();
-          return;
-        }
-        else {
-          //Do nothign, we got it
-        }
+    // if (isTileFrame) {
+    //   //We are static tileframe frame(s)
+    //   if (this._tileData === null) {
+    //     this._tileData = new SpriteAnimationData(animation_name);
+    //   }
+    //   ret = this._tileData;
+    // }
+    // else {
+    ret = this.Animations.get(animation_name);
+    if (ret) {
+      if (append === false) {
+        Globals.logError("Tried to add another animation " + animation_name + " -- already added.");
+        Globals.debugBreak();
+        return;
       }
       else {
-        ret = new SpriteAnimationData(animation_name);
+        //Do nothign, we got it
       }
     }
+    else {
+      ret = new SpriteAnimationData(animation_name);
+    }
+    // }
 
     //If we are a sub-tile animation, then add the parent sprite's sub-tile coordinates to the input animation.
     let sub_x = 0;
@@ -713,9 +714,8 @@ export enum Tiling {
   Random,
   SetEvenOdd2x2
 }
-export interface CollisionFunction25D { (this_block: TileBlock, thisObj: Phyobj25D, other: Phyobj25D): void; }
-//TileBlock is null for object sprites.
-export interface PreCollisionFunction25D { (block: TileBlock): void; }
+export interface CollisionFunction25D { (thisObj: Phyobj25D, other: Phyobj25D, this_block: TileBlock, other_block: TileBlock): void; }
+export interface GestureCallback { (thisObj: Sprite25D, this_block: TileBlock, hand: Tickler): void; }
 export enum DirtyFlag { /*Transform = 0x01,*/ UVs = 0x02, Normals = 0x04, Colors = 0x08, All = 0x01 | 0x02 | 0x04 | 0x08 }
 export class Sprite25D {
   private _subTile: vec2 = null; //If set, this tile is a collection of other subtiles.
@@ -753,6 +753,7 @@ export class Sprite25D {
   private _boundBox_world: Box2f = new Box2f();// The animated bounds of the sprite.
   private _quadVerts: Array<vec3> = new Array<vec3>();  //Quad Verts - do not clone
   private _quadNormal: vec3 = new vec3(0, 0, 1); // do not clone
+
   private _isCellTile: boolean = false;
   public _layer: TileLayer = TileLayer.Unset;
   private _atlas: Atlas = null;
@@ -761,14 +762,32 @@ export class Sprite25D {
   private _tiling: Tiling = Tiling.None;
 
   //This is a rudimentary test of collisions.  We'll get fancy later.
-  private _preCollisionFunction: PreCollisionFunction25D = null;
+  private _preCollisionFunction: CollisionFunction25D = null;
+  private _postCollisionFunction: CollisionFunction25D = null;
   private _collisionFunction: CollisionFunction25D = null;
 
-  public get PreCollisionFunction(): PreCollisionFunction25D { return this._preCollisionFunction; }
-  public set PreCollisionFunction(x: PreCollisionFunction25D) { this._preCollisionFunction = x; }
+  private _gestureCallback: GestureCallback = null;
+  private _gesture: HandGesture = HandGesture.None;
+  private _r3Parent: Object3D = null;
+
+  //Hand Gesture stuff
+  public get GestureCallback(): GestureCallback { return this._gestureCallback; }
+  public set GestureCallback(x: GestureCallback) { this._gestureCallback = x; }
+
+  public get Gesture(): HandGesture { return this._gesture; }
+  public set Gesture(x: HandGesture) { this._gesture = x; }
+
+  public get R3Parent(): Object3D { return this._r3Parent; }
+  public set R3Parent(x: Object3D) { this._r3Parent = x; }
+
+  public get PreCollisionFunction(): CollisionFunction25D { return this._preCollisionFunction; }
+  public set PreCollisionFunction(x: CollisionFunction25D) { this._preCollisionFunction = x; }
 
   public get CollisionFunction(): CollisionFunction25D { return this._collisionFunction; }
   public set CollisionFunction(x: CollisionFunction25D) { this._collisionFunction = x; }
+
+  public get PostCollisionFunction(): CollisionFunction25D { return this._postCollisionFunction; }
+  public set PostCollisionFunction(x: CollisionFunction25D) { this._postCollisionFunction = x; }
 
   public get CollisionHandling(): CollisionHandling { return this._collisionHandling; }
   public set CollisionHandling(x: CollisionHandling) { this._collisionHandling = x; }
@@ -822,7 +841,7 @@ export class Sprite25D {
   public get Destroyed(): boolean { return this._destroyed; }
   public set Destroyed(x: boolean) { this._destroyed = x; }
 
-  public get Position(): vec3 { return this._location; }
+  public get Position(): vec3 { return this._location; } //Position in Tile World space (Not OpenGL World space)
   public set Position(x: vec3) { this._location = x; }
   public get Rotation(): Quaternion { return this._rotation; }
   public set Rotation(x: Quaternion) { this._rotation = x; }
@@ -830,6 +849,15 @@ export class Sprite25D {
   public set Scale(x: vec2) { this._scale = x; }
   public get Color(): vec4 { return this._color; }
   public set Color(x: vec4) { this._color = x; this.markDirty(DirtyFlag.Colors); }
+
+  public get Center(): vec3 {
+    //Returns the sprite tile center in Tile World space without depth applied.
+    return new vec3(
+      this._location.x + this.WorldView.Atlas.TileWidthR3,
+      this._location.y + this.WorldView.Atlas.TileWidthR3,
+      0
+    );
+  }
 
   public get WorldPosition(): vec3 { return this._worldlocation; }
   public set WorldPosition(x: vec3) { this._worldlocation = x; }
@@ -879,6 +907,7 @@ export class Sprite25D {
     for (let ci = 0; ci < other._children.length; ci++) {
       this._children.push(other._children[ci].clone());
     }
+
     this._visible = other._visible;
 
     this._color = other._color;
@@ -888,6 +917,8 @@ export class Sprite25D {
 
     this._boundBox_grid = other._boundBox_grid.clone();
     this._boundBox_world = other._boundBox_world.clone();
+    //private _quadVerts: Array<vec3> = new Array<vec3>();  //Quad Verts - do not clone
+    //private _quadNormal: vec3 = new vec3(0, 0, 1); // do not clone
     this._tiledSpriteId = other._tiledSpriteId;
     this._isCellTile = other._isCellTile;
 
@@ -898,8 +929,11 @@ export class Sprite25D {
 
     this._preCollisionFunction = other._preCollisionFunction;
     this._collisionFunction = other._collisionFunction;
+    this._postCollisionFunction = other._postCollisionFunction;
 
-
+    this._gestureCallback = other._gestureCallback;
+    this._gesture = other._gesture;
+    //this._r3Parent = other._r3Parent; // This may not be somethnig we shoudl copy
   }
   public clone(): Sprite25D {
     let ret = new Sprite25D(this._atlas);
@@ -914,11 +948,7 @@ export class Sprite25D {
       box.GenResetExtents();
     }
 
-    //Update Boundbox.
     this.calcQuadVerts();
-    // for (let v of this.QuadVerts) {
-    //   box.ExpandByPoint(new vec2(v.x, v.y));
-    // }
 
     //Update Children
     for (let ci = 0; ci < this._children.length; ++ci) {
@@ -1032,6 +1062,14 @@ export class Sprite25D {
       Utils.multiplyVec4(this._worldcolor, this.Parent.WorldColor);
     }
 
+    //R3 Parent- We use this to move the tiles around realitve to hand
+    if (this.R3Parent) {
+      let v: vec3 = new vec3();
+      this.R3Parent.getWorldPosition(v);
+      v.y *= -1; //HACK:
+      this._worldlocation.add(v);
+    }
+
     SpriteFrame.createQuadVerts(this.QuadVerts, this._worldlocation, this._worldrotation, this._worldscale, this.Width, this.Height);
   }
   public markDirty(flags: number = DirtyFlag.All) {
@@ -1069,12 +1107,14 @@ export class Phyobj25D extends Sprite25D {
           if (block.SpriteRef) {
 
             if (block.SpriteRef.PreCollisionFunction) {
-              block.SpriteRef.PreCollisionFunction(block);
+              block.SpriteRef.PreCollisionFunction(null, this, block, null);
             }
 
             if (block.SpriteRef.CollisionFunction) {
               if (this.BoundBox_Grid.BoxIntersect_EasyOut_Inclusive(cell.BoundBox_World)) {
-                block.SpriteRef.CollisionFunction(block, null, this);
+                block.SpriteRef.CollisionFunction(null, this, block, null);
+
+                //block.SpriteRef.CollisionFunction(block, null, this);
               }
             }
 
@@ -1105,7 +1145,7 @@ export class Character extends Phyobj25D {
   private _speedMultiplier: number = 1;
   private _carryover_velocity: number = 0;//Carryover, if we are moving in the same direction but we've hit a tile boundary. This prevents hiccups in a low frame rate.
 
-  public set SpeedMultiplier(x: number) { this._speedMultiplier=x; }
+  public set SpeedMultiplier(x: number) { this._speedMultiplier = x; }
   public get SpeedMultiplier(): number { return this._speedMultiplier; }
   public get IsPlayer(): boolean { return this._isPlayer; }
   public set IsPlayer(x: boolean) { this._isPlayer = x; }
@@ -1119,9 +1159,14 @@ export class Character extends Phyobj25D {
     this._eCommandedDirection = dir;
   }
   private updateMovement(dt: number) {
-    let speed = this._speed * dt * this.SpeedMultiplier;
-
+    this.updatePosition(dt);
+    if (this.computeNextDestination()) {
+      //this.updatePosition(dt); //Call a second time here, to prevent the player from stopping for a farme if the arrow key is held down.
+    }
+  }
+  private updatePosition(dt: number) {
     if (this._bMoving) {
+      let speed = this._speed * dt * this.SpeedMultiplier;
       let a: string = Character.getAnimationNameForMovementDirection(this._eMoveDirection);
       if (!this.Animation.isPlaying(a)) {
         this.Animation.play(a, true);
@@ -1141,19 +1186,10 @@ export class Character extends Phyobj25D {
 
       if (this_delta >= dest_delta) {
         //Overshot our dest, set the position.
-        vel_len = dest_len;
         this._bMoving = false;
-
-        if (this._eCommandedDirection !== this._eMoveDirection) {
-          //Player is still pressing the direction key so don't fudge the animation
-          this.Animation.pause();
-          this.Animation.setKeyFrame(0, null, true);
-        }
-        else {
-          //Carry over any remaining velocity
-          this._carryover_velocity = Math.max(this_len - dest_len, 0);
-        }
-
+        vel_len = dest_len;
+        this.Animation.pause();
+        this.Animation.setKeyFrame(0, null, true);
       }
       else {
         vel_len = this_len;
@@ -1165,21 +1201,34 @@ export class Character extends Phyobj25D {
       }
     }
 
+  }
+  private computeNextDestination(): boolean {
     if (this._eCommandedDirection !== Direction4Way.None) {
       if (!this._bMoving) {
         this._bMoving = true;
         this._eMoveDirection = this._eCommandedDirection;
         this._startPosition = this.Position.clone();
         //Move 1 tile.
-        //We can even have cinematics and such ehre.
+
+        //Test
+        let cc = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center);
 
         let n = Character.getMovementNormalForDirection(this._eMoveDirection);
-        let next = n.clone().multiplyScalar(this.WorldView.Atlas.TileWidthR3);
+        n.multiplyScalar(this.WorldView.Atlas.TileWidthR3);
+        let c = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center.clone().add(n));
 
-        this._destination = this.Position.clone().add(next);
+        if (c) {
+          this._destination = new vec3(c.CellPos_World.x, c.CellPos_World.y, 0);
+        }
+        else {
+          this._bMoving = false;
+        }
+
         this._eCommandedDirection = Direction4Way.None;
+        return true;
       }
     }
+    return false;
   }
   public face(dir: Direction4Way) {
     //face a certain direction.
@@ -1224,12 +1273,9 @@ export class Character extends Phyobj25D {
 export class Viewport25D {
   private _widthPixels: Int = 0 as Int;
   private _heightPixels: Int = 0 as Int;
-
   private _boxR2: Box2f = new Box2f();
   private _boxR3: Box2f = new Box2f();
-
   public Center: vec3 = new vec3(0, 0, 0);
-  public Campos: vec3 = new vec3(0, 0, 0);
 
   public get WidthPixels(): Int { return this._widthPixels; }
   public get HeightPixels(): Int { return this._heightPixels; }
@@ -1261,7 +1307,6 @@ export class Viewport25D {
     this._boxR2.Min.y = -this._boxR3.Max.y;
     this._boxR2.Max.y = -this._boxR3.Min.y;
 
-
     if (Globals.isDebug()) {
       if (this._box3helper !== null) {
         Globals.scene.remove(this._box3helper);
@@ -1272,14 +1317,11 @@ export class Viewport25D {
       Globals.scene.add(this._box3helper);
 
     }
-
-
   }
 }
 class InputControls {
   private _playerChar: Character = null;
   private _playerCharZoom: number = 8;
-
   private _viewport: Viewport25D = null;
 
   public get PlayerChar(): Character { return this._playerChar; }
@@ -1290,32 +1332,36 @@ class InputControls {
   }
   public update(dt: number) {
     //Movement
-    if (Globals.input.mouse.Left.pressed()) {
-      Globals.input.MovementController.Axis.set(0, 0);
-      Globals.input.keyboard.SmoothAxis = true;
-    }
-    else if (Globals.input.mouse.Left.released()) {
-      Globals.input.keyboard.SmoothAxis = false;
-      Globals.input.MovementController.Axis.set(0, 0);
-    }
+    // if (Globals.input.mouse.Left.pressed()) {
+    //   Globals.input.MovementController.Axis.set(0, 0);
+    //   Globals.input.keyboard.SmoothAxis = true;
+    // }
+    // else if (Globals.input.mouse.Left.released()) {
+    //   Globals.input.keyboard.SmoothAxis = false;
+    //   Globals.input.MovementController.Axis.set(0, 0);
+    // }
     if (Globals.input.mouse.Right.pressOrHold()) {
       this.movePlayer(dt);
-    } else {
+      this.projectViewportWhileFlying();
+    }
+    else {
       this.movePlayerChar();
       this.zoomPlayerChar();
       this.lookAtPlayerChar();
     }
+  }
+  private projectViewportWhileFlying() {
+    let player_n = new vec3();
+    Globals.player.getWorldDirection(player_n);
 
-    //Update hand
-    if (g_hand) {
-      if (Globals.userIsInVR()) {
-        g_hand.position.copy(Globals.input.right.Position);
-      }
-      else {
-        let handpos = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 4);
-        g_hand.position.copy(handpos);
-      }
-    }
+    let player_p = new vec3();
+    Globals.player.getWorldPosition(player_p);
+
+    let p1 = player_p.clone();
+    let p2 = player_p.clone().add(player_n.clone().multiplyScalar(1000));
+    let center = g_mainWorld.MasterMap.project(p1, p2, WorldView25D.Normal, g_mainWorld.position);
+
+    this._viewport.Center = center;
   }
   private movePlayer(dt: number) {
     //This moves the player (the person) not the spite character
@@ -1351,7 +1397,6 @@ class InputControls {
     Globals.camera.lookAt(center);
 
     this._viewport.Center = center;
-    this._viewport.Campos = position;
   }
   private zoomPlayerChar() {
     let zoomPerWheel = 0.1;
@@ -1529,7 +1574,6 @@ export class WorldView25D extends Object3D {
     }
     this._viewport.update();
   }
-
   private updatePostPhysics() {
     this._viewportCellsFrame = this._masterMap.Area.Grid.GetCellManifoldForBox(this._viewport.BoxR2)
   }
@@ -1550,7 +1594,6 @@ export class WorldView25D extends Object3D {
     }
     this._buffer.copyFrameQuad(Cell.DebugFrame, c.DebugVerts, WorldView25D.Normal, new vec4(c.DebugColor.r, c.DebugColor.g, c.DebugColor.b, 1), 1, false, false, DirtyFlag.All);
   }
-
   private drawEverything() {
     this.drawTiles();
     //Draw Objects
@@ -1581,6 +1624,57 @@ export class WorldView25D extends Object3D {
     let ret = (layer as number) * WorldView25D.LayerDepth;
     return ret;
   }
+  public grabTileOrSprite(tickler: Tickler): Sprite25D {
+    let ret: Sprite25D = null;
+
+    //Grap Tile Sprite.
+    let ap_world = tickler.getActionPointLocation();
+    if (ap_world) {
+      let ap_map = this.MasterMap.worldPointToMapPoint(ap_world);
+
+      let c: Cell = this.MasterMap.Area.Grid.GetCellForPoint_WorldR3(ap_map);
+      if (c !== null) {
+        let blocks: TileBlock[] = c.getOrderedBlockArrayTopDown();
+        if (blocks.length > 0) {
+          if (blocks[0].SpriteRef) {
+
+            //Grab the Block
+            if (blocks[0].SpriteRef.Gesture === HandGesture.Grab) {
+
+              ret = this.blockTileToSprite(blocks[0], c);
+
+              ret.R3Parent = tickler.ActionPoint;
+              tickler.Held = ret;
+            }
+
+            //Do callback if needed
+            if (blocks[0].SpriteRef.GestureCallback) {
+              blocks[0].SpriteRef.GestureCallback(blocks[0].SpriteRef, blocks[0], tickler);
+            }
+
+          }
+
+        }
+      }
+    }
+    else {
+      Globals.logError("Could not find action point for tickler.");
+    }
+    return ret;
+  }
+  public blockTileToSprite(block: TileBlock, cell: Cell): Sprite25D {
+    let ret: Sprite25D = block.SpriteRef.clone();
+
+    ret.Animation.setKeyFrame(block.FrameIndex, block.AnimationData.Name);
+
+    g_mainWorld.addObject25(ret);
+
+    cell.removeBlock(block);
+
+    return ret;
+  }
+
+
 }
 export class TileBuffer extends THREE.BufferGeometry {
   private _bufferSizeTiles: number = 0;
@@ -1724,8 +1818,11 @@ export class TileBuffer extends THREE.BufferGeometry {
     v[2] = tile.QuadVerts[2].clone();
     v[3] = tile.QuadVerts[3].clone();
 
-    for (let vi = 0; vi < 4; ++vi) {
-      v[vi].z = depth;
+    //If we have an object parent then we're relative to that instead.
+    if (tile.R3Parent === null) {
+      for (let vi = 0; vi < 4; ++vi) {
+        v[vi].z = depth;
+      }
     }
 
     if (cell) {
@@ -1851,11 +1948,101 @@ export class TileBuffer extends THREE.BufferGeometry {
     }
   }
 }
+export enum HandGesture { None = 0x00, Grab = 0x01, Poke = 0x02 }
+export class Tickler extends PhysicsObject3D {
+  public Gesture: HandGesture = HandGesture.None;
+  public Grabbed: Sprite25D = null;
+  // public get ActionPoint (): Object3D {return this._actionPoint;}
+  private _actionPoint: Object3D = null;
+
+  public Held: Sprite25D = null;
+
+  public get ActionPoint(): Object3D { return this._actionPoint; }
+
+  public constructor(model: Object3D, action_point: Object3D) {
+    super();
+    this.add(model);
+    // this.add(action_point);
+
+    this._actionPoint = action_point;
+  }
+  public snapToTile(tile: TileBlock) {
+
+  }
+  public getActionPointLocation(): vec3 {
+    if (this._actionPoint) {
+      let v: vec3 = new vec3();
+      this._actionPoint.getWorldPosition(v);
+      return v;
+    }
+    return null;
+  }
+  // private setActionPoint() {
+  //   let that = this;
+  //   that.traverse(function (ob_child: any) {
+  //     if (ob_child instanceof Object3D) {
+  //       if (ob_child.name === "Action_Point") {
+  //         that._actionPoint = ob_child;
+  //       }
+  //     }
+  //   });
+  // }
+  public update(dt: number) {
+    super.update(dt);
+
+    //Update position
+    if (Globals.userIsInVR()) {
+      this.position.copy(Globals.input.right.Position);
+    }
+    else {
+      let hand_pos_final: vec3 = null;
+      if (Globals.input.mouse.Right.pressOrHold()) {
+        //Player is moving.
+        hand_pos_final = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 4);
+      }
+      else {
+        //Project the hand onto the world.  This is for PC only. 
+        let p1 = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 0);
+        let p2 = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 100);
+        let projected_world = g_mainWorld.MasterMap.project(p1, p2, WorldView25D.Normal, g_mainWorld.position);
+
+        //Push the hand out a little bit so it isn't stuck in the world.
+        let push_amt: number = 1.9;
+        let push_out = p1.clone().sub(p2).normalize().multiplyScalar(push_amt);
+
+        hand_pos_final = projected_world.clone().add(push_out);
+      }
+      //hardcode the z to a solid position so we can easily project it.
+      this.position.copy(hand_pos_final);
+    }
+
+    if (this.Held === null) {
+      //Grab stuff
+      if (Globals.input.mouse.Left.pressed()) {
+        this.Gesture = HandGesture.Grab;
+        this.Grabbed = g_mainWorld.grabTileOrSprite(this);
+      }
+      else {
+        this.Gesture = HandGesture.None;
+      }
+    }
+    else{
+      if (Globals.input.mouse.Left.releaseOrUp()) {
+        //Essentially this would work best if we used a PhysicsObject with velocity and gravity.
+        this.Held.R3Parent = null;
+        this.Held = null;
+        this.Gesture = HandGesture.None;
+      }
+    }
+
+  }
+
+}
 
 let g_ambientlight: THREE.AmbientLight = null;
 let axis: THREE.AxesHelper = null;
 let gridhelper: THREE.GridHelper = null;
-let g_hand: THREE.Object3D = null;
+let g_hand: Tickler = null;
 
 let g_atlas: Atlas = null;
 let g_mainWorld: WorldView25D = null;
@@ -1863,13 +2050,12 @@ let g_mainWorld: WorldView25D = null;
 $(document).ready(function () {
   Globals.setFlags(document.location);
 
-  Globals.init();
+  Globals.init(800, 800, ResizeMode.FitAndCenter); //Gameboy pixel dims
   Globals.prof.frameStart();
 
   loadResources();
 });
 function loadResources() {
-
   //https://threejs.org/docs/#manual/en/introduction/Animation-system
 
   // this should really be handled by a promise.
@@ -1880,6 +2066,11 @@ function loadResources() {
       Globals.models.loadModel(Files.Model.Hand, ['Armature', 'Action_Point'], function (success: boolean, arr: Array<Object3D>, gltf: any): THREE.Object3D {
         if (success) {
           if (arr.length === 2) {
+            let hand: Object3D = arr[0];
+            let action_point: Object3D = arr[1];
+
+            createTickler(hand, action_point);
+
             return arr[0];
           }
         }
@@ -1887,17 +2078,19 @@ function loadResources() {
       })
     });
   Globals.models.setModelAsyncCallback(Files.Model.Hand, function (model: THREE.Mesh) {
-    g_hand = model;
-    //Apply Hand Transforms.
-    //Note: We might be able to swap left/right here.
-    g_hand.rotateY(Math.PI);
-    //g_hand.scale.set(-1,0,0);
-
-
-    Globals.scene.add(g_hand);
 
     initializeGame();
   });
+}
+function createTickler(model: Object3D, action_point: Object3D) {
+  //Apply Hand Transforms.
+  //Note: We might be able to swap left/right here.
+  model.rotateY(Math.PI);
+
+  g_hand = new Tickler(model, action_point);
+
+  g_hand.scale.set(3, 3, 3);
+  Globals.physics3d.add(g_hand);
 }
 function initializeGame() {
   createWorld();

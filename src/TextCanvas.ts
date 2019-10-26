@@ -20,7 +20,7 @@ export class TextCanvas extends THREE.Object3D {
   private _plane: THREE.Mesh = null;
   private _hitBoxes: Array<THREE.Mesh> = new Array<THREE.Mesh>();
   private _lines: THREE.LineSegments = null;
-  private _ctx: CanvasRenderingContext2D = null;
+  private _renderingContext: CanvasRenderingContext2D = null;
 
   public AlignToScreen = false;
   public ScreenX = 0;
@@ -69,7 +69,7 @@ export class TextCanvas extends THREE.Object3D {
     canvas.width = 1024;
     canvas.height = canvas.width / ratio; // make sure the canvas is the same size ratio as the geometry
 
-    this._ctx = canvas.getContext('2d');
+    this._renderingContext = canvas.getContext('2d');
     this._texture = new THREE.Texture(canvas);
     this._texture.needsUpdate = true;
 
@@ -130,7 +130,7 @@ export class TextCanvas extends THREE.Object3D {
     this._lastText = this.Text;
 
     //var string = this.string = str || this.string;
-    var ctx = this._ctx;
+    var ctx = this._renderingContext;
     var canvas = ctx.canvas;
 
     ctx.font = '800 ' + this._options.Fontsize + 'px Arial';

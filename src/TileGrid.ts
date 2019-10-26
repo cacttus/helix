@@ -1,7 +1,7 @@
 import { Color, EqualStencilFunc } from 'three';
 import { ivec2, vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import { Globals } from './Globals';
-import { Atlas, Sprite25D, FDef, SpriteFrame, Tiling, Character, Direction4Way, SpriteProp, CollisionHandling, Phyobj25D } from './Main';
+import { Atlas, Sprite25D, FDef, SpriteFrame, Tiling, Character, Direction4Way, SpriteProp, CollisionHandling, Phyobj25D, HandGesture, SpriteAnimationData } from './Main';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 import world_data from './game_world.json';
 import { Random } from './Base';
@@ -181,6 +181,7 @@ export enum TiledSpriteId {
   Hole = 9
 }
 export enum TileLayer {
+  /* THESE MUST BE IN ORDER TO GET CELL BLOCKS ARRAY */
   DebugBackground = -1,
   Border = 0,
   Background = 1,
@@ -252,6 +253,8 @@ export class Tiles {
       tile.Tiling = Tiling.SetEvenOdd2x2;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
       tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
+      tile.Gesture = HandGesture.Poke;
+
       return tile;
     });
     this.addTile(function () {
@@ -274,6 +277,7 @@ export class Tiles {
       tile.Tiling = Tiling.Single;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
       tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
+      tile.Gesture = HandGesture.Grab;
       return tile;
     });
     this.addTile(function () {
@@ -291,18 +295,20 @@ export class Tiles {
       tile.Tiling = Tiling.Single;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
       tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
+      tile.Gesture = HandGesture.Poke;
 
-      tile.PreCollisionFunction = function (this_block: TileBlock) {
-        this.Layer = TileLayer.Objects;
-        this_block.FrameIndex = toInt(0); // reset
-      }
-      tile.CollisionFunction = function (this_block: TileBlock, thisObj: Phyobj25D, other: Phyobj25D) {
-        //Move the grass into the foreground and change its sprite
-        if (this_block) {
-          this_block.Layer = TileLayer.Foreground;
-          this_block.FrameIndex = toInt(1); // reset
-        }
-      }
+
+      // tile.PreCollisionFunction = function (this_block: TileBlock) {
+      //   this.Layer = TileLayer.Objects;
+      //   this_block.FrameIndex = toInt(0); // reset
+      // }
+      // tile.CollisionFunction = function (this_block: TileBlock, thisObj: Phyobj25D, other: Phyobj25D) {
+      //   //Move the grass into the foreground and change its sprite
+      //   if (this_block) {
+      //     this_block.Layer = TileLayer.Foreground;
+      //     this_block.FrameIndex = toInt(1); // reset
+      //   }
+      // }
       return tile;
     });
 
@@ -325,19 +331,19 @@ export class Tiles {
     char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Down),
       FDef.default(down),
       0.7, atlas,
-      new ivec2(1, 2), true, false, props);
+      new ivec2(1, 2), true, props);
     char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Right),
       FDef.default(right),
       0.7, atlas,
-      new ivec2(1, 2), true, false, props);
+      new ivec2(1, 2), true, props);
     char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Left),
       FDef.default(left, true),
       0.7, atlas,
-      new ivec2(1, 2), true, false, props);
+      new ivec2(1, 2), true, props);
     char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Up),
       FDef.default(up),
       0.7, atlas,
-      new ivec2(1, 2), true, false, props);
+      new ivec2(1, 2), true, props);
   }
 
 }
@@ -445,7 +451,7 @@ export class MasterMap {
           let tile_x: Int = toInt(toInt(iTile) % toInt(layer.width));
           let tile_y: Int = toInt(iTile / layer.width);
 
-          if(tile === TiledSpriteId.Grass_Base){
+          if (tile === TiledSpriteId.Grass_Base) {
             this.dbg_count++;
           }
           //Flip the map upside down.
@@ -522,6 +528,30 @@ export class MasterMap {
     }
   }
 
+  public worldPointToMapPoint(v_in:vec3) : vec3 {
+    //Converts an OpenGL coordinate system point to a point relative to the MasterMap origin.
+    let v : vec3 = new vec3(
+      v_in.x,
+      -v_in.y,
+      v_in.z
+    );
+    return v;
+  }
+  public project(p1:vec3, p2:vec3, normal:vec3, position:vec3) : vec3{
+    //Projects the given line segment onto this world
+    //Input: OpenGL World coordinates
+    //Returns OpenGL World coordinates.
+    
+
+        //(n.p+d) = (a+tb)
+        let n = normal;
+        let d = -(n.dot(position));
+        let t: number = -(n.dot(p1) + d) / ((p2.clone().sub(p1)).dot(n));
+        let ret = p1.clone().add(p2.clone().sub(p1).multiplyScalar(t));
+        return ret;
+
+  }
+  
 }
 export class MapArea {
   //A piece of a platform map that was found by flood filling to border tiles.
@@ -772,6 +802,7 @@ export class TileGrid {
           c.Blocks.push(new TileBlock());
           c.Blocks[c.Blocks.length - 1].SpriteRef = tileSprite;
           c.Blocks[c.Blocks.length - 1].Layer = iLayer;
+          c.Blocks[c.Blocks.length - 1].AnimationData = tileSprite.Animation.TileData;
           c.Blocks[c.Blocks.length - 1].FrameIndex = this.getSpriteTileFrame(c.CellPos_World.x, c.CellPos_World.y, toInt(iLayer as number), tileSprite, iTileId);
         }
       }
@@ -791,14 +822,18 @@ export class TileGrid {
     cell = this.CellDict.get(xy);
     return cell;
   }
-  public GetCellForPoint(pos: vec2): Cell {
+
+  public GetCellForPoint_WorldR3(pos: vec3): Cell {
+    return this.GetCellForPoint_World(new vec2(pos.x, pos.y));
+  }
+  public GetCellForPoint_World(pos: vec2): Cell {
     let parent: BvhNode = this.RootNode;
     let ret: Cell = null;
 
     let nSanity: Int = 0 as Int;//Instead of using a while true loop we do this to prevent catastrophic failure
     while (nSanity < 1000) {
       for (let n of parent.Children) {
-        if (n.Box.ContainsPointInclusive(pos)) {
+        if (n.Box.ContainsPoint_TL_INCLUSIVE_BR_EXCLUSIVE(pos)) {
           if (n.Cell != null) {
             ret = n.Cell;
             nSanity = 1005 as Int;
@@ -886,13 +921,13 @@ export class TileGrid {
     let pt: vec2 = new vec2(
       c.Parent.Box.Min.x + this.Area.Map.Atlas.TileWidthR3 * (x as number) + this.Area.Map.Atlas.TileWidthR3 * 0.5,
       c.Parent.Box.Min.y + this.Area.Map.Atlas.TileHeightR3 * (y as number) + this.Area.Map.Atlas.TileHeightR3 * 0.5);
-    let ret: Cell = this.GetCellForPoint(pt);
+    let ret: Cell = this.GetCellForPoint_World(pt);
     return ret;
   }
   public getSpriteTileFrame(x: Int, y: Int, layer: Int, tileSprite: Sprite25D, tileId: Int) {
     let ret: Int = toInt(0);
     if (tileSprite.Tiling === Tiling.Random) {
-      ret = Random.int(0, tileSprite.Animation.getTileAnimation().KeyFrames.length - 1);
+      ret = Random.int(0, tileSprite.Animation.TileData.KeyFrames.length - 1);
     }
     else if (tileSprite.Tiling === Tiling.SetEvenOdd2x2) {
       ret = this.GetTileIndexEvenOdd2x2(x, y);
@@ -1039,6 +1074,10 @@ export class TileBlock {
   private _spriteRef: Sprite25D = null; //Reference to a Sprite25D, // Sprite for this block.  This also containst he TILE ID.  This is a REFERENCE to the tile.  Not a copy
   private _frameIndex: Int = 0 as Int;//The index of the frame that this sprite
   private _layer: TileLayer = TileLayer.Unset;
+  private _animationData : SpriteAnimationData = null;
+  
+  public get AnimationData(): SpriteAnimationData { return this._animationData; }
+  public set AnimationData(x: SpriteAnimationData) { this._animationData = x; }
 
   public get FrameIndex(): Int { return this._frameIndex; }
   public set FrameIndex(x: Int) { this._frameIndex = x; }
@@ -1081,6 +1120,29 @@ export class Cell {
   public DebugColor: Color = null;
   public DebugVerts: Array<vec3> = new Array<vec3>();
   public static DebugFrame: SpriteFrame = null; // thisis just for debug
+
+  public removeBlock(block:TileBlock):boolean{
+    for(let bi=this.Blocks.length-1; bi>=0; bi--){
+      if(this.Blocks[bi]===block){
+        this.Blocks.splice(bi,1);
+        return true;
+      }
+    }
+    return false;
+  }
+  public getOrderedBlockArrayTopDown(): Array<TileBlock> {
+    //Returns the array of all blocks ordered from Front[0] to Back[n]
+    //If this tile has multiple blocks on the same layer, then the order is the order in which they exist on the cell.
+    let ret: Array<TileBlock> = new Array<TileBlock>();
+    for (let iLayer = TileLayer.LayerCount - 1; iLayer >= 0; --iLayer) {
+      for (let block of this.Blocks) {
+        if (block.Layer === iLayer as TileLayer) {
+          ret.push(block);
+        }
+      }
+    }
+    return ret;
+  }
 
   //Cell position relative to the master map.
   public get CellPos_World(): ivec2 { return this._cellPosWorld; }

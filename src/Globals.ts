@@ -21,7 +21,12 @@ import { Prof } from "./Prof";
 
 export enum GameState { Title, Play, GameOver }
 enum WebGLVersion { WebGL1, WebGL2 }
-
+export enum ResizeMode {
+  Fixed, // Fixed canvas size.
+  FillAndCenter, //Stretch the canvas across the window keeping the height aspect ratio, then center the canvas
+  FitAndCenter, //Fit the viewport within the window's width/height and maintain the supplied aspect ratio
+  Fullscreen // stretch the canvas across the window.
+}
 export class _Globals {
   private _gamestate: GameState = GameState.Title;
   private _debug: boolean = false;
@@ -48,18 +53,23 @@ export class _Globals {
   private _canvas: HTMLCanvasElement = null;
   private _statsFps: Stats = null;
   private _statsMb: Stats = null;
-
-  // private _cameraCachedPos : Vector3 = new Vector3(0,0,0);
-  // private _cameraCachedDir : Vector3 = new Vector3(0,0,0);
-  // public get cameraWorldDirection() : Vector3 { return this._cameraCachedDir;}
-  // public get cameraWorldPosition() : Vector3 { return this._cameraCachedPos;}
+  private _renderWidth: number = 1024;
+  private _renderHeight: number = 768;
+  private _resizeMode: ResizeMode = ResizeMode.Fullscreen;
+  private _barColor : Color = new Color(0,0,0); // Color of the bars when in ResizeMode.Fit mode.
 
   public isNotNullorUndefined(x: any) {
     return (x !== null) && (x !== undefined);
   }
 
-  public init() {
+  public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor:Color = new Color(0,0,0)) {
     this._canvas = document.querySelector('#page_canvas');
+    
+    this._renderWidth = canvasWidth;
+    this._renderHeight = canvasHeight;
+    this._resizeMode = resize;
+    this._barColor = barColor;
+
     this._screen = new Screen2D(this._canvas);
     this.createCamera();
 
@@ -296,41 +306,100 @@ export class _Globals {
     this._player.DestroyCheck = function (ob: PhysicsObject3D): boolean { return false; /*do not destroy player */ }
     this._player.rotateY(0);
   }
+
+
+  private udpateRenderSize() {
+    //if in VR, the "presenting" will cause an error if you try to do this.
+    if (Globals.vrDeviceIsPresenting() === false) {
+      if (this._renderer) {
+        //WebGL1 does not support non pow2 textures.
+        if (this._webGLVersion === WebGLVersion.WebGL2) {
+          //https://stackoverflow.com/questions/19827030/renderer-setsize-calculation-by-percent-of-screen-three-js
+          let canvas = this._renderer.domElement;
+          let pixelRatio = window.devicePixelRatio;
+          let height = this._renderHeight * pixelRatio | 0;; //canvas.clientWidth * pixelRatio | 0;
+          let width = this._renderWidth * pixelRatio | 0;; //canvas.clientHeight * pixelRatio | 0;
+          let needResize = (canvas.width !== width) || (canvas.height !== height);
+
+          if (needResize) {
+            this._renderer.setSize(width, height, false);
+          }
+
+          if (needResize) {
+            Globals.camera.aspect = this._renderHeight / this._renderWidth; //canvas.clientWidth / canvas.clientHeight;
+            Globals.camera.updateProjectionMatrix();
+          }
+          //Set the actual cnavas size.
+          //This should cause the resize method to fire.
+
+          if (this._resizeMode === ResizeMode.Fullscreen) {
+            //Fullscreen, do not maintain aspect ratio
+            $("#page_canvas").width(window.innerWidth);
+            $("#page_canvas").height(window.innerHeight);
+          }
+          else if (this._resizeMode === ResizeMode.FillAndCenter) {
+            //Fill the window, but maintain aspect ratio
+            $("#page_canvas").width(window.innerWidth);
+            let ch = window.innerWidth * (height / width);
+            $("#page_canvas").height(ch);
+            $("#page_canvas").css('position', 'absolute');
+            $("#page_canvas").css('left', '0');
+            let t = (window.innerHeight - ch > 0) ? ((window.innerHeight - ch) / 2) : -(ch - window.innerHeight) / 2;
+            $("#page_canvas").css('top', t);
+
+          }
+          else if (this._resizeMode === ResizeMode.FitAndCenter) {
+            //Fit the canvas.
+            if (window.innerWidth >= window.innerHeight) {
+              
+              $("#page_canvas").height(window.innerHeight);
+              let cv = window.innerHeight * (width / height);
+              $("#page_canvas").width(cv);
+              $("#page_canvas").css('position', 'absolute');
+              $("#page_canvas").css('top', '0');
+              let t = (window.innerWidth - cv > 0) ? ((window.innerWidth - cv) / 2) : -(cv - window.innerWidth) / 2;
+              $("#page_canvas").css('left', t);
+            }
+            else {
+              $("#page_canvas").width(window.innerWidth);
+              let cv = window.innerWidth * (height / width);
+              $("#page_canvas").height(cv);
+              $("#page_canvas").css('position', 'absolute');
+              $("#page_canvas").css('left', '0');
+              let t = (window.innerHeight - cv > 0) ? ((window.innerHeight - cv) / 2) : -(cv - window.innerHeight) / 2;
+              $("#page_canvas").css('top', t);
+            }
+
+            $('body').css('background-color', "#"+this._barColor.getHexString())
+
+          }
+          else {
+            //fixed w/h
+            $("#page_canvas").width(width);
+            $("#page_canvas").height(height);
+          }
+
+
+        }
+      }
+
+    }
+  }
   private createRenderSystem() {
     let that = this;
 
     //Make sure the window can resize.
     window.addEventListener('resize', function () {
-      //if in VR, the "presenting" will cause an error if you try to do this.
-      if (Globals.vrDeviceIsPresenting() === false) {
-        //WebGL1 does not support non pow2 textures.
-        if (that._webGLVersion === WebGLVersion.WebGL2) {
-          //https://stackoverflow.com/questions/19827030/renderer-setsize-calculation-by-percent-of-screen-three-js
-          const canvas = that._renderer.domElement;
-          const pixelRatio = window.devicePixelRatio;
-          const width = canvas.clientWidth * pixelRatio | 0;
-          const height = canvas.clientHeight * pixelRatio | 0;
-          const needResize = canvas.width !== width || canvas.height !== height;
-
-          if (needResize) {
-            that._renderer.setSize(width, height, false);
-          }
-
-          if (needResize) {
-            Globals.camera.aspect = canvas.clientWidth / canvas.clientHeight;
-            Globals.camera.updateProjectionMatrix();
-          }
-        }
-      }
-
-      //This should cause the resize method to fire.
-      $("#page_canvas").width(window.innerWidth);
-      $("#page_canvas").height(window.innerHeight);
+      that.udpateRenderSize();
     }, false);
 
     this.createWebGL2Context();
+
+    //Force an update to the renderer size.
+    this.udpateRenderSize();
   }
   private createWebGL2Context() {
+
     //So, THREE has less capabilities if it's not using webgl2
     //we must use webgl2 to prevent erroneous texture resizing (pow2 only textures)
     //@ts-ignore:
@@ -348,6 +417,7 @@ export class _Globals {
       this._renderer = new THREE.WebGLRenderer({ canvas: this.canvas, context: context });
       this._webGLVersion = WebGLVersion.WebGL2;
     }
+
     Globals.logInfo("***Created " + this._webGLVersion + " context.***")
     this._renderer.setClearColor(0xffffff, 1);
     this._renderer.setPixelRatio(window.devicePixelRatio);

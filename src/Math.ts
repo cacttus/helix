@@ -262,6 +262,22 @@ export class Box2f {
     }
     return true;
   }
+  public ContainsPoint_TL_INCLUSIVE_BR_EXCLUSIVE(point: vec2): boolean {
+    //Useful for 2D data when the top left is the origin
+    if (point.x < this.Min.x) {
+      return false;
+    }
+    if (point.y < this.Min.y) {
+      return false;
+    }
+    if (point.x >= this.Max.x) {
+      return false;
+    }
+    if (point.y >= this.Max.y) {
+      return false;
+    }
+    return true;
+  }
   private bounds(x: Int): vec2 {
     if (x === 0) { return this.Min.clone(); }
     return this.Max.clone();
