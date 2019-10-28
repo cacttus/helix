@@ -4,7 +4,7 @@ import { WEBGL } from 'three/examples/jsm/WebGL.js';
 import { WEBVR } from 'three/examples/jsm/vr/WebVR.js';
 import {
   Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D, AlwaysStencilFunc, MeshStandardMaterial,
-  MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material
+  MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, ParametricBufferGeometry
 } from 'three';
 import * as Stats from 'stats.js';
 
@@ -27,6 +27,7 @@ export enum ResizeMode {
   FitAndCenter, //Fit the viewport within the window's width/height and maintain the supplied aspect ratio
   Fullscreen // stretch the canvas across the window.
 }
+export interface GetVRDisplaysCallback { (): void }
 export class _Globals {
   private _gamestate: GameState = GameState.Title;
   private _debug: boolean = false;
@@ -56,15 +57,15 @@ export class _Globals {
   private _renderWidth: number = 1024;
   private _renderHeight: number = 768;
   private _resizeMode: ResizeMode = ResizeMode.Fullscreen;
-  private _barColor : Color = new Color(0,0,0); // Color of the bars when in ResizeMode.Fit mode.
+  private _barColor: Color = new Color(0, 0, 0); // Color of the bars when in ResizeMode.Fit mode.
 
   public isNotNullorUndefined(x: any) {
     return (x !== null) && (x !== undefined);
   }
 
-  public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor:Color = new Color(0,0,0)) {
+  public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor: Color = new Color(0, 0, 0)) {
     this._canvas = document.querySelector('#page_canvas');
-    
+
     this._renderWidth = canvasWidth;
     this._renderHeight = canvasHeight;
     this._resizeMode = resize;
@@ -131,7 +132,12 @@ export class _Globals {
     }
     return b;
   }
+  private _vrSetupComplete: boolean = false;
   public userIsInVR(): boolean {
+    if (!this._vrSetupComplete) {
+      Globals.logError("Tried to query VR state before running the VR Setup algorithm.")
+    }
+    //Only call this after we have checked for VR
     return (this.VRSupported() && this._renderer.vr.enabled);
   }
   public VRSupported(): boolean {
@@ -351,7 +357,7 @@ export class _Globals {
           else if (this._resizeMode === ResizeMode.FitAndCenter) {
             //Fit the canvas.
             if (window.innerWidth >= window.innerHeight) {
-              
+
               $("#page_canvas").height(window.innerHeight);
               let cv = window.innerHeight * (width / height);
               $("#page_canvas").width(cv);
@@ -370,7 +376,7 @@ export class _Globals {
               $("#page_canvas").css('top', t);
             }
 
-            $('body').css('background-color', "#"+this._barColor.getHexString())
+            $('body').css('background-color', "#" + this._barColor.getHexString())
 
           }
           else {
@@ -383,6 +389,98 @@ export class _Globals {
         }
       }
 
+    }
+  }
+  private getCookie(name: string): any {
+    if (document.cookie) {
+      var value = "; " + document.cookie;
+      var parts = value.split("; " + name + "=");
+      if (parts.length == 2) {
+        return parts.pop().split(";").shift();
+      }
+    }
+    return null;
+  }
+  private getBrowserMessage() {
+    //https://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
+    // Internet Explorer 6-11
+    // @ts-ignore
+    var isIE = /*@cc_on!@*/false || !!document.documentMode;
+    // Edge 20+
+    // @ts-ignore
+    var isEdge = !isIE && !!window.StyleMedia;
+    if (isIE || isEdge) {
+      return "For the best experience, try using a <a href='https://www.google.com/chrome' target='_blank'>Chrome</a> or <a href='https://www.mozilla.org/en-US/firefox/' target='_blank'>Firefox</a> web browser.";
+    }
+
+    // Opera 8.0+
+    // @ts-ignore
+    var isOpera = (!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
+    // Firefox 1.0+
+    // @ts-ignore
+    var isFirefox = typeof InstallTrigger !== 'undefined';
+    // Safari 3.0+ "[object HTMLElementConstructor]" 
+    // @ts-ignore
+    var isSafari = /constructor/i.test(window.HTMLElement) || (function (p) { return p.toString() === "[object SafariRemoteNotification]"; })(!window['safari'] || (typeof safari !== 'undefined' && safari.pushNotification));
+
+    // Chrome 1 - 71
+    // @ts-ignore
+    var isChrome = !!window.chrome && (!!window.chrome.webstore || !!window.chrome.runtime);
+    // Blink engine detection
+    // @ts-ignore
+    var isBlink = (isChrome || isOpera) && !!window.CSS;
+    if (!isChrome && !isFirefox) {
+      return "Please note Helix is currently tested on Oculus VR, <a href='https://www.google.com/chrome'>Google Chrome</a>, <a href='https://www.mozilla.org/en-US/firefox/'>Firefox</a> and Edge.  Other browsers and VR systems may not work."
+    }
+    return "";
+  }
+  private checkBrowser() {
+    let showWarningCookie: string = "shownBrowserWarning";
+    let shown: boolean = this.getCookie(showWarningCookie) as boolean;
+    if (shown === null || shown === false) {
+      let msg = this.getBrowserMessage();
+
+      if (msg && msg.length) {
+        $('body').prepend(' <div class="browser_warning_container">' +
+          '<div class="bwc_cont" style="padding-bottom:0.4em"></div>' +
+          '<div style="text-align:center;">' +
+          '<div class="browser_warning_container_ok">Ok</div>' +
+          '</div>' +
+          '</div>');
+        let bw = $('.browser_warning_container');
+        bw.hide();
+
+        let bwc = $('.bwc_cont');
+        bwc.append(msg);
+
+        bw.css('position', 'absolute');
+        let middle = Math.max((window.innerWidth - bw.width()) * 0.5, 0);
+        bw.css('left', middle);
+        bw.css('top', 0);
+
+        bw.fadeToggle(600); //show smoothly
+        $('.browser_warning_container_ok').click((e) => {
+          function hideIt() {
+            let bw = $('.browser_warning_container');
+            document.cookie = showWarningCookie + "=true";
+            if (bw.is(':visible')) {
+              bw.fadeToggle(200);
+            }
+          }
+          hideIt();
+          //center it
+          window.addEventListener('resize', function () {
+            let middle = Math.max((window.innerWidth - bw.width()) * 0.5, 0);
+            bw.css('left', middle);
+            bw.css('top', 0);
+          }, false);
+          //remove after 10s
+          window.setTimeout(() => {
+            hideIt();
+          }, 10000);
+
+        });
+      }
     }
   }
   private createRenderSystem() {
@@ -399,7 +497,6 @@ export class _Globals {
     this.udpateRenderSize();
   }
   private createWebGL2Context() {
-
     //So, THREE has less capabilities if it's not using webgl2
     //we must use webgl2 to prevent erroneous texture resizing (pow2 only textures)
     //@ts-ignore:
@@ -418,28 +515,54 @@ export class _Globals {
       this._webGLVersion = WebGLVersion.WebGL2;
     }
 
-    Globals.logInfo("***Created " + this._webGLVersion + " context.***")
+    Globals.logInfo("***Created WebGL version '" + this._webGLVersion + "' context.***")
     this._renderer.setClearColor(0xffffff, 1);
     this._renderer.setPixelRatio(window.devicePixelRatio);
-    if (Globals.VRSupported()) {
-      //This has no effect
-      //https://github.com/mrdoob/three.js/issues/13225
-      this._renderer.setSize(1920, 1080); // Set to 10px as purely a test
-    }
-    else {
-      this._renderer.setSize(window.innerWidth, window.innerHeight);
-    }
 
-    Globals.setRenderer(this._renderer);
-
-    if (Globals.VRSupported()) {
-      this._renderer.vr.enabled = true;
-      document.body.appendChild(WEBVR.createButton(this._renderer, { referenceSpaceType: 'local' }));
-    }
-    else {
-      document.body.appendChild(this._renderer.domElement);
-    }
+    this.setupVRorDesktopMode()
   }
+  private setupVRorDesktopMode() {
+    const setupVROrDesktopCallback = (value: VRDisplay[]) => {
+      //Check for VR
+      if (value && value.length > 0) {
+        Globals.logInfo("WebVR: VR is supported and enabled.  Starting in VR mode.")
+        this._renderer.vr.enabled = true;
+        document.body.appendChild(WEBVR.createButton(this._renderer, { referenceSpaceType: 'local' }));
+      }
+      else {
+        Globals.logInfo("WebVR: VR is not supported or enabled.  Starting in Desktop mode.")
+        this._renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(this._renderer.domElement);
+      }
+
+      //Set the final renderer
+      Globals.setRenderer(this._renderer);
+
+      //Check Browser
+      window.setTimeout(() => {
+        try {
+          this.checkBrowser();
+        }
+        catch (ex) {
+          Globals.logError("Non-critical error during browser checking: " + ex ? ex : '');
+        }
+      }, 3000);
+
+      //Done
+      this._vrSetupComplete = true;
+    }
+    if ('getVRDisplays' in navigator) {
+      //we have the method, need to check fo rdisplays async
+      navigator.getVRDisplays().then((value: VRDisplay[]) => {
+        setupVROrDesktopCallback(value);
+      });
+    }
+    else {
+      setupVROrDesktopCallback([]);
+    }
+
+  }
+
   private createSSAA() {
     if (this.getSSAA() > 0) {
       this._composer = new EffectComposer(this._renderer);

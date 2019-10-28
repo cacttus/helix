@@ -6,6 +6,10 @@
 <head>
   <meta charset=utf-8>
   <title id="gametitle">Helix VR</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" type="text/css" href="styles.css">
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.2/jquery.min.js"></script>
   <script type='x-shader/x-vertex' id='sprite_vs'>
     varying vec2 vUv; // pass the uv coordinates of each pixel to the frag shader
@@ -25,7 +29,6 @@
       gl_FragColor = texture2D(texture, vUv);
     }
   </script>
-
   <script type="text/javascript">
     function getCssValuePrefix() {
       var rtrnVal = '';//default to standard syntax
@@ -49,80 +52,40 @@
 
       return rtrnVal;
     }
-    function init() {
+    function initLoadingAnimation() {
       setInterval(draw, 10);
     }
     var pct = 100;
-   // var start = 100;
-   // var end = 0;
     function draw() {
-
       if ($("#outPopUp").is(":visible")) {
         pct += 1;
         if (pct === 120) {
-          pct=-20;
+          pct = -20;
         }
-
-        //-webkit-linear-gradient(0deg, #292929 0%, #a9a9a9 50%, #292929 100%);
         var sel = $('.loadingText').css('background', '-webkit-linear-gradient(0deg, #292929 ' + 0 + '%, #a9a9a9 ' + pct + '%, #292929 ' + 100 + '%)');
         var sel = $('.loadingText').css('-webkit-background-clip', 'text');
-        //var sel = $('.loadingText') .css( 'background''-webkit-linear-gradient(0deg, #292929 0%, #a9a9a9 ' + pct + '%, #292929 100%)'});
       }
       else {
         clearInterval(draw);
       }
       return true;
     }
-    init();
+
+    $(document).ready(() => {
+      try {
+
+        initLoadingAnimation();
+      }
+      catch (ex) {
+        console.log("**Failed to do simple init stuff in the index (not critical), exception: " + ex ? ex.toString() : "no exception is defined");
+      }
+    });
   </script>
-  <style>
-    body {
-      margin: 0;
-      background-color: #e9e9e9;
-    }
 
-    .canvas {
-      width:33;
-      height:33;
-     /* Is this cross-browser compatible ? https://stackoverflow.com/questions/7615009/disable-interpolation-when-scaling-a-canvas*/
-      image-rendering: optimizeSpeed;             /* Older versions of FF          */
-      image-rendering: -moz-crisp-edges;          /* FF 6.0+                       */
-      image-rendering: -webkit-optimize-contrast; /* Safari                        */
-      image-rendering: -o-crisp-edges;            /* OS X & Windows Opera (12.02+) */
-      image-rendering: pixelated;                 /* Awesome future-browsers       */
-      -ms-interpolation-mode: nearest-neighbor;   /* IE  
-      display:block;
-    }
-
-    #outPopUp {
-      position: absolute;
-      width: 300px;
-      height: 200px;
-      line-height: 200px;
-      z-index: 99999;
-      top: 50%;
-      left: 50%;
-      margin: -100px 0 0 -150px;
-      text-align: center;
-    }
-
-    .loadingText {
-      width: 100%;
-      font-family: Arial, Helvetica, sans-serif;
-      font-weight: 900;
-      font-style: italic;
-      font-size: 60px;
-
-      background: -webkit-linear-gradient(0deg, #292929 0%, #a9a9a9 50%, #292929 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-stroke: 4px transparent;
-      color: #e9e9e9;
-    }
-  </style>
 </head>
 
 <body>
+
   <div id="outPopUp" class="loadingText">
     Loading...
   </div>

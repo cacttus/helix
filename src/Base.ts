@@ -846,7 +846,6 @@ export class Mouse extends Vector3 {
       e.preventDefault();
     });
     document.addEventListener('wheel', function (e: MouseWheelEvent) {
-      e.preventDefault();
       that._mousewheel_evt.push(e);
     });
     //var controls = new OrbitControls.default();
@@ -1235,16 +1234,28 @@ export class Frustum {
   private _ftl: Vector3 = new Vector3();
   private _ftr: Vector3 = new Vector3();
   private _fbl: Vector3 = new Vector3();
+  private _fbr: Vector3 = new Vector3();
   private _ntl: Vector3 = new Vector3();
-  private _nbl: Vector3 = new Vector3();
   private _ntr: Vector3 = new Vector3();
+  private _nbl: Vector3 = new Vector3();
+  private _nbr: Vector3 = new Vector3();
 
-  get ftl(): Vector3 { return this._ftl; }//back topleft
-  get ftr(): Vector3 { return this._ftr; }//back topright
-  get fbl(): Vector3 { return this._fbl; }//back bottomleft
-  get ntl(): Vector3 { return this._ntl; }//near top left
-  get nbl(): Vector3 { return this._nbl; }//near bot left
-  get ntr(): Vector3 { return this._ntr; }//near top right
+  private _right : vec3 = new vec3();
+  private _down : vec3 = new vec3();
+  private _normal : vec3 = new vec3();
+
+  public get ftl(): Vector3 { return this._ftl; }//back topleft
+  public get ftr(): Vector3 { return this._ftr; }//back topright
+  public get fbl(): Vector3 { return this._fbl; }//back bottomleft
+  public get fbr(): Vector3 { return this._fbr; }//back bottomleft
+  public get ntl(): Vector3 { return this._ntl; }//near top left
+  public get nbl(): Vector3 { return this._nbl; }//near bot left
+  public get nbr(): Vector3 { return this._nbr; }//near bot left
+  public get ntr(): Vector3 { return this._ntr; }//near top right
+
+  public get right(): Vector3 { return this._right; }
+  public get down(): Vector3 { return this._down; }
+  public get normal(): Vector3 { return this._normal; }
 
   //private Points_fpt_ntl: Vector3;//back bottomleft
   public constructor(cam_dir: Vector3 = null, cam_pos: Vector3 = null) {
@@ -1304,6 +1315,7 @@ export class Frustum {
     this._ftl = farCenter.clone().add(cup_far).sub(crt_far);
     this._ftr = farCenter.clone().add(cup_far).add(crt_far);
     this._fbl = farCenter.clone().sub(cup_far).sub(crt_far);
+    this._fbr = farCenter.clone().sub(cup_far).add(crt_far);
 
     let w_near_2 = tan_fov_2 * Globals.camera.near;
     let h_near_2 = w_near_2 * ar;
@@ -1312,6 +1324,12 @@ export class Frustum {
     this._ntl = nearCenter.clone().add(cup_near).sub(crt_near);
     this._ntr = nearCenter.clone().add(cup_near).add(crt_near);
     this._nbl = nearCenter.clone().sub(cup_near).sub(crt_near);
+    this._nbr = nearCenter.clone().sub(cup_near).add(crt_near);
+
+
+    this._right= rightVec.clone();
+    this._down = camup.clone().multiplyScalar(-1);
+    this._normal = cam_dir.clone();
   }
 }
 

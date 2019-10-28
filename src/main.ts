@@ -6,7 +6,7 @@ import {
 import { Globals, GameState, ResizeMode } from './Globals';
 import { basename } from 'upath';
 import { Utils } from './Utils';
-import { Random, ModelManager, AfterLoadFunction, Frustum } from './Base';
+import { Random, ModelManager, AfterLoadFunction, Frustum, Timer } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
@@ -100,12 +100,39 @@ export class Atlas extends ImageResource {
 
     this.load(tex, afterLoad);
   }
+  public getFrame(tx: Int, ty: Int, tiles_width: Int = 1 as Int, tiles_height: Int = 1 as Int, spacing_h: Int = 1 as Int, spacing_v: Int = 1 as Int, margin: number = 0.0004): SpriteFrame {
+    let atlas = this;
+    //Tiles_width / height is a multiple-segment frame (ex. 2 16x16 frames)
+    //Spacing is a pixel space between multiple tile segments (ex. tiles_width>1)
+    //Margin will shrink or grow the image to reduce texel border artifacts
+    let sw: number = Number(atlas.TileWidthPixels * tiles_width - (tiles_width - 1) * spacing_h) / Number(atlas.ImageWidth);
+    let sh: number = Number(atlas.TileHeightPixels * tiles_height - (tiles_height - 1) * spacing_v) / Number(atlas.ImageHeight);
+    let f: SpriteFrame = new SpriteFrame();
+    f.x = (Number(atlas.LeftPad) + tx * Number(atlas.TileWidthPixels + atlas.SpaceX)) / Number(atlas.ImageWidth);
+    //Tex is in gl coords from bot left corner. so 0,0 is actually 0,h-1
+    f.y = 1 - (Number(atlas.TopPad) + ty * Number(atlas.TileHeightPixels + atlas.SpaceY)) / Number(atlas.ImageHeight) - sh;
+    f.w = sw;
+    f.h = sh;
+    f.tile_x_tiles = tx;
+    f.tile_y_tiles = ty;
+    f.tile_width_tiles = tiles_width;
+    f.tile_height_tiles = tiles_height;
+
+    if (margin !== 0) {
+      f.shrink(margin);
+    }
+
+    return f;
+  }
+
 }
 export class SpriteFrame {
   //A sub-image of a texture.
   //Technically we should allow multiple textures and batching, but for now, just one texture.
-  public debug_tile_x: number = 0;  //The Tile X/Y.  This is for information purposes only and may not actually be usd.
-  public debug_tile_y: number = 0;
+  public tile_x_tiles: number = 0;  //The Tile X/Y.  This is for information purposes only and may not actually be usd.
+  public tile_y_tiles: number = 0;
+  public tile_width_tiles: number = 0;
+  public tile_height_tiles: number = 0;
   public x: number = 0; //Texture X/Y (NOT tile index)
   public y: number = 0;
   public w: number = 0;
@@ -117,35 +144,21 @@ export class SpriteFrame {
     this.w -= amt * 2;
     this.h -= amt * 2;
   }
-  public static fromAtlasTile(atlas: Atlas, tx: Int, ty: Int, margin: number = 0.0004): SpriteFrame {
-    //Margin will shrink or grow the image to reduce texel border artifacts
-    let sw: number = Number(atlas.TileWidthPixels) / Number(atlas.ImageWidth);
-    let sh: number = Number(atlas.TileHeightPixels) / Number(atlas.ImageHeight);
-    let f: SpriteFrame = new SpriteFrame();
-    f.x = (Number(atlas.LeftPad) + tx * Number(atlas.TileWidthPixels + atlas.SpaceX)) / Number(atlas.ImageWidth);
-    //Tex is in gl coords from bot left corner. so 0,0 is actually 0,h-1
-    f.y = 1 - (Number(atlas.TopPad) + ty * Number(atlas.TileHeightPixels + atlas.SpaceY)) / Number(atlas.ImageHeight) - sh;
-    f.w = sw;
-    f.h = sh;
-    f.debug_tile_x = tx;
-    f.debug_tile_y = ty;
 
-    if (margin !== 0) {
-      f.shrink(margin);
-    }
-
-    return f;
-  }
-  public static createQuadVerts(verts: Array<vec3> /*out*/, origin: vec3, rotation: Quaternion, scale: vec2 = new vec2(1, 1), width: number, height: number) {
+  public static createQuadVerts(verts: Array<vec3> /*out*/, origin: vec3, rotation: Quaternion, scale: vec2 = new vec2(1, 1),
+    width: number, height: number,
+    right: vec3 = WorldView25D.RightR3,
+    down: vec3 = WorldView25D.DownR3World,
+    normal: vec3 = WorldView25D.Normal) {
     //Returns verts filled with the 4 quad vertexes
-    let right: vec3 = WorldView25D.RightR3;
-    let down: vec3 = WorldView25D.DownR3World;
-    let normal: vec3 = WorldView25D.Normal;
+    // let right: vec3 = WorldView25D.RightR3;
+    // let down: vec3 = WorldView25D.DownR3World;
+    // let normal: vec3 = WorldView25D.Normal;
 
     //Position the image relative to the world grid's basis
-    let tilepos_local: vec3 = right.clone().multiplyScalar(origin.x);
-    tilepos_local.add(down.clone().multiplyScalar(origin.y));
-    tilepos_local.add(normal.clone().multiplyScalar(origin.z));
+    let tilepos_local: vec3 =origin.clone();//right.clone().multiplyScalar(origin.x);
+    //tilepos_local.add(down.clone().multiplyScalar(origin.y));
+   // tilepos_local.add(normal.clone().multiplyScalar(origin.z));
 
     //Force add 4 verts
     if (verts.length !== 4) {
@@ -582,7 +595,7 @@ class Animation25D {
 
       let kf = new SpriteKeyFrame(ret);
 
-      kf.Frame = SpriteFrame.fromAtlasTile(atlas, (def.p.x + sub_x) as Int, (def.p.y + sub_y) as Int);
+      kf.Frame = atlas.getFrame((def.p.x + sub_x) as Int, (def.p.y + sub_y) as Int);
 
       kf.Color = def.c ? def.c : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
       kf.FlipH = def.h ? def.h : false;
@@ -770,6 +783,12 @@ export class Sprite25D {
   private _gesture: HandGesture = HandGesture.None;
   private _r3Parent: Object3D = null;
 
+  public snapToCell(c: Cell) {
+    if (c) {
+      this.Position = new vec3(c.CellPos_World.x, c.CellPos_World.y, 0);
+    }
+  }
+
   //Hand Gesture stuff
   public get GestureCallback(): GestureCallback { return this._gestureCallback; }
   public set GestureCallback(x: GestureCallback) { this._gestureCallback = x; }
@@ -853,8 +872,8 @@ export class Sprite25D {
   public get Center(): vec3 {
     //Returns the sprite tile center in Tile World space without depth applied.
     return new vec3(
-      this._location.x + this.WorldView.Atlas.TileWidthR3,
-      this._location.y + this.WorldView.Atlas.TileWidthR3,
+      this._location.x + this.WorldView.Atlas.TileWidthR3 * 0.5,
+      this._location.y + this.WorldView.Atlas.TileWidthR3 * 0.5,
       0
     );
   }
@@ -1054,21 +1073,29 @@ export class Sprite25D {
     this._worldrotation = this.Rotation.clone().multiply(this.Animation.AnimatedRotation);
     this._worldcolor = Utils.multiplyVec4(this.Color.clone(), this.Animation.AnimatedColor);
 
+    //This got hacky.  Basically JUST Character sprites are having a negative Y.
+    //They are in GRID space and not WORLD space for some reason as opposed to tiles.
+    //Should be fixed..
+
     //Apply parent transform.
     if (this.Parent) {
-      this._worldlocation.add(this.Parent.WorldPosition);
+      //**HACK!!!:
+      this._worldlocation.add(this.Parent.WorldPosition.clone().setY(this.Parent.WorldPosition.y*-1)); //Convert from Grid to World
       this._worldscale.multiply(this.Parent.WorldScale);
       this._worldrotation.multiply(this.Parent.WorldRotation);
       Utils.multiplyVec4(this._worldcolor, this.Parent.WorldColor);
     }
 
+
     //R3 Parent- We use this to move the tiles around realitve to hand
     if (this.R3Parent) {
       let v: vec3 = new vec3();
       this.R3Parent.getWorldPosition(v);
-      v.y *= -1; //HACK:
       this._worldlocation.add(v);
     }
+
+    //TODO fix this
+    this._worldlocation.y *= -1; //HACK://Convert from Grid to World
 
     SpriteFrame.createQuadVerts(this.QuadVerts, this._worldlocation, this._worldrotation, this._worldscale, this.Width, this.Height);
   }
@@ -1091,6 +1118,8 @@ export class Phyobj25D extends Sprite25D {
   private _velocity: vec3 = new vec3(0, 0, 0);
   public get Velocity(): vec3 { return this._velocity; }
   public set Velocity(x: vec3) { this._velocity = x; }
+
+  public ApplySnap: boolean = false;
 
   public update(dt: number) {
     //Update physics.
@@ -1124,11 +1153,21 @@ export class Phyobj25D extends Sprite25D {
 
     }
 
-    //Snap
-    this.Position.copy(this.Position.clone().add(this.Velocity));
+    //Update Position + velocity
+    if (this.Velocity.lengthSq()) {
+      this.Position.copy(this.Position.clone().add(this.Velocity));
 
-    //Reset velocity
-    this.Velocity.set(0, 0, 0);
+      //If we got a command to snap the player after applying velocity.
+      if (this.ApplySnap) {
+        //Snap.
+        let c = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center);
+        //   this.snapToCell(c);
+        this.ApplySnap = false;
+      }
+
+      //Reset velocity
+      this.Velocity.set(0, 0, 0);
+    }
 
     super.update(dt);
   }
@@ -1161,7 +1200,7 @@ export class Character extends Phyobj25D {
   private updateMovement(dt: number) {
     this.updatePosition(dt);
     if (this.computeNextDestination()) {
-      //this.updatePosition(dt); //Call a second time here, to prevent the player from stopping for a farme if the arrow key is held down.
+      this.updatePosition(dt); //Call a second time here, to prevent the player from stopping for a farme if the arrow key is held down.
     }
   }
   private updatePosition(dt: number) {
@@ -1170,6 +1209,12 @@ export class Character extends Phyobj25D {
       let a: string = Character.getAnimationNameForMovementDirection(this._eMoveDirection);
       if (!this.Animation.isPlaying(a)) {
         this.Animation.play(a, true);
+      }
+      if (this.SpeedMultiplier > 0) {
+        this.Animation.AnimationSpeed = 2;
+      }
+      else {
+        this.Animation.AnimationSpeed = 1.0;
       }
       let n: vec3 = Character.getMovementNormalForDirection(this._eMoveDirection);
       let nextPos: vec3 = this.Position.clone().add(n.clone().multiplyScalar(speed));
@@ -1190,11 +1235,14 @@ export class Character extends Phyobj25D {
         vel_len = dest_len;
         this.Animation.pause();
         this.Animation.setKeyFrame(0, null, true);
+
+        this.ApplySnap = true;
       }
       else {
         vel_len = this_len;
       }
       this.Velocity.copy(n.clone().multiplyScalar(vel_len));
+
 
       if (this._isPlayer) {
         this.WorldView.InputControls.lookAtPlayerChar();
@@ -1228,6 +1276,7 @@ export class Character extends Phyobj25D {
         return true;
       }
     }
+
     return false;
   }
   public face(dir: Direction4Way) {
@@ -1271,26 +1320,43 @@ export class Character extends Phyobj25D {
 
 }
 export class Viewport25D {
-  private _widthPixels: Int = 0 as Int;
-  private _heightPixels: Int = 0 as Int;
+  private _widthPixels: number = 0;
+  private _tilesWidth: number = 0;
+  private _heightPixels: number = 0;
+  private _tilesHeight: number = 0;
   private _boxR2: Box2f = new Box2f();
   private _boxR3: Box2f = new Box2f();
   public Center: vec3 = new vec3(0, 0, 0);
 
-  public get WidthPixels(): Int { return this._widthPixels; }
-  public get HeightPixels(): Int { return this._heightPixels; }
-  public get TilesWidth(): Int { return Math.floor(this._widthPixels / g_atlas.TileWidthPixels) as Int; }
-  public get TilesHeight(): Int { return Math.floor(this._heightPixels / g_atlas.TileHeightPixels) as Int; }
+  public get WidthPixels(): number { return this._widthPixels; }
+  public get HeightPixels(): number { return this._heightPixels; }
+  public get TilesWidth(): number { return this._tilesWidth; }
+  public get TilesHeight(): number { return this._tilesHeight; }
   public get BoxR2(): Box2f { return this._boxR2; }
   public get BoxR3(): Box2f { return this._boxR3; }
 
   private _box3helper: Box3Helper = null;
 
-  public constructor(width_pixels: Int, height_pixels: Int) {
-    this._widthPixels = width_pixels;
-    this._heightPixels = height_pixels;
+  public constructor() {
   }
-  public update() {
+  private widthHeightUpdate(dt: number) {
+    let dist = new vec3();
+    Globals.player.getWorldPosition(dist);
+
+    let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
+    let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV());
+    let tan_fov_2 = Math.tan(fov * 0.5);
+
+    //2 A * tan(fov/2) * tile_w = tiles width
+    this._tilesWidth = tan_fov_2 * Math.abs(dist.z) * g_atlas.TileWidthR3;
+    this._tilesHeight = tan_fov_2 * Math.abs(dist.z) * g_atlas.TileHeightR3 * ar;
+
+    this._widthPixels = this._tilesWidth * g_atlas.TileWidthPixels;
+    this._heightPixels = this._tilesHeight * g_atlas.TileHeightPixels;
+  }
+
+  public update(dt: number) {
+    this.widthHeightUpdate(dt);
     let tw = this.TilesWidth;
     let th = this.TilesHeight;
 
@@ -1331,18 +1397,9 @@ class InputControls {
     this._viewport = viewport;
   }
   public update(dt: number) {
-    //Movement
-    // if (Globals.input.mouse.Left.pressed()) {
-    //   Globals.input.MovementController.Axis.set(0, 0);
-    //   Globals.input.keyboard.SmoothAxis = true;
-    // }
-    // else if (Globals.input.mouse.Left.released()) {
-    //   Globals.input.keyboard.SmoothAxis = false;
-    //   Globals.input.MovementController.Axis.set(0, 0);
-    // }
     if (Globals.input.mouse.Right.pressOrHold()) {
       this.movePlayer(dt);
-      this.projectViewportWhileFlying();
+      this.centerViewportWhileFlying();
     }
     else {
       this.movePlayerChar();
@@ -1350,7 +1407,8 @@ class InputControls {
       this.lookAtPlayerChar();
     }
   }
-  private projectViewportWhileFlying() {
+  private centerViewportWhileFlying() {
+    //This simply re-centers the viewport to see another area of the world.
     let player_n = new vec3();
     Globals.player.getWorldDirection(player_n);
 
@@ -1416,7 +1474,13 @@ class InputControls {
 
   private movePlayerChar() {
     if (Globals.input.keyboard.Shift.pressOrHold()) {
-      this.PlayerChar.SpeedMultiplier = 20;
+      if (Globals.isDebug()) {
+        this.PlayerChar.SpeedMultiplier = 20;
+      }
+      else {
+        this.PlayerChar.SpeedMultiplier = 2;
+
+      }
     }
     else {
       this.PlayerChar.SpeedMultiplier = 1;
@@ -1458,6 +1522,9 @@ export class WorldView25D extends Object3D {
   private _masterMap: MasterMap = null;
   private _inputControls: InputControls = null;
 
+
+  private _quickUI: QuickUI = null;
+
   public get InputControls(): InputControls { return this._inputControls; }
   public set InputControls(x: InputControls) { this._inputControls = x; }
   public get Atlas(): Atlas { return this._atlas; }
@@ -1473,7 +1540,7 @@ export class WorldView25D extends Object3D {
   }
   public init(bufSizeTiles: Int) {
     //6 high x 16 wide
-    this._viewport = new Viewport25D(256 as Int, 92 as Int);
+    this._viewport = new Viewport25D();
 
     //This is where the most of the level processing happens.
     //hold onto your butts.
@@ -1497,6 +1564,9 @@ export class WorldView25D extends Object3D {
     this._mesh = new THREE.Mesh(this._buffer, mat);
 
     this.add(this._mesh);
+
+    this._quickUI = new QuickUI(this);
+    this._quickUI.Elements.push(new UIElement(this._quickUI, 0, 6, 11, 11));
   }
   public addObject25(ob: Sprite25D) {
     if (ob.Destroyed === false) {
@@ -1517,26 +1587,31 @@ export class WorldView25D extends Object3D {
   }
   public update(dt: number) {
     this.InputControls.update(dt);
+    this.updateViewport(dt);
+    this._quickUI.update();
 
-    //Update Objects
-    for (const [key, value] of this._objects) {
-      //There may be a faster way to do this. For instance, static objects don't update.
-      key.update(dt);
+    if (Globals.gameState === GameState.Play) {
+      //Update Objects
+      for (const [key, value] of this._objects) {
+        //There may be a faster way to do this. For instance, static objects don't update.
+        key.update(dt);
+      }
+
+      this.updatePostPhysics();
     }
-
-
-    this.updateViewport();
-
-    this.updatePostPhysics();
 
     //Copy Render Data
     this._buffer.beginCopy();
 
-    if (Globals.isDebug()) {
-      this.debug_DrawCells();
+    if (Globals.gameState === GameState.Play) {
+      if (Globals.isDebug()) {
+        this.debug_DrawCells();
+      }
+      this.drawEverything();
     }
-
-    this.drawEverything();
+    else if (Globals.gameState === GameState.Title) {
+      this._quickUI.draw();
+    }
 
     this._buffer.endCopy();
 
@@ -1568,11 +1643,11 @@ export class WorldView25D extends Object3D {
       this.copyCellTiles(cell, ob.Children[ci], frame, depth);
     }
   }
-  private updateViewport() {
+  private updateViewport(dt: number) {
     if (!this.Player) {
       Globals.debugBreak();
     }
-    this._viewport.update();
+    this._viewport.update(dt);
   }
   private updatePostPhysics() {
     this._viewportCellsFrame = this._masterMap.Area.Grid.GetCellManifoldForBox(this._viewport.BoxR2)
@@ -1587,7 +1662,7 @@ export class WorldView25D extends Object3D {
   }
   private debug_drawCell(c: Cell) {
     if (Cell.DebugFrame === null) {
-      Cell.DebugFrame = SpriteFrame.fromAtlasTile(this.Atlas, 2 as Int, 0 as Int);
+      Cell.DebugFrame = this.Atlas.getFrame(2 as Int, 0 as Int);
     }
     if (c.DebugVerts === null || c.DebugVerts.length < 4) {
       SpriteFrame.createQuadVerts(c.DebugVerts, c.TilePosR3, new Quaternion(1, 1, 1, 1), new vec2(1, 1), this.Atlas.TileWidthR3, this.Atlas.TileHeightR3);
@@ -2026,7 +2101,7 @@ export class Tickler extends PhysicsObject3D {
         this.Gesture = HandGesture.None;
       }
     }
-    else{
+    else {
       if (Globals.input.mouse.Left.releaseOrUp()) {
         //Essentially this would work best if we used a PhysicsObject with velocity and gravity.
         this.Held.R3Parent = null;
@@ -2036,7 +2111,98 @@ export class Tickler extends PhysicsObject3D {
     }
 
   }
+}
 
+export class UIElement {
+  //A simple texture that we got from the tile map
+  private _frame: SpriteFrame = null;
+  public get Frame(): SpriteFrame { return this._frame; }
+  public Verts: Array<vec3> = new Array<vec3>();
+  public Depth: number = 0.01;
+  private _ui: QuickUI = null;
+
+  //For now we're just going to use textures
+  public constructor(ui: QuickUI, frame_x: number, frame_y: number, frame_width: number, frame_height: number) {
+    this._ui = ui;
+    this._frame = ui.WorldView.Atlas.getFrame(frame_x as Int, frame_y as Int, frame_width as Int, frame_height as Int);
+  }
+  public update(parent_depth: number) {
+    //hard coding title screen here.
+
+    let rot: Quaternion = new Quaternion(1, 1, 1, 1);
+    let scale: vec2 = new vec2(1, 1);
+    let widthR3 = 1;
+    let heightR3 = 1;
+    let depth = parent_depth + this.Depth;
+
+
+
+    let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
+    let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV());
+    let sin_fov_2 = Math.sin(fov * 0.5);
+    let dist = (this._frame.tile_width_tiles * 0.5) / sin_fov_2;
+    //let delta_dist = Globals.player.position.z - dist;
+
+    //  let normal = new vec3();
+    //  Globals.camera.getWorldDirection(normal);
+    // let down = new vec3();
+    // down = Globals.camera.up.clone().multiplyScalar(-1);
+
+    // let right = new vec3();
+    // right = down.clone().cross(normal);
+
+    //  let campos = new vec3();
+    //  Globals.player.getWorldPosition(campos);
+
+    let frust: Frustum = new Frustum();
+    let delta = frust.ftl.clone().sub(frust.ntl);
+    let pos: vec3 = frust.ntl.clone().add(delta.normalize().multiplyScalar(dist));
+
+    //let pos: vec3 = new vec3(this._ui.WorldView.Viewport.BoxR2.Min.x, this._ui.WorldView.Viewport.BoxR2.Min.y, 0);
+
+    SpriteFrame.createQuadVerts(this.Verts, pos, rot, scale, this._frame.tile_width_tiles, this._frame.tile_height_tiles, 
+      frust.right.clone(), frust.down.clone(), frust.normal.clone());
+
+    //compute the distance needed to keep this in the correct distance so it fills the screen.
+
+
+    // for (let vi = 0; vi < 4; ++vi) {
+    //  this.Verts[vi].z = delta_dist;
+    // }
+
+
+    //Add depth ** Do this later for ui elements that are on teh screen...
+    // for (let vi = 0; vi < 4; ++vi) {
+    //   this.Verts[vi].z = depth;
+    // }
+
+  }
+}
+export class QuickUI {
+  private _elements: Array<UIElement> = new Array<UIElement>();
+  public get Elements(): Array<UIElement> { return this._elements; }
+
+  public readonly c_base_ui_depth = 0.06;
+
+  private _view: WorldView25D = null;
+  public get WorldView(): WorldView25D { return this._view; }
+  public constructor(view: WorldView25D) {
+    this._view = view;
+  }
+  public update() {
+
+    for (let elem of this._elements) {
+      elem.update(this.c_base_ui_depth);
+    }
+  }
+  public draw() {
+    let normal: vec3 = new vec3(0, 0, 1);
+    let color: vec4 = new vec4(1, 1, 1, 1);
+
+    for (let elem of this._elements) {
+      this._view.Buffer.copyFrameQuad(elem.Frame, elem.Verts, normal, color, 1, false, false, DirtyFlag.All);
+    }
+  }
 }
 
 let g_ambientlight: THREE.AmbientLight = null;
@@ -2046,7 +2212,7 @@ let g_hand: Tickler = null;
 
 let g_atlas: Atlas = null;
 let g_mainWorld: WorldView25D = null;
-
+let g_bAssetsLoaded: boolean = false;
 $(document).ready(function () {
   Globals.setFlags(document.location);
 
@@ -2078,8 +2244,8 @@ function loadResources() {
       })
     });
   Globals.models.setModelAsyncCallback(Files.Model.Hand, function (model: THREE.Mesh) {
-
     initializeGame();
+    g_bAssetsLoaded = true;
   });
 }
 function createTickler(model: Object3D, action_point: Object3D) {
@@ -2088,9 +2254,7 @@ function createTickler(model: Object3D, action_point: Object3D) {
   model.rotateY(Math.PI);
 
   g_hand = new Tickler(model, action_point);
-
   g_hand.scale.set(3, 3, 3);
-  Globals.physics3d.add(g_hand);
 }
 function initializeGame() {
   createWorld();
@@ -2129,19 +2293,14 @@ function createWorld() {
 
   player.update(0.0001);
 }
-
-function listenForGameStart() {
-  if (Globals.input.right.A.pressed() || Globals.input.right.Trigger.pressed() || Globals.input.left.A.pressed() || Globals.input.left.Trigger.pressed()) {
-    startGame();
-  }
-}
-function startGame() {
-  Globals.gameState = GameState.Play;
-}
 function gameLoop(dt: number) {
   Globals.prof.begin("main game loop");
+
+  //Listen for game start
   if (Globals.gameState === GameState.Title) {
-    listenForGameStart();
+    if (Globals.input.right.A.pressed() || Globals.input.right.Trigger.pressed() || Globals.input.left.A.pressed() || Globals.input.left.Trigger.pressed()) {
+      Globals.gameState = GameState.Play;
+    }
   }
 
   g_mainWorld.update(dt);

@@ -273,7 +273,7 @@ export class Tiles {
     });
     this.addTile(function () {
       let tile = new Sprite25D(atlas, "Rock", TiledSpriteId.Rock, TileLayer.Unset);
-      tile.Animation.addTileFrame(new ivec2(0, 3), atlas);
+      tile.Animation.addTileFrame(new ivec2(9, 3), atlas);
       tile.Tiling = Tiling.Single;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
       tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
@@ -282,7 +282,7 @@ export class Tiles {
     });
     this.addTile(function () {
       let tile = new Sprite25D(atlas, "Hole", TiledSpriteId.Hole, TileLayer.Unset);
-      tile.Animation.addTileFrame(new ivec2(1, 3), atlas);
+      tile.Animation.addTileFrame(new ivec2(10, 3), atlas);
       tile.Tiling = Tiling.Single;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
       tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
@@ -290,8 +290,8 @@ export class Tiles {
     });
     this.addTile(function () {
       let tile = new Sprite25D(atlas, "Monster_Grass", TiledSpriteId.Monster_Grass, TileLayer.Unset);
-      tile.Animation.addTileFrame(new ivec2(2, 3), atlas);
-      tile.Animation.addTileFrame(new ivec2(3, 3), atlas);
+      tile.Animation.addTileFrame(new ivec2(11, 3), atlas);
+      tile.Animation.addTileFrame(new ivec2(12, 3), atlas);
       tile.Tiling = Tiling.Single;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
       tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;

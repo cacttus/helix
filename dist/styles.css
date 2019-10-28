@@ -1,0 +1,96 @@
+    @font-face {
+      font-family: 'computer-pixel-7';
+      src: url('/fonts/computer-pixel-7.ttf') format('truetype');
+    }
+
+    .browser_warning_container {
+      overflow: hidden;
+      margin: auto;
+      width: auto;
+      height: auto;
+      border-radius: 1em;
+      border: 2px #aeaeae;
+      background-color: #fefefe;
+      font-family: 'computer-pixel-7', sans-serif;
+      font-size:26px;;
+      color: #292929;
+      padding-right: 2em;
+      padding-left: 2em;
+      padding-bottom: .2em;
+      padding-top: .5em;
+      z-index: 9998 !important;
+      opacity:0.7;
+      float:left; 
+    }
+    .browser_warning_container_ok{
+      display:inline-block;
+      min-width:4em;
+      cursor:pointer; 
+      border-radius:.3em;
+      background-color:#292929;
+      color:#a9a9a9;
+      padding:0.2em;
+      margin:auto;
+      width:auto;
+    }
+    .browser_warning_container_ok:hover{
+      display:inline-block;
+      min-width:4em;
+      cursor:pointer; 
+      border-radius:.3em;
+      background-color:#494949;
+      color:#a9a9a9;
+      padding:0.2em;
+      margin:auto;
+      width:auto;
+    }
+
+    body {
+      margin: 0;
+      background-color: #e9e9e9;
+    }
+
+    .canvas {
+      width: 33;
+      height: 33;
+      /* Is this cross-browser compatible ? https://stackoverflow.com/questions/7615009/disable-interpolation-when-scaling-a-canvas*/
+      image-rendering: optimizeSpeed;
+      /* Older versions of FF          */
+      image-rendering: -moz-crisp-edges;
+      /* FF 6.0+                       */
+      image-rendering: -webkit-optimize-contrast;
+      /* Safari                        */
+      image-rendering: -o-crisp-edges;
+      /* OS X & Windows Opera (12.02+) */
+      image-rendering: pixelated;
+      /* Awesome future-browsers       */
+      -ms-interpolation-mode: nearest-neighbor;
+      /* IE  */
+      display: block;
+    }
+
+    #outPopUp {
+      position: absolute;
+      width: 300px;
+      height: 200px;
+      line-height: 200px;
+      z-index: 99999;
+      top: 50%;
+      left: 50%;
+      margin: -100px 0 0 -150px;
+      text-align: center;
+    }
+
+    .loadingText {
+      width: 100%;
+      font-family: Arial, Helvetica, sans-serif;
+      font-weight: 900;
+      font-style: italic;
+      font-size: 60px;
+
+      background: -webkit-linear-gradient(0deg, #292929 0%, #a9a9a9 50%, #292929 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-stroke: 4px transparent;
+      color: #e9e9e9;
+    }
