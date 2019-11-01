@@ -1,10 +1,38 @@
 import * as THREE from 'three';
 import { Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D, AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, BoxHelper } from 'three';
 import { Dictionary } from './Base';
-import { vec4 } from 'Math';
+import { vec4 } from './Math';
+import { Globals } from './Globals';
+
+type WithProperty<K extends string, V = {}> = {
+  [P in K]: V
+}
 
 export class Utils {
-  public static multiplyVec4(a: vec4, b: vec4) : vec4 {
+  public static enumKeyVals(kv: Array<string>): Map<string, number> {
+    //Returns a map that you can iterate over enum:
+    //Usage:
+    //    for(let [k,v] of enumKeyVals(Object.keys(MyEnum)))
+    // Wish there was a way to make this generic though.
+
+    let ret: Map<string, number> = new Map<string, number>();
+
+    if (kv.length % 2 !== 0) {
+      Globals.logError("enumKeyVals - Enum values were not evenly divisible. ?");
+      Globals.debugBreak();
+    }
+
+    let valoff: number = kv.length / 2;
+
+    for (let i = 0; i < valoff; ++i) {
+      let key = kv[i + valoff];
+      let val = parseInt(kv[i]);// as number;
+      ret.set(key, val);
+    }
+
+    return ret;
+  }
+  public static multiplyVec4(a: vec4, b: vec4): vec4 {
     a.x *= b.x;
     a.y *= b.y;
     a.z *= b.z;

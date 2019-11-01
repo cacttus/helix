@@ -24,13 +24,23 @@
       "node_modules/@types/",
     ],
     "alwaysStrict" : true,
-    "noImplicitAny": true,
-    "noImplicitThis": true,
+
     //"strictNullChecks": true,
     "allowSyntheticDefaultImports": true,
     //These two are so that we can import the Tiled JSON file. https://hackernoon.com/import-json-into-typescript-8d465beded79
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
     //,"esModuleInterop": true ,
+
+    //"noEmit": true, //**We are using this because webpack is emitting the output code anyway... 
+    "noEmitOnError":true,//	boolean	false	Do not emit outputs if any errors were reported.
+    "noErrorTruncation":true,//	boolean	false	Do not truncate error messages.
+    "noFallthroughCasesInSwitch":true,//	boolean	false	Report errors for fallthrough cases in switch statement.
+    "noImplicitAny": true,
+    "noImplicitReturns":true,//	false	Report an error when not all code paths in function return a value.
+    "noImplicitThis": true,
+    //"noUnusedLocals":true,// probably too much
+    //"noUnusedParameters":true,// probably too much
+
   },
   "exclude": [
     "./node_modules",

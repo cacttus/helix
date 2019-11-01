@@ -177,7 +177,7 @@ export class _Globals {
     return this._frame;
   }
   public logInfo(e: any): void {
-    let str: string = "" + e;
+    let str: string = ">>I:" + e;
     console.info(e);
 
     if (this._console3d) {
@@ -185,7 +185,7 @@ export class _Globals {
     }
   }
   public logError(e: any): void {
-    let str: string = "" + e;
+    let str: string = ">>E:" + e;
     console.error(str);
 
     let stack: string = '' + new Error().stack;
@@ -193,9 +193,13 @@ export class _Globals {
     if (this._console3d) {
       this._console3d.log(str);
     }
+
+    if(Globals.isDebug()){
+     // Globals.debugBreak();
+    }
   }
   public logWarn(e: any): void {
-    let str: string = "" + e;
+    let str: string = ">>W:" + e;
     console.warn(str);
 
     if (this._console3d) {
@@ -203,7 +207,7 @@ export class _Globals {
     }
   }
   public logDebug(e: any): void {
-    let str: string = "" + e;
+    let str: string = ">>D:" + e;
     console.debug(str);
 
     if (this._console3d) {

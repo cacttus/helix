@@ -1,18 +1,46 @@
 import * as THREE from 'three';
 import {
   Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D,
-  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute, NormalBlending, WrapAroundEnding, InvertStencilOp, Box3Helper, Int8BufferAttribute
+  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute, NormalBlending, WrapAroundEnding, InvertStencilOp, Box3Helper, Int8BufferAttribute, Texture
 } from 'three';
 import { Globals, GameState, ResizeMode } from './Globals';
 import { basename } from 'upath';
 import { Utils } from './Utils';
-import { Random, ModelManager, AfterLoadFunction, Frustum, Timer } from './Base';
+import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
-import { TileGrid, MasterMap, Cell, TileBlock, TiledSpriteId, TileLayer } from './TileGrid';
+import { TileGrid, MasterMap, Cell, TileBlock, TiledSpriteId, TileLayerID } from './TileGrid';
 import { PhysicsObject3D } from './Physics3D';
 
+export class Color4 {
+  public r: number;
+  public g: number;
+  public b: number;
+  public a: number;
+  public constructor(dr: number, dg: number, db: number, da: number) {
+    this.r = dr; this.g = dg; this.b = db; this.a = da;
+  }
+  public equals(c: Color4): boolean {
+    let b = (c.r === this.r) && (c.g === this.g) && (c.b === this.b) && (c.a === this.a);
+    return b;
+  }
+}
+function getPixel(x: number, y: number, imageData: ImageData): Color4 {
+  let position = (x + imageData.width * y) * 4;
+  let data = imageData.data;
+  let c: Color4 = new Color4(data[position], data[position + 1], data[position + 2], data[position + 3]);
+  return c;
+}
+function setPixel(x: number, y: number, color: Color4, imageData: ImageData) {
+  let position = (x + imageData.width * y) * 4;
+  let data = imageData.data;
+
+  data[position + 0] = color.r;
+  data[position + 1] = color.g;
+  data[position + 2] = color.b;
+  data[position + 3] = color.a;
+}
 export class ImageResource {
   private _location: string = "";
   public get Location(): string { return this._location; }
@@ -26,15 +54,125 @@ export class ImageResource {
 
     let that = this;
     //THREE.ImageUtils.loadTexture(loc), transparent: true, opacity: 0.5, color: 0xFF0000 }))
-    this.Texture = new THREE.TextureLoader().load(loc, function (tex) {
-      if (afterLoad) {
-        afterLoad(that);
+    new THREE.TextureLoader().load(loc, function (tex: THREE.Texture) {
+      var canvas_texdata = document.createElement('canvas');
+      canvas_texdata.width = tex.image.width;
+      canvas_texdata.height = tex.image.height;
+
+      var context = canvas_texdata.getContext('2d');
+      context.drawImage(tex.image, 0, 0);
+      let tex_data = context.getImageData(0, 0, tex.image.width, tex.image.height);
+
+
+
+      //Alter the image color. 
+      //Set the color of the image.
+      let numColors = 8; //2 pixels downward per color
+      let baseGradient = new Array<Color4>();
+      for (let iy = 0; iy < numColors * 2; iy += 2) {
+        baseGradient.push(getPixel(1, 1 + iy, tex_data));
       }
+
+      let blueGradient = new Array<Color4>();
+      for (let iy = 0; iy < numColors * 2; iy += 2) {
+        blueGradient.push(getPixel(2, 1 + iy, tex_data));
+      }
+
+      let redGradient = new Array<Color4>();
+      for (let iy = 0; iy < numColors * 2; iy += 2) {
+        redGradient.push(getPixel(3, 1 + iy, tex_data));
+      }
+
+      let idata: ImageData = new ImageData(tex.image.width, tex.image.height);
+
+      //Change texture color
+      for (let iy = 0; iy < tex.image.height; ++iy) {
+        for (let ix = 0; ix < tex.image.width; ++ix) {
+
+
+          //    setPixel(ix, iy, new Color4(255,255,255,255), idata);
+          //   continue;
+          let c0 = getPixel(ix, iy, tex_data);
+          let grad_index = -1;
+          for (let ig = 0; ig < blueGradient.length; ++ig) {
+            if (baseGradient[ig].equals(c0)) {
+              grad_index = ig;
+            }
+          }
+          if (grad_index >= 0) {
+            setPixel(ix, iy, blueGradient[grad_index], idata);
+          }
+          else {
+            setPixel(ix, iy, c0, idata);
+          }
+        }
+      }
+
+      //https://stackoverflow.com/questions/25108574/update-texture-map-in-threejs
+      // that.Texture.image.data = id;// = { data: id, width: that.Texture.image.width, height: that.Texture.image.height };
+
+      //let gl = Globals.canvas.getContext("webgl2");
+      createImageBitmap(idata).then(function (imgBitmap) {
+        //Asynchronously create a new texture and darw the stuff.
+        let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
+        canvasxx.width = tex.image.width;
+        canvasxx.height = tex.image.height;
+        let context = canvasxx.getContext('2d');
+        context.drawImage(imgBitmap, 0, 0);
+
+        //this.Texture = 
+        that.Texture = new THREE.Texture(canvasxx);
+
+        //that.Texture.image;
+        that.Texture.magFilter = THREE.NearestFilter;
+        that.Texture.minFilter = THREE.NearestMipmapNearestFilter;
+        that.Texture.generateMipmaps = true;
+        that.Texture.needsUpdate = true;
+
+        if (afterLoad) {
+          afterLoad(that);
+        }
+      });
+
+
+      //afterLoad(that);
+
     });
-    this.Texture.magFilter = THREE.NearestFilter;
-    this.Texture.minFilter = THREE.NearestMipmapNearestFilter;
-    this.Texture.generateMipmaps = true;
+    // that.Texture.magFilter = THREE.NearestFilter;
+    // that.Texture.minFilter = THREE.NearestMipmapNearestFilter;
+    // that.Texture.generateMipmaps = true;
+
   }
+
+  // private _imageData: ImageData = null;
+  // public get ImageData(): ImageData {
+  //   if (this._imageData === null) {
+
+  //     var canvas = document.createElement('canvas');
+  //     canvas.width = this.Texture.image.width;
+  //     canvas.height = this.Texture.image.height;
+
+  //     var context = canvas.getContext('2d');
+  //     context.drawImage(this.Texture.image, 0, 0);
+  //     this._imageData = context.getImageData(0, 0, this.Texture.image.width, this.Texture.image.height);
+  //   }
+  //   return this._imageData;
+  // }
+
+  // public getPixel(x: number, y: number): Color4 {
+  //   var position = (x + this.ImageData.width * y) * 4, data = this.ImageData.data;
+  //   let c: Color4 = new Color4(data[position], data[position + 1], data[position + 2], data[position + 3]);
+  //   return c;
+  // }
+  // public setPixel(x: number, y: number, color: Color4) {
+  //   var position = (x + this.ImageData.width * y) * 4, data = this.ImageData.data;
+
+  //   this.ImageData.data[position + 0] = color.r;
+  //   this.ImageData.data[position + 1] = color.g;
+  //   this.ImageData.data[position + 2] = color.b;
+  //   this.ImageData.data[position + 3] = color.a;
+  // }
+
 }
 export class Atlas extends ImageResource {
   /*
@@ -156,9 +294,9 @@ export class SpriteFrame {
     // let normal: vec3 = WorldView25D.Normal;
 
     //Position the image relative to the world grid's basis
-    let tilepos_local: vec3 =origin.clone();//right.clone().multiplyScalar(origin.x);
+    let tilepos_local: vec3 = origin.clone();//right.clone().multiplyScalar(origin.x);
     //tilepos_local.add(down.clone().multiplyScalar(origin.y));
-   // tilepos_local.add(normal.clone().multiplyScalar(origin.z));
+    // tilepos_local.add(normal.clone().multiplyScalar(origin.z));
 
     //Force add 4 verts
     if (verts.length !== 4) {
@@ -289,13 +427,13 @@ export class SpriteAnimationData {
     this._name = name;
   }
 }
-export class SpriteProp {
+export class SpriteTileInfo {
   //This class defines sprite properties at the sprite level for animation definitions.
   //specifically, which layer the sprite props should be.
   public RelativeTileOffset: ivec2 = new ivec2(0, 0);
-  public Layer: TileLayer = TileLayer.Objects;
+  public Layer: TileLayerID = TileLayerID.Unset; // If left unset, we set the sprite to the layer that it comes in in the map.
   public Collision: CollisionHandling = CollisionHandling.None;
-  public constructor(tileoff: ivec2, layer: TileLayer, collision: CollisionHandling) {
+  public constructor(tileoff: ivec2, layer: TileLayerID, collision: CollisionHandling) {
     this.RelativeTileOffset = tileoff;
     this.Layer = layer;
     this.Collision = collision;
@@ -303,9 +441,9 @@ export class SpriteProp {
 }
 export enum CollisionHandling { None, CollideWithLayerObjects }
 export enum AnimationPlayback { Playing, Pauseed, Stopped }
-class Animation25D {
+export class Animation25D {
   //Separate class to deal with animations and transitinos.  Just because Sprite25D was getting big.
-  private static readonly c_strDefaultTileAnimation: string = "_default";
+  public static readonly c_strDefaultTileAnimation: string = "_default";
 
   private _animated_location: vec3 = new vec3(0, 0, 0); // Animated attributes.  These are applied if there is animation on the object.
   private _animated_rotation: Quaternion = new Quaternion(0, 0, 0, 0);
@@ -323,7 +461,24 @@ class Animation25D {
   private _animationSpeed: number = 1;//multiplier
   private _playback: AnimationPlayback = AnimationPlayback.Stopped;
 
+
   private _sprite: Sprite25D = null;
+
+  public get CurrentFrameIndex(): Int {
+    if (!this.CurrentAnimation) {
+      return toInt(-1);
+    }
+    if (!this.CurrentAnimation.KeyFrames) {
+      return toInt(-1);
+    }
+
+    for (let i = 0; i < this.CurrentAnimation.KeyFrames.length; ++i) {
+      if (this.CurrentAnimation.KeyFrames[i].Frame === this.Frame) {
+        return toInt(i);
+      }
+    }
+    return toInt(-1);
+  }
 
   //Tileblock Data - static tile data used by background sprites & such.
   // private _tileData: SpriteAnimationData = null;
@@ -334,9 +489,18 @@ class Animation25D {
 
   public get Sprite(): Sprite25D { return this._sprite; }
   public get AnimationTime(): number { return this._animationTime; }
-  public set AnimationTime(x: number) { this._animationTime = x; }
-  public get AnimationSpeed(): number { return this._animationSpeed; }
-  public set AnimationSpeed(x: number) { this._animationSpeed = x; }
+  public set AnimationTime(x: number) {
+    this._animationTime = x;
+  }
+  public get AnimationSpeed(): number {
+    return this._animationSpeed;
+  }
+  public set AnimationSpeed(x: number) {
+    this._animationSpeed = x;
+    for (let ch of this.Sprite.Children) {
+      ch.Animation.AnimationSpeed = x;
+    }
+  }
   public get Animations(): Map<string, SpriteAnimationData> { return this._animations; }
   public get Loop(): boolean { return this._loop; }
 
@@ -486,11 +650,6 @@ class Animation25D {
       c.Animation.play(animation_name);
     }
   }
-
-  public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1)) {
-    //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
-    this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]]), 0, atlas, imageSize, true);
-  }
   private _tileData_Cached: SpriteAnimationData = null;//Store it for easier retrieval.
   public get TileData(): SpriteAnimationData {
     if (!this._tileData_Cached) {
@@ -498,17 +657,22 @@ class Animation25D {
     }
     return this._tileData_Cached;
   }
+  public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1), props: Array<SpriteTileInfo> = null, frameDuration: number = 0) {
+    //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
+    this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]]), frameDuration, atlas, imageSize, true, props);
+  }
   public addTiledAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, imageSize:
-    ivec2 = null, append: boolean = false, props: Array<SpriteProp> = null) {
+    ivec2 = null, append: boolean = false, props: Array<SpriteTileInfo> = null) {
     //This sets 'real' frame-by-frame animation for a multiple tiled sprite, OR can be used to set static tiled animations.
     //if Append is true, we append the given FDef keys to the input animation
     //Frames should reference from the top left corner (root) of the animated image.
     //This both creates sprites and adds animations to them.
+    //Props: Note that if you have props you must define a prop for each tile in the image.
     for (let jtile = 0; jtile < imageSize.y; ++jtile) {
       for (let itile = 0; itile < imageSize.x; ++itile) {
 
         //Find sprite prop if we have one defined.
-        let prop: SpriteProp = null;
+        let prop: SpriteTileInfo = null;
         if (props) {
           for (let ob_prop of props) {
             if (ob_prop.RelativeTileOffset.x === toInt(itile) && ob_prop.RelativeTileOffset.y === toInt(jtile)) {
@@ -516,7 +680,14 @@ class Animation25D {
               break;
             }
           }
+
+          if (prop === null) {
+            Globals.logError("Could not find tiled sprite prop for a property-defined tiled sprite.");
+            Globals.debugBreak();
+          }
         }
+
+
 
         if (itile === 0 && jtile === 0) {
           this.Sprite.SubTile = new vec2(itile, jtile);
@@ -569,7 +740,7 @@ class Animation25D {
       if (append === false) {
         Globals.logError("Tried to add another animation " + animation_name + " -- already added.");
         Globals.debugBreak();
-        return;
+        return null;
       }
       else {
         //Do nothign, we got it
@@ -725,7 +896,8 @@ export enum Tiling {
   Set3x3Block /*a solid 3x3 block with no corners (9 tiles) */,
   Set3x3Seamless /* a terrain master tileset 40+ tiles */,
   Random,
-  SetEvenOdd2x2
+  FoliageBorderRules,
+  FenceBorderRules,
 }
 export interface CollisionFunction25D { (thisObj: Phyobj25D, other: Phyobj25D, this_block: TileBlock, other_block: TileBlock): void; }
 export interface GestureCallback { (thisObj: Sprite25D, this_block: TileBlock, hand: Tickler): void; }
@@ -768,7 +940,7 @@ export class Sprite25D {
   private _quadNormal: vec3 = new vec3(0, 0, 1); // do not clone
 
   private _isCellTile: boolean = false;
-  public _layer: TileLayer = TileLayer.Unset;
+  public _layer: TileLayerID = TileLayerID.Unset;
   private _atlas: Atlas = null;
   private _collisionHandling: CollisionHandling = CollisionHandling.None;
 
@@ -811,14 +983,18 @@ export class Sprite25D {
   public get CollisionHandling(): CollisionHandling { return this._collisionHandling; }
   public set CollisionHandling(x: CollisionHandling) { this._collisionHandling = x; }
 
-  public get Layer(): TileLayer { return this._layer; }
-  public set Layer(x: TileLayer) { this._layer = x; }
+  public get Layer(): TileLayerID { return this._layer; }
+  public set Layer(x: TileLayerID) { this._layer = x; }
 
   public get IsCellTile(): boolean { return this._isCellTile; }
   public set IsCellTile(x: boolean) { this._isCellTile = x; }
 
   public get Tiling(): Tiling { return this._tiling; }
   public set Tiling(x: Tiling) { this._tiling = x; }
+
+  public _tilingAnimated: boolean = false; // True if the tiling for this tile is animated
+  public get TilingAnimated(): boolean { return this._tilingAnimated; }
+  public set TilingAnimated(x: boolean) { this._tilingAnimated = x; }
 
   public get BoundBox_Grid(): Box2f { return this._boundBox_grid; }
   public get BoundBox_World(): Box2f { return this._boundBox_world; }
@@ -896,7 +1072,7 @@ export class Sprite25D {
 
   private _debugBox: THREE.Box3Helper = null;
 
-  public constructor(atlas: Atlas, name: string = null, spriteId: TiledSpriteId = TiledSpriteId.None, layer: TileLayer = null) {
+  public constructor(atlas: Atlas, name: string = null, spriteId: TiledSpriteId = TiledSpriteId.None, layer: TileLayerID = null) {
     this._atlas = atlas;
     if (name) {
       this._name = name;
@@ -1080,7 +1256,7 @@ export class Sprite25D {
     //Apply parent transform.
     if (this.Parent) {
       //**HACK!!!:
-      this._worldlocation.add(this.Parent.WorldPosition.clone().setY(this.Parent.WorldPosition.y*-1)); //Convert from Grid to World
+      this._worldlocation.add(this.Parent.WorldPosition.clone().setY(this.Parent.WorldPosition.y * -1)); //Convert from Grid to World
       this._worldscale.multiply(this.Parent.WorldScale);
       this._worldrotation.multiply(this.Parent.WorldRotation);
       Utils.multiplyVec4(this._worldcolor, this.Parent.WorldColor);
@@ -1108,11 +1284,36 @@ export class Sprite25D {
     this._dirtyFlags = 0;
   }
 
-  public applyProp(sp: SpriteProp) {
+  public applyProp(sp: SpriteTileInfo) {
     this.Layer = sp.Layer;
     this.CollisionHandling = sp.Collision;
   }
+  protected checkCollision(cell: Cell): boolean {
+    var res: { value: boolean } = { value: false };
+    this.checkCollision_r(cell, res);
 
+    return res.value ? res.value : false;
+  }
+  private checkCollision_r(cell: Cell, result: { value: boolean }) {
+    if (result.value) {
+      return;
+    }
+
+    if (cell.isBlocked(this.Layer as Int)) {
+      result.value = true;
+      return;
+    }
+
+    for (let ch of this.Children) {
+      if (ch.canCollide()) {
+        ch.checkCollision_r(cell, result);
+      }
+    }
+
+  }
+  public canCollide(): boolean {
+    return this.CollisionHandling === CollisionHandling.CollideWithLayerObjects;
+  }
 }
 export class Phyobj25D extends Sprite25D {
   private _velocity: vec3 = new vec3(0, 0, 0);
@@ -1171,6 +1372,7 @@ export class Phyobj25D extends Sprite25D {
 
     super.update(dt);
   }
+
 }
 export enum Direction4Way { None, Left, Right, Up, Down };
 export class Character extends Phyobj25D {
@@ -1189,7 +1391,12 @@ export class Character extends Phyobj25D {
   public get IsPlayer(): boolean { return this._isPlayer; }
   public set IsPlayer(x: boolean) { this._isPlayer = x; }
 
+  private _hitSoundTimer: WaitTimer = new WaitTimer(.6);
+  private _runSoundTimer: WaitTimer = new WaitTimer(.6);
+
   public update(dt: number) {
+    this._hitSoundTimer.update(dt);
+    this._runSoundTimer.update(dt);
     this.updateMovement(dt);
     super.update(dt);
   }
@@ -1203,19 +1410,21 @@ export class Character extends Phyobj25D {
       this.updatePosition(dt); //Call a second time here, to prevent the player from stopping for a farme if the arrow key is held down.
     }
   }
+  private stopMovementAnimation() {
+    this.Animation.pause();
+    this.Animation.setKeyFrame(0, null, true);
+  }
+  private playMovementAnimation(dir: Direction4Way) {
+    let a: string = Character.getAnimationNameForMovementDirection(dir);
+    if (!this.Animation.isPlaying(a)) {
+      this.Animation.play(a, true);
+    }
+    this.Animation.AnimationSpeed = this.SpeedMultiplier;
+  }
   private updatePosition(dt: number) {
     if (this._bMoving) {
       let speed = this._speed * dt * this.SpeedMultiplier;
-      let a: string = Character.getAnimationNameForMovementDirection(this._eMoveDirection);
-      if (!this.Animation.isPlaying(a)) {
-        this.Animation.play(a, true);
-      }
-      if (this.SpeedMultiplier > 0) {
-        this.Animation.AnimationSpeed = 2;
-      }
-      else {
-        this.Animation.AnimationSpeed = 1.0;
-      }
+
       let n: vec3 = Character.getMovementNormalForDirection(this._eMoveDirection);
       let nextPos: vec3 = this.Position.clone().add(n.clone().multiplyScalar(speed));
       let vel_len: number = 0;
@@ -1231,15 +1440,23 @@ export class Character extends Phyobj25D {
 
       if (this_delta >= dest_delta) {
         //Overshot our dest, set the position.
-        this._bMoving = false;
         vel_len = dest_len;
-        this.Animation.pause();
-        this.Animation.setKeyFrame(0, null, true);
-
+        this._bMoving = false;
+        this.stopMovementAnimation();
         this.ApplySnap = true;
       }
       else {
         vel_len = this_len;
+
+        //Run Noise
+        if (this.SpeedMultiplier > 1.1) {
+          this._runSoundTimer.interval = (1.0 / (this.SpeedMultiplier * 4)); // 4 = .125 = 4 for 4 frames.
+          if (this._runSoundTimer.ready()) {
+            Globals.audio.play(Files.Audio.RunStep, this.Center);
+            this._runSoundTimer.reset();
+          }
+        }
+
       }
       this.Velocity.copy(n.clone().multiplyScalar(vel_len));
 
@@ -1251,29 +1468,44 @@ export class Character extends Phyobj25D {
 
   }
   private computeNextDestination(): boolean {
+    //Move 1 tile.
+
     if (this._eCommandedDirection !== Direction4Way.None) {
       if (!this._bMoving) {
-        this._bMoving = true;
-        this._eMoveDirection = this._eCommandedDirection;
-        this._startPosition = this.Position.clone();
-        //Move 1 tile.
-
-        //Test
-        let cc = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center);
-
-        let n = Character.getMovementNormalForDirection(this._eMoveDirection);
+        let n = Character.getMovementNormalForDirection(this._eCommandedDirection);
         n.multiplyScalar(this.WorldView.Atlas.TileWidthR3);
         let c = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center.clone().add(n));
 
+        //Check to see if neighbor cell is blocked.
         if (c) {
-          this._destination = new vec3(c.CellPos_World.x, c.CellPos_World.y, 0);
+          if (this.checkCollision(c)) {
+            if (this._hitSoundTimer.ready()) {
+              Globals.audio.play(Files.Audio.HitWall, this.Center);
+              this._hitSoundTimer.reset();
+            }
+
+            this.SpeedMultiplier = this._hitSoundTimer.interval;
+          }
+          else {
+            this._bMoving = true;
+            this._eMoveDirection = this._eCommandedDirection;
+            this._startPosition = this.Position.clone();
+            this._destination = new vec3(c.CellPos_World.x, c.CellPos_World.y, 0);
+          }
         }
         else {
           this._bMoving = false;
         }
 
+        this.playMovementAnimation(this._eCommandedDirection);//don't use the move direction
+
         this._eCommandedDirection = Direction4Way.None;
         return true;
+      }
+    }
+    else {
+      if (!this._bMoving) {
+        this.stopMovementAnimation();
       }
     }
 
@@ -1387,7 +1619,7 @@ export class Viewport25D {
 }
 class InputControls {
   private _playerChar: Character = null;
-  private _playerCharZoom: number = 8;
+  private _playerCharZoom: number = 13;
   private _viewport: Viewport25D = null;
 
   public get PlayerChar(): Character { return this._playerChar; }
@@ -1458,7 +1690,7 @@ class InputControls {
   }
   private zoomPlayerChar() {
     let zoomPerWheel = 0.1;
-    let maxZoom: number = 12;
+    let maxZoom: number = 20;
     let minZoom: number = 3;
 
     if (Globals.isDebug()) {
@@ -1502,6 +1734,7 @@ class InputControls {
     }
   }
 }
+let g_material: THREE.MeshBasicMaterial;
 export class WorldView25D extends Object3D {
   //*Note the difference between downR3 World and Grid.  The TileGrid's down is opposite.
   public static readonly DownR3Grid: vec3 = new vec3(0, 1, 0);
@@ -1548,7 +1781,7 @@ export class WorldView25D extends Object3D {
 
     this._buffer = new TileBuffer(bufSizeTiles * 4, this);
 
-    let mat = new THREE.MeshBasicMaterial({
+    g_material = new THREE.MeshBasicMaterial({
       color: 0xffffff
       , side: THREE.DoubleSide
       , map: this.Atlas.Texture
@@ -1561,7 +1794,7 @@ export class WorldView25D extends Object3D {
       //, blending: THREE.MultiplyBlending // or Normalblending (unsure)
     });
 
-    this._mesh = new THREE.Mesh(this._buffer, mat);
+    this._mesh = new THREE.Mesh(this._buffer, g_material);
 
     this.add(this._mesh);
 
@@ -1591,6 +1824,10 @@ export class WorldView25D extends Object3D {
     this._quickUI.update();
 
     if (Globals.gameState === GameState.Play) {
+      //Update map tile sprites
+      this.MasterMap.update(dt);
+
+
       //Update Objects
       for (const [key, value] of this._objects) {
         //There may be a faster way to do this. For instance, static objects don't update.
@@ -1635,7 +1872,7 @@ export class WorldView25D extends Object3D {
   }
   private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, depth: number) {
     //You can override tile layer depth by setting the layer manually on the sprite.
-    depth = (ob.Layer === TileLayer.Unset ? depth : this.getLayerDepth(ob.Layer));
+    depth = (ob.Layer === TileLayerID.Unset ? depth : this.getLayerDepth(ob.Layer));
     this._buffer.copyCellTile(cell, ob, frame, depth);
     ob.clearDirty();
 
@@ -1693,9 +1930,15 @@ export class WorldView25D extends Object3D {
     }
   }
   private drawBlock(c: Cell, block: TileBlock) {
-    this.copyCellTiles(c, block.SpriteRef, block.FrameIndex, this.getLayerDepth(block.Layer));
+    let frame = block.FrameIndex;
+    if (block.SpriteRef.TilingAnimated) {
+      //Perform special animation
+      frame = block.SpriteRef.Animation.CurrentFrameIndex;
+    }
+
+    this.copyCellTiles(c, block.SpriteRef, frame, this.getLayerDepth(block.Layer));
   }
-  private getLayerDepth(layer: TileLayer): number {
+  private getLayerDepth(layer: TileLayerID): number {
     let ret = (layer as number) * WorldView25D.LayerDepth;
     return ret;
   }
@@ -2112,7 +2355,6 @@ export class Tickler extends PhysicsObject3D {
 
   }
 }
-
 export class UIElement {
   //A simple texture that we got from the tile map
   private _frame: SpriteFrame = null;
@@ -2160,7 +2402,7 @@ export class UIElement {
 
     //let pos: vec3 = new vec3(this._ui.WorldView.Viewport.BoxR2.Min.x, this._ui.WorldView.Viewport.BoxR2.Min.y, 0);
 
-    SpriteFrame.createQuadVerts(this.Verts, pos, rot, scale, this._frame.tile_width_tiles, this._frame.tile_height_tiles, 
+    SpriteFrame.createQuadVerts(this.Verts, pos, rot, scale, this._frame.tile_width_tiles, this._frame.tile_height_tiles,
       frust.right.clone(), frust.down.clone(), frust.normal.clone());
 
     //compute the distance needed to keep this in the correct distance so it fills the screen.
@@ -2213,6 +2455,7 @@ let g_hand: Tickler = null;
 let g_atlas: Atlas = null;
 let g_mainWorld: WorldView25D = null;
 let g_bAssetsLoaded: boolean = false;
+
 $(document).ready(function () {
   Globals.setFlags(document.location);
 
@@ -2221,6 +2464,8 @@ $(document).ready(function () {
 
   loadResources();
 });
+
+
 function loadResources() {
   //https://threejs.org/docs/#manual/en/introduction/Animation-system
 
@@ -2228,7 +2473,8 @@ function loadResources() {
   g_atlas = new Atlas(
     1 as Int, 1 as Int, 1 as Int, 1 as Int,
     1 as Int, 1 as Int,
-    16 as Int, 16 as Int, './dat/img/tiles.png', function () {
+    16 as Int, 16 as Int, './dat/img/tiles.png', function (that: ImageResource) {
+      //Load the hnad
       Globals.models.loadModel(Files.Model.Hand, ['Armature', 'Action_Point'], function (success: boolean, arr: Array<Object3D>, gltf: any): THREE.Object3D {
         if (success) {
           if (arr.length === 2) {
@@ -2242,6 +2488,10 @@ function loadResources() {
         }
         return null;
       })
+
+
+
+
     });
   Globals.models.setModelAsyncCallback(Files.Model.Hand, function (model: THREE.Mesh) {
     initializeGame();
@@ -2280,7 +2530,7 @@ function createWorld() {
   g_mainWorld.init(2048 as Int);
   Globals.scene.add(g_mainWorld);
 
-  let player = g_mainWorld.MasterMap.Tiles.getTile(TiledSpriteId.Player) as Character;
+  let player = g_mainWorld.MasterMap.TileDefs.getTile(TiledSpriteId.Player) as Character;
 
   let inputControls = new InputControls(player, g_mainWorld.Viewport);
   g_mainWorld.addObject25(player);
@@ -2288,8 +2538,8 @@ function createWorld() {
   g_mainWorld.InputControls = inputControls;
 
   //Drop player
-  inputControls.PlayerChar.Position.x = g_mainWorld.MasterMap.PlayerStartXY.x * g_atlas.TileWidthR3;
-  inputControls.PlayerChar.Position.y = g_mainWorld.MasterMap.PlayerStartXY.y * g_atlas.TileHeightR3;
+  inputControls.PlayerChar.Position.x = g_mainWorld.MasterMap.Data.PlayerStartXY.x * g_atlas.TileWidthR3;
+  inputControls.PlayerChar.Position.y = g_mainWorld.MasterMap.Data.PlayerStartXY.y * g_atlas.TileHeightR3;
 
   player.update(0.0001);
 }

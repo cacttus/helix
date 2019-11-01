@@ -531,6 +531,7 @@ export class VRGamepad extends THREE.Object3D {
       if (gamepad.id.startsWith(id)) {
         return true;
       }
+      return false;
     });
 
     let supported: any = VRInputManager.supported_controllers[key];

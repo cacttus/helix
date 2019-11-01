@@ -1,9 +1,11 @@
 import { Color, EqualStencilFunc } from 'three';
 import { ivec2, vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import { Globals } from './Globals';
-import { Atlas, Sprite25D, FDef, SpriteFrame, Tiling, Character, Direction4Way, SpriteProp, CollisionHandling, Phyobj25D, HandGesture, SpriteAnimationData } from './Main';
+import { Utils } from './Utils';
+import { Atlas, Sprite25D, FDef, SpriteFrame, Tiling, Character, Direction4Way, SpriteTileInfo as SpriteTileInfo, CollisionHandling, Phyobj25D, HandGesture, SpriteAnimationData, Animation25D } from './Main';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
-import world_data from './game_world.json';
+import world_data from './tiles_world.json';
+import world_tiles from './tiles_tileset.json';
 import { Random } from './Base';
 
 class IVec2Map<K> {
@@ -122,7 +124,31 @@ class MultiValueDictionary<K, V>  {
   }
 
 }
+
+
+class TmxProperty {
+  public name: string;
+  public type: string;
+  public value: string;
+}
+class TmxTilesetTile {
+  public id: Int;
+  public properties: Array<TmxProperty>;
+}
 class TmxTileset {
+  public columns: Int;
+  public image: string;
+  public imageheight: Int;
+  public imagewidth: Int;
+  public margin: Int;
+  public name: string;
+  public spacing: Int;
+  public tilecount: Int;
+  public tiledversion: string;
+  public tileheight: Int;
+  public tiles: Array<TmxTilesetTile>;
+}
+class TmxMapTileset {
   //Tileset in Tiled.
   public columns: Int;//":6,
   public firstgid: Int;//":1,
@@ -138,7 +164,7 @@ class TmxTileset {
 }
 class TmxLayer {
   //Layer in Tiled
-  public data: Array<Int>;//:[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  public data: Array<Int>;
   public height: Int;//":44,
   public id: Int;//":6,
   public name: string;//":"Border",
@@ -148,6 +174,19 @@ class TmxLayer {
   public width: Int;//":60,
   public x: Int;//":0,
   public y: Int;//":0
+  public objects: Array<TmxObject>;
+  public draworder: string;
+}
+class TmxObject {
+  public name: string;
+  public gid: Int; // This is the tile index. Id is not the tile index.
+  public properties: Array<TmxProperty>;
+  public rotation: number;
+  public visible: boolean;
+  public x: Int;
+  public y: Int;
+  public width: Int;
+  public height: Int;
 }
 class TmxMap {
   //This is a map in Tiled
@@ -164,36 +203,45 @@ class TmxMap {
   public type: string; //":"map",
   public version: string; //":1.2,\
   public layers: Array<TmxLayer>;
-  public tilesets: Array<TmxTileset>;///":[
+  public tilesets: Array<TmxMapTileset>;///":
 }
+
 
 export enum TiledSpriteId {
   //Note: the actual exported Tiled ID is +1 greater than the 0 based offset in the program.
-  None = 0,
-  Border = 1,
-  Tree = 2,
-  House = 3,
-  Player = 4,
-  Monster_Grass = 5,
-  Grass_Base = 6,
-  Rock = 7,
-  Door = 8,
-  Hole = 9
+  //Note: The code string value here must exactly match the string in tiled "name" property on the tileset.
+  None
+  , Border // 1
+  , Tree
+  , House
+  , Player
+  , Monster_Grass
+  , Grass_Base
+  , Rock
+  , Door
+  , Hole
+  , Conduit
+  , Water
+  , Fence
+  , Npc
+  , Area_Props
+  , Empty // ?, not sure.
 }
-export enum TileLayer {
+export enum TileLayerID {
   /* THESE MUST BE IN ORDER TO GET CELL BLOCKS ARRAY */
   DebugBackground = -1,
   Border = 0,
   Background = 1,
-  Midground = 2,
+  Water = 2, //Midground = 2,
   Objects = 3,
   Foreground = 4,
-  LayerCount = 5,
-  Unset = 6, // Special layer type indicating that the layer of this
+  Conduit = 5,
+  Data_Objects = 6,
+  LayerCountEnum = 7,
+  Unset = 999, // Special layer type indicating that the layer of this
 }
-
 interface MakeTileFn { (): Sprite25D }
-export class Tiles {
+export class TileDefs {
   //This is the definitions for all tiles in the game.
   //If we get Monogame Toolkit to work... we can eventually do away with this.
   private _tileMap: Map<TiledSpriteId, Sprite25D> = null;
@@ -203,7 +251,7 @@ export class Tiles {
     let that = this;
 
     this.addTile(function () {
-      let player = new Character(atlas, "Player", TiledSpriteId.Player, TileLayer.Objects);
+      let player = new Character(atlas, "Player", TiledSpriteId.Player, TileLayerID.Objects);
       that.addCharacterAnimation(player, atlas,
         [[3, 1], [4, 1], [3, 1], [5, 1]],//left
         [[3, 1], [4, 1], [3, 1], [5, 1]],//right
@@ -221,12 +269,12 @@ export class Tiles {
 
     //Testing grass..
     this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Grass_Base", TiledSpriteId.Grass_Base, TileLayer.Unset);
-      tile.Animation.addTileFrame(new ivec2(0, 0), atlas);
+      let tile = new Sprite25D(atlas, "Grass_Base", TiledSpriteId.Grass_Base);
       tile.Animation.addTileFrame(new ivec2(1, 0), atlas);
       tile.Animation.addTileFrame(new ivec2(2, 0), atlas);
       tile.Animation.addTileFrame(new ivec2(3, 0), atlas);
       tile.Animation.addTileFrame(new ivec2(4, 0), atlas);
+      tile.Animation.addTileFrame(new ivec2(5, 0), atlas);
 
       tile.Tiling = Tiling.Random;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
@@ -235,22 +283,24 @@ export class Tiles {
 
     //9,0
     this.addTile(function () {
-      // let props = [
-      //   new SpriteProp(new ivec2(0,0), TileLayer.Foreground, CollisionHandling.None),
-      //   new SpriteProp(new ivec2(1,0), TileLayer.Foreground, CollisionHandling.None),
-      //   new SpriteProp(new ivec2(0,1), TileLayer.Objects, CollisionHandling.CollideWithLayerObjects),
-      //   new SpriteProp(new ivec2(1,1), TileLayer.Objects, CollisionHandling.CollideWithLayerObjects),
-      // ]
+      let props = [
+        new SpriteTileInfo(new ivec2(0, 0), TileLayerID.Foreground, CollisionHandling.None), // Tree Top
+        new SpriteTileInfo(new ivec2(1, 0), TileLayerID.Foreground, CollisionHandling.None),
+        new SpriteTileInfo(new ivec2(2, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), //Bush
+        new SpriteTileInfo(new ivec2(0, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
+        new SpriteTileInfo(new ivec2(1, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
+        new SpriteTileInfo(new ivec2(2, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), // Bush
+      ]
 
-      let tile = new Sprite25D(atlas, "Tree", TiledSpriteId.Tree, TileLayer.Unset);
+      let tile = new Sprite25D(atlas, "Tree", TiledSpriteId.Tree);
       let off_x = 9;
       let off_y = 0;
-      for (let j = 0; j < 2; ++j) {
-        for (let i = 0; i < 2; ++i) {
-          tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas);
+      for (let j = 0; j < 3; ++j) {
+        for (let i = 0; i < 3; ++i) {
+          tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas, new ivec2(1, 1), props);
         }
       }
-      tile.Tiling = Tiling.SetEvenOdd2x2;
+      tile.Tiling = Tiling.FoliageBorderRules;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
       tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
       tile.Gesture = HandGesture.Poke;
@@ -258,7 +308,34 @@ export class Tiles {
       return tile;
     });
     this.addTile(function () {
-      let tile = new Sprite25D(atlas, "House", TiledSpriteId.House, TileLayer.Unset);
+      let props = [
+        new SpriteTileInfo(new ivec2(0, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), // Tree Top
+        new SpriteTileInfo(new ivec2(1, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
+        new SpriteTileInfo(new ivec2(2, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), //Bush
+        new SpriteTileInfo(new ivec2(3, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), //Bush
+        new SpriteTileInfo(new ivec2(0, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), //Bush
+        new SpriteTileInfo(new ivec2(1, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
+        new SpriteTileInfo(new ivec2(2, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
+        new SpriteTileInfo(new ivec2(3, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), // Bush
+      ]
+
+      let tile = new Sprite25D(atlas, "Fence", TiledSpriteId.Fence);
+      let off_x = 0;
+      let off_y = 3;
+      for (let j = 0; j < 3; ++j) {
+        for (let i = 0; i < 5; ++i) {
+          tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas, new ivec2(1, 1), props);
+        }
+      }
+      tile.Tiling = Tiling.FenceBorderRules;
+      tile.IsCellTile = true;
+      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
+      tile.Gesture = HandGesture.Poke;
+
+      return tile;
+    });
+    this.addTile(function () {
+      let tile = new Sprite25D(atlas, "House", TiledSpriteId.House);
       let off_x = 12;
       let off_y = 0;
       for (let j = 0; j < 3; ++j) {
@@ -272,7 +349,28 @@ export class Tiles {
       return tile;
     });
     this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Rock", TiledSpriteId.Rock, TileLayer.Unset);
+      let tile = new Sprite25D(atlas, "Water", TiledSpriteId.Water);
+      let off_x = 5;
+      let off_y = 5;
+
+      //add an animated tileframe
+      tile.Animation.addTileFrame(new ivec2(off_x + 0, off_y + 0), atlas, new ivec2(1, 1), null, 2.4);
+      tile.Animation.addTileFrame(new ivec2(off_x + 1, off_y + 0), atlas, new ivec2(1, 1), null, 2.1);
+      tile.Animation.addTileFrame(new ivec2(off_x + 2, off_y + 0), atlas, new ivec2(1, 1), null, 2.0);
+
+      tile.Tiling = Tiling.Single;
+
+      //Tiled animation for static tile.  Set TilingAnimated to true and play the animation.
+      tile.TilingAnimated = true;
+      tile.Animation.play(Animation25D.c_strDefaultTileAnimation);
+
+      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
+
+      return tile;
+    });
+    this.addTile(function () {
+      let tile = new Sprite25D(atlas, "Rock", TiledSpriteId.Rock);
       tile.Animation.addTileFrame(new ivec2(9, 3), atlas);
       tile.Tiling = Tiling.Single;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
@@ -281,7 +379,7 @@ export class Tiles {
       return tile;
     });
     this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Hole", TiledSpriteId.Hole, TileLayer.Unset);
+      let tile = new Sprite25D(atlas, "Hole", TiledSpriteId.Hole);
       tile.Animation.addTileFrame(new ivec2(10, 3), atlas);
       tile.Tiling = Tiling.Single;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
@@ -289,7 +387,7 @@ export class Tiles {
       return tile;
     });
     this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Monster_Grass", TiledSpriteId.Monster_Grass, TileLayer.Unset);
+      let tile = new Sprite25D(atlas, "Monster_Grass", TiledSpriteId.Monster_Grass);
       tile.Animation.addTileFrame(new ivec2(11, 3), atlas);
       tile.Animation.addTileFrame(new ivec2(12, 3), atlas);
       tile.Tiling = Tiling.Single;
@@ -324,8 +422,8 @@ export class Tiles {
 
     //This places the char's head above things in the world, and also makes it not collidable.
     let props = [
-      new SpriteProp(new ivec2(0, 0), TileLayer.Foreground, CollisionHandling.None),
-      new SpriteProp(new ivec2(0, 1), TileLayer.Objects, CollisionHandling.CollideWithLayerObjects)
+      new SpriteTileInfo(new ivec2(0, 0), TileLayerID.Foreground, CollisionHandling.None),
+      new SpriteTileInfo(new ivec2(0, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects)
     ]
 
     char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Down),
@@ -345,167 +443,457 @@ export class Tiles {
       0.7, atlas,
       new ivec2(1, 2), true, props);
   }
+  public update(dt: number) {
+    //Update the animations of the static tiles.
+    for (let [k, v] of this._tileMap) {
+      if (v.TilingAnimated) {
+        v.update(dt);
+      }
+    }
 
+
+  }
 }
-export class MasterMap {
-  //The entire game world in one Tiled data file.  
-  //We flood fill rooms bounded by border tiles to create map areas.
-  //It's a fun way to make seamless game areas and makes it easy to connect areas since they're just right next to each other.
-  public static readonly EMPTY_TILE: Int = -1 as Int;
+export class TileMapTileData {
+  public TileID: Int = MasterMap.EMPTY_TILE;
+  public constructor(id: Int) {
+    this.TileID = id;
+  }
+}
+export class TileMapLayerData {
+  public data: Array<TileMapTileData> = new Array<TileMapTileData>();
+}
+export class TileMapData {
+  //This is the parsed data from the TMX JSON
+  //Holds all tile data closer to our format with objects and tiles at the root cell.
+  private _width: Int;
+  private _height: Int;
+  private _layers: Array<TileMapLayerData> = new Array<TileMapLayerData>();
 
-  private _atlas: Atlas = null;
-  private _tiles: Tiles = null;
-  public _area: MapArea = null; //{ get; private set; }
-
-  public get Area(): MapArea { return this._area; }
-  public get Atlas(): Atlas { return this._atlas; }
-  public get Tiles(): Tiles { return this._tiles; }
+  private _spriteLUT: Map<Int, TiledSpriteId>; // Lookup table to convert TMX tileset ID into a Sprite ID the engine can use.
 
   public PlayerStartXY: ivec2 = new ivec2(Number.MAX_SAFE_INTEGER as Int, Number.MAX_SAFE_INTEGER as Int);
-  public MapWidthTiles: Int = 0 as Int; //{ get; private set; }
-  public MapHeightTiles: Int = 0 as Int; //{ get; private set; }
-  private DoorTilesLUT: Array<Int> = new Array<Int>();
-  public GenTiles: Array<Array<Array<Int>>> = new Array<Array<Array<Int>>>();
+  public errors: string = "";
 
-  public constructor(atlas: Atlas) {
-    this._atlas = atlas;
+  public get Layers(): Array<TileMapLayerData> { return this._layers; }
+  public get Width(): Int { return this._width; }
+  public get Height(): Int { return this._height; }
 
-    let map = this.ParseTmxJson(JSON.stringify(world_data));
-    this.MapWidthTiles = map.width as Int;
-    this.MapHeightTiles = map.height as Int;
+  public static readonly Prop_Name: string = "name";
 
-    //Create Tiles.
-    this._tiles = new Tiles(atlas);
-
-    this.InitGenTileGrid();
-
-    this.ParseGenTiles(map);
-
-
-
-
-    this.debugPrintGenTileInfo();
-    this.MakeMapArea(this.PlayerStartXY);
+  private tiledIdtoHelixId(id: Int): Int {
+    //Convert the ACTUAL tiled ID to helix.  The Tiled Id is +1 when exported so it should be subtracted before this function.
+    let idr = this._spriteLUT.get(id);
+    if (!idr) {
+      return null;
+    }
+    return toInt(idr);
   }
-  private debugPrintGenTileInfo() {
+
+  public constructor(map: TmxMap, tileset: TmxTileset) {
+    this._width = map.width;
+    this._height = map.height;
+
+    this.parseTileset(tileset);
+
+    this.parseMap(map);
+
     if (Globals.isDebug()) {
-      //debug gent iles.
-      let mapFound: Map<Int, Int> = new Map<Int, Int>();
-      let s: string = "";
-      let del: string = "";
-      for (let iRow = 0 as Int; iRow < this.MapHeightTiles; ++iRow) {
-        for (let iCol = 0; iCol < this.MapWidthTiles; ++iCol) {
-          for (let iLayer = 0; iLayer < TileLayer.LayerCount; ++iLayer) {
-            let t = this.GenTiles[iRow][iCol][iLayer];
-            s += del + this.GenTiles[iRow][iCol][iLayer];
-            del = ",";
-            mapFound.set(t, t);
-          }
-        }
-      }
-      s = " >>>> " + s;
-      for (let [k, v] of mapFound) {
-        s = k + " " + s;
-      }
-      s = "tiles: " + s;
-      console.log(s);
+      this.debugPrint();
     }
   }
-  public InitGenTileGrid() {
-    this.GenTiles = new Array<Array<Array<Int>>>();
-    for (let iRow = 0 as Int; iRow < this.MapHeightTiles; ++iRow) {
-      this.GenTiles.push(new Array<Array<Int>>());
-
-      for (let iCol = 0; iCol < this.MapWidthTiles; ++iCol) {
-        let layers: Array<Int> = new Array<Int>();
-        for (let iLayer = 0; iLayer < TileLayer.LayerCount; ++iLayer) {
-          layers.push(MasterMap.EMPTY_TILE);
+  private getProp<T>(prop: string, props: Array<TmxProperty>, nocase: boolean = true): T {
+    for (let p of props) {
+      if (nocase) {
+        if (p.name.trim().toLowerCase() === prop.trim().toLowerCase()) {
+          return p.value as unknown as T;
         }
-        this.GenTiles[iRow].push(layers);// 3 layers **0 is out of bounds** so -1 is unset/null
       }
+    }
+    return null;
+  }
+  private parseTileset(tileset: TmxTileset) {
+    try {
+      let debug_info: string = "";
+      //Creates a lookup-table that matches a Tiled sprite ID to a Helix sprite ID.
+      //This Matches the Tiled "name" property to the name on the "TiledSpriteId" enumerator
+      this._spriteLUT = new Map<Int, TiledSpriteId>();
+      if (tileset.tiles) {
+        for (let tile of tileset.tiles) {
+          let tiled_tileset_id = tile.id;
+
+          if (tile.properties) {
+
+            let str = this.getProp<string>(TileMapData.Prop_Name, tile.properties);
+
+            let found: boolean = false;
+
+
+            //Jesus christ typescript is so fucked up.
+
+            let keyvals = Utils.enumKeyVals(Object.keys(TiledSpriteId));
+            for (let [k, v] of keyvals) {
+
+              //Enum iteration: https://noahbass.com/posts/typescript-enum-iteration
+
+              if (k.trim().toLowerCase() === str.trim().toLowerCase()) {
+                this._spriteLUT.set(tiled_tileset_id, v);
+                found = true;
+                break;
+              }
+
+            }
+            if (found === false) {
+              Globals.logError("Could not find a Helix sprite ID for the Tiled sprite named '" + str + "'");
+              Globals.debugBreak();
+            }
+            else {
+              debug_info += str + " = " + tiled_tileset_id + " " + "\r\n";
+            }
+
+          }
+          else {
+            Globals.logWarn("Tile id '" + tiled_tileset_id + " " + "' did not have a 'name' property.  Tile will not be used!");
+            debug_info += "Error! = " + tiled_tileset_id + " " + "\r\n";
+          }
+
+        }
+      }
+      else {
+        Globals.logError("Tileset tiles were undefined.");
+      }
+
+      Globals.logDebug("Parsed tileset tiles:\r\n" + debug_info);
+
+    }
+    catch (ex) {
+      Globals.logError(ex);
+      Globals.debugBreak();
+    }
+
+  }
+  public setTile(x: Int, y: Int, layer: Int, value: Int) {
+    if (value === null) {
+      this.errors += "set tile value was null.\r\n";
+    }
+    if (y < 0 || y >= this.Height) {
+      return;
+    }
+    if (x < 0 || x >= this.Width) {
+      return;
+    }
+    try {
+      if (this.Layers && layer < this.Layers.length) {
+        let off = this.xyToLinear(x, y);
+        if (this.Layers[layer].data.length > off) {
+          this.Layers[layer].data[off] = new TileMapTileData(value);
+          return;
+        }
+      }
+    }
+    catch (ex) {
+      Globals.debugBreak();
+      this.errors += "setTile - " + ex + "\r\n";//errorthis.tiledata_set_errors++;
+
+    }
+  }
+  public xyToLinear(x: Int, y: Int): Int {
+    let ret: Int = toInt(y * this.Width + x);
+    return ret;
+
+  }
+  public linearToX(iTile: Int): Int {
+    let tile_x: Int = toInt(toInt(iTile) % toInt(this.Width));
+    return tile_x;
+  }
+  public linearToY(iTile: Int): Int {
+    let tile_y: Int = toInt(iTile / this.Width);
+    return tile_y;
+  }
+  public linearToXY(iTile: Int): ivec2 {
+    let tile_x: Int = this.linearToX(iTile);
+    let tile_y: Int = this.linearToY(iTile);
+    return new ivec2(tile_x, tile_y);
+  }
+  public cellHasTileXY(col: Int, row: Int, tile: Int): boolean {
+    //Searches for the given tileID in the stack.
+    for (let iLayer: Int = 0 as Int; iLayer < this.Layers.length; ++iLayer) {
+      if (this.tileXY_World(col, row, iLayer) === tile) {
+        return true;
+      }
+    }
+    return false;
+  }
+  public tileXY_World(x: Int, y: Int, layer: Int): Int {
+    let ret: Int = toInt(0);
+    if (y >= this.Height || y < 0) {
+      ret = MasterMap.EMPTY_TILE as Int;
+    }
+    else if (x >= this.Width || x < 0) {
+      ret = MasterMap.EMPTY_TILE as Int;
+    }
+    else if (layer >= this.Layers.length) {
+      ret = MasterMap.EMPTY_TILE as Int;
+    }
+    else {
+      try {
+        let idx = this.xyToLinear(x, y);
+        ret = this.Layers[layer].data[idx].TileID;
+      }
+      catch (ex) {
+        Globals.debugBreak();
+        this.errors += "tileXY_World - " + ex + "\r\n";
+      }
+    }
+    return ret;
+  }
+  private allocData(map: TmxMap) {
+    this._layers = new Array<TileMapLayerData>();
+    for (let iLayer = 0; iLayer < map.layers.length; ++iLayer) {
+      this.Layers.push(new TileMapLayerData());
+      this.Layers[iLayer].data = new Array<TileMapTileData>();
+
+      for (let iy = 0 as Int; iy < this.Height; ++iy) {
+        for (let ix = 0; ix < this.Width; ++ix) {
+          this.Layers[iLayer].data.push(new TileMapTileData(MasterMap.EMPTY_TILE));
+        }
+      }
+
     }
   }
   private dbg_count = 0;
-  public ParseGenTiles(map: TmxMap) {
-    //Parse the Tiled map and translate the Tile IDs into IDs we can use
-    //Basically all this does is set '0' to '-1' for empty tile.
-    //
-    //We don't use zero, just because it's likely to become confusing.
-    let debug_invalid_tiles: Int = 0 as Int;
-
+  private parseMap(map: TmxMap) {
+    this.allocData(map);
+    //This is actually necessary now that we are using tiled tilesets.
+    //basically tiled doesn't guarantee the IDs of tilesets to stay the same so we
+    //parse the tileset Id's and translate them into Helix tile ids.
+    //Also this finds the player start xy.
+    //Performs some math operations on tile sets, and 
+    //We don't use zero, but -1 the Tileset enum starts at 1
+    let debug_did_not_find: string = "";
     for (let layer of map.layers) {
-      let layerId: Int = toInt(-1);
-
-      if (layer.name === ("Border")) { layerId = toInt(TileLayer.Border); }
-      else if (layer.name === ("Foreground")) { layerId = toInt(TileLayer.Foreground); }
-      else if (layer.name === ("Background")) { layerId = toInt(TileLayer.Background); }
-      else if (layer.name === ("Midground")) { layerId = toInt(TileLayer.Midground); }
-      else if (layer.name === ("Objects")) { layerId = toInt(TileLayer.Objects); }
+      //string to enum
+      let layerId: Int = TileLayerID[(layer.name as string) as keyof typeof TileLayerID] as Int;
 
       if (layerId === -1) {
         Globals.debugBreak();
       }
       else {
-        for (let iTile = 0; iTile < layer.data.length; iTile++) {
-          let tile: Int = layer.data[iTile];
-          let tile_x: Int = toInt(toInt(iTile) % toInt(layer.width));
-          let tile_y: Int = toInt(iTile / layer.width);
+        if (layer.data) {
+          for (let iTile = 0; iTile < layer.data.length; iTile++) {
+            let tiled_tileid: Int = layer.data[iTile];
+            let helix_tileid: Int = MasterMap.EMPTY_TILE as Int;
+            let tilexy: ivec2 = this.linearToXY(toInt(iTile));
 
-          if (tile === TiledSpriteId.Grass_Base) {
-            this.dbg_count++;
+            if (tiled_tileid === -1) {
+              let n = 0;
+              n++;
+            }
+            if (tiled_tileid === 0) {
+              let n = 0;
+              n++;
+            }
+            if (tiled_tileid === 1) {
+              let n = 0;
+              n++;
+            }
+
+            //***SO***  Tile Id's are +1 in the EXPORTED TILED JSON file.  NOT in the Tiled map or the tiled tileset.
+            //Really annoying, can I get a beer over here?
+            tiled_tileid = (tiled_tileid as number - 1) as Int;
+
+            if (tiled_tileid === -1) {
+              //-1 ie empty, or 0
+              helix_tileid = MasterMap.EMPTY_TILE;
+            }
+            else {
+              helix_tileid = this.tiledIdtoHelixId(tiled_tileid);
+            }
+
+            if (helix_tileid === null) {
+              helix_tileid = MasterMap.EMPTY_TILE;
+              debug_did_not_find += tiled_tileid + ",";
+            }
+
+            this.setTile(tilexy.x, tilexy.y, layerId, helix_tileid);
+
+            //Check the tile id's for special things
+            if (helix_tileid === TiledSpriteId.Grass_Base) {
+              this.dbg_count++;
+            }
+            if (helix_tileid === TiledSpriteId.Player) {
+              //here is our start point, flood fill this area.
+              this.PlayerStartXY.x = tilexy.x;
+              this.PlayerStartXY.y = tilexy.y;
+            }
+
           }
-          //Flip the map upside down.
-          //  tile_y = (this.MapHeightTiles - tile_y) as Int;
-
-          if (tile === TiledSpriteId.Player) {
-            //here is our start point, flood fill this area.
-            this.PlayerStartXY.x = tile_x;
-            this.PlayerStartXY.y = tile_y;
-          }
-
-          //Set to empty if we're not presetn.  Most tiles are 0, we use -1 for empty
-          let val: Int = tile;
-          if (tile === 0) {
-            val = MasterMap.EMPTY_TILE;
-          }
-          // else if (this._tiles.getTile(tile)) {
-          //   //The tile is valid.
-          //   let nnn = 0;
-          //   nnn += 1;
-          // }
-
-          // else {
-          //   val = MasterMap.EMPTY_TILE;
-          // }
-          this.TrySetGenTile(tile_x, tile_y, layerId, val);
         }
+        if (layer.objects) {
+
+        }
+
+        let borders = this.tileCount(TiledSpriteId.Border);
+
+        let n = 0;
+        n++;
+
       }
 
     }
 
-    if (debug_invalid_tiles > 0) {
-      Globals.logWarn("Found " + debug_invalid_tiles + " invalid tiles..");
+
+    if (debug_did_not_find.length > 0) {
+      this.errors += "Found some NULL tile IDs, this may not be a real error,\r\n becasue blank tiles may have accidently been set in the Tiled Map: \r\n" + debug_did_not_find + "\r\n";
     }
+
   }
-  private ParseTmxJson(json: string): TmxMap {
-    let ret: TmxMap = JSON.parse(json);
+  private tileCount(id: TiledSpriteId): number {
+    let ret = 0;
+    for (let iy = 0; iy < this.Height; ++iy) {
+      for (let ix = 0; ix < this.Width; ++ix) {
+        for (let layer = 0; layer < this.Layers.length; ++layer) {
+          let xx = this.tileXY_World(ix as Int, iy as Int, layer as Int);
+          if (xx === id) {
+            ret++;
+          }
+        }
+      }
+    }
     return ret;
   }
-  private TrySetGenTile(iCol: Int, iRow: Int, iLayer: Int, iTile: Int) {
-    if (iRow < 0 || iRow >= this.MapHeightTiles) {
-      return;
-    }
-    if (iCol < 0 || iCol >= this.MapWidthTiles) {
-      return;
-    }
-    try {
-      this.GenTiles[iRow][iCol][iLayer] = iTile;//already set, but debug here
-    }
-    catch (ex) {
-      Globals.debugBreak();
+  private debugPrint() {
+    if (Globals.isDebug()) {
+      //debug gent iles.
+      let mapTiles: Map<Int, Int> = new Map<Int, Int>();
+      let tiles: string = "";
+      let del: string = "";
+      for (let iLayer = 0; iLayer < this.Layers.length; ++iLayer) {
+        for (let xx = 0; xx < this.Layers[iLayer].data.length; ++xx) {
+          let t = this.Layers[iLayer].data[xx].TileID;
+          tiles += del + t;
+          del = ",";
+          mapTiles.set(t, t);
+        }
+      }
+
+      let matching = "";
+      let nMatching = 0;
+      let mapFoundSprites: Map<Int, Int> = new Map<Int, Int>();
+      for (let [k, v] of mapTiles) {
+
+        let spriteName = "";
+        let found = false;
+        for (let item in TiledSpriteId) {
+          let enumid = TiledSpriteId[(item as string) as keyof typeof TiledSpriteId] as Int;
+          if (enumid as Int === k as Int) {
+            spriteName = "(" + item as string + ")";
+            mapFoundSprites.set(enumid, enumid);
+            nMatching++
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          spriteName = "(UNKNOWN!)";
+        }
+
+        matching = k + " " + spriteName + "\n" + matching;
+      }
+
+      //Match the sprites we have with ones in the map.
+      let missingSprites = "";
+      let nMissingSprites = 0;
+      for (let item in TiledSpriteId) {
+        //let enumid2 : Int = TiledSpriteId[(item as string) as keyof typeof TiledSpriteId] as Int;
+        //let enumid3 : Int = TiledSpriteId[item];//(<any>TiledSpriteId)[item] as Int;
+        //let x: { [idx: string]: TiledSpriteId; } = <any>TiledSpriteId;
+        let enumid = parseInt(item);//x[item];
+
+        let found = false;
+        for (let [k, v] of mapFoundSprites) {
+          if ((k as Int) === (enumid as Int)) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          missingSprites += (item as string) + " (" + enumid + ")\n";
+          nMissingSprites++;
+        }
+
+      }
+
+      console.log("" + nMatching + " TMX Tile IDs found in map: \n" + matching);
+      console.log("" + nMissingSprites + " Helix Sprites not in Map: \n" + missingSprites);
+      console.log("Tiles incoming:\n" + tiles);
+
     }
   }
-  private MakeMapArea(startxy: ivec2) {
+
+
+}
+export class MasterMap {
+  //The entire game world in one Tiled data file.  
+  //This class is the container, it's job is mostly to create the world and
+  //map ponints from Map space to World space.
+  public static readonly EMPTY_TILE: Int = -1 as Int;
+
+  private _atlas: Atlas = null;
+  private _tiledefs: TileDefs = null;
+  public _area: MapArea = null; //{ get; private set; }
+
+  private DoorTilesLUT: Array<Int> = new Array<Int>();
+  private _tileMap: TileMapData = null;
+
+  private _mapWidthTiles: Int;
+  private _mapHeightTiles: Int;
+  private _mapLayerCount: Int;
+
+  public get Data(): TileMapData { return this._tileMap; }
+  public get Area(): MapArea { return this._area; }
+  public get Atlas(): Atlas { return this._atlas; }
+  public get TileDefs(): TileDefs { return this._tiledefs; }
+  public get MapLayerCount(): Int { return this._mapLayerCount; }
+  public get MapWidthTiles(): Int { return this._mapWidthTiles; }
+  public get MapHeightTiles(): Int { return this._mapHeightTiles; }
+
+  public constructor(atlas: Atlas) {
+    this._atlas = atlas;
+
+    let tiles: TmxTileset = JSON.parse(JSON.stringify(world_tiles));
+    if (Globals.isDebug()) {
+      Globals.logDebug("Tiles:\r\n" + JSON.stringify(world_tiles));
+    }
+
+    let map: TmxMap = JSON.parse(JSON.stringify(world_data));
+    if (Globals.isDebug()) {
+      Globals.logDebug("Tile Map:\r\n" + JSON.stringify(world_data));
+    }
+
+    this._mapWidthTiles = map.width;
+    this._mapHeightTiles = map.height;
+    this._mapLayerCount = map.layers.length as Int;
+
+    //Create Tile Defs.
+    this._tiledefs = new TileDefs(atlas);
+
+    //Create the map
+    this._tileMap = new TileMapData(map, tiles);
+
+    this.makeMapArea(this._tileMap.PlayerStartXY);
+
+
+    if (this._tileMap && this._tileMap.errors.length) {
+      Globals.logError("Tilemap errors: " + this._tileMap.errors + ".");
+    }
+
+
+  }
+  public update(dt:number){
+    this.TileDefs.update(dt);
+  }
+  private makeMapArea(startxy: ivec2) {
     if (startxy.x != Number.MAX_SAFE_INTEGER as Int) {
       //Cleanup
       //this.Grid = null;
@@ -528,30 +916,30 @@ export class MasterMap {
     }
   }
 
-  public worldPointToMapPoint(v_in:vec3) : vec3 {
+  public worldPointToMapPoint(v_in: vec3): vec3 {
     //Converts an OpenGL coordinate system point to a point relative to the MasterMap origin.
-    let v : vec3 = new vec3(
+    let v: vec3 = new vec3(
       v_in.x,
       -v_in.y,
       v_in.z
     );
     return v;
   }
-  public project(p1:vec3, p2:vec3, normal:vec3, position:vec3) : vec3{
+  public project(p1: vec3, p2: vec3, normal: vec3, position: vec3): vec3 {
     //Projects the given line segment onto this world
     //Input: OpenGL World coordinates
     //Returns OpenGL World coordinates.
-    
 
-        //(n.p+d) = (a+tb)
-        let n = normal;
-        let d = -(n.dot(position));
-        let t: number = -(n.dot(p1) + d) / ((p2.clone().sub(p1)).dot(n));
-        let ret = p1.clone().add(p2.clone().sub(p1).multiplyScalar(t));
-        return ret;
+
+    //(n.p+d) = (a+tb)
+    let n = normal;
+    let d = -(n.dot(position));
+    let t: number = -(n.dot(p1) + d) / ((p2.clone().sub(p1)).dot(n));
+    let ret = p1.clone().add(p2.clone().sub(p1).multiplyScalar(t));
+    return ret;
 
   }
-  
+
 }
 export class MapArea {
   //A piece of a platform map that was found by flood filling to border tiles.
@@ -573,15 +961,25 @@ export class MapArea {
     this.Map = map;
     this.debug_numfloodfill = 0 as Int;
 
-    this.FloodFillFromPointRecursive(startxy);
-    this.Validate();
+    this.floodFillFromPointRecursive(startxy);
+    this.validate();
 
     //Make the grid
-    this.Grid = new TileGrid(this, this.WidthTiles, this.HeightTiles, TileLayer.LayerCount as Int);
+    this.Grid = new TileGrid(this, this.WidthTiles, this.HeightTiles, map.MapLayerCount as Int);
+
+    Globals.logDebug("Floodfill called " + this.debug_numfloodfill + " times.");
+    if (this.Grid.errors.length) {
+
+      Globals.logError(this.Grid.errors);
+    }
+
   }
-  public Validate() {
+  public validate() {
     if (this.Min.x > this.Max.x || this.Min.y > this.Max.y) {
       Globals.debugBreak();//System.Diagnostics.Debugger.Break();
+    }
+    if (this.Border.count === 0 as Int) {
+      Globals.logError("Did not find any room border tiles.");
     }
     if (this.Tiles.count === 0 as Int) {
       //Don't know whyt his would happen.
@@ -594,17 +992,12 @@ export class MapArea {
       Globals.debugBreak();// System.Diagnostics.Debugger.Break();
     }
 
-    //include the border for doors
-    //Plus 1 - the magnitue doesn't include the end tile
-    //Max.x += 1;
-    //Max.y += 1;
-
     //Subtract 1 for the outside border.
     this.WidthTiles = (this.Max.x - this.Min.x + (1 as Int)) as Int;
     this.HeightTiles = (this.Max.y - this.Min.y + (1 as Int)) as Int;
   }
   private debug_numfloodfill = 0;
-  public FloodFillFromPointRecursive(pt_origin: ivec2) {
+  public floodFillFromPointRecursive(pt_origin: ivec2) {
     //Flood fill an area demarcated by the boundary.
     let toCheck: Array<ivec2> = new Array<ivec2>();
     toCheck.push(pt_origin);
@@ -616,30 +1009,33 @@ export class MapArea {
       toCheck.splice(toCheck.length - 1, 1);
 
       if (pt.x < 0 || pt.y < 0 || pt.x > this.Map.MapWidthTiles || pt.y > this.Map.MapHeightTiles) {
-        return;
+        continue;
       }
 
       //Get the tile from the BORDER tile layer.
-      let iTile: Int = this.TileXY_World(pt.x, pt.y, TileLayer.Border as Int);
-      let iTile_Door: Int = this.TileXY_World(pt.x, pt.y, TileLayer.Objects as Int);
+      // let iTile: Int = this.TileXY_World(pt.x, pt.y, TileLayer.Border as Int);
+      // let iTile_Door: Int = this.TileXY_World(pt.x, pt.y, TileLayer.Objects as Int);
+
+      let isBorder: boolean = this.Map.Data.cellHasTileXY(pt.x, pt.y, toInt(TiledSpriteId.Border));
+      let isDoor: boolean = this.Map.Data.cellHasTileXY(pt.x, pt.y, toInt(TiledSpriteId.Door));
 
       if (this.Tiles.has(pt)) {
         //do nothing
       }
-      else if (iTile === TiledSpriteId.Border) {
+      else if (isBorder) {
         if (!this.Border.has(pt)) {
           this.Border.set(pt);
 
           //Include Corner border tiles.
           //This is needed to see if a door that lies on a border corner is a portal door
           //otherwise we wouldn't include cornder borders in the flood fill
-          this.FloodFillAddNeighborBorder(pt.clone().add(new ivec2(-1 as Int, 0 as Int)), this.Border);
-          this.FloodFillAddNeighborBorder(pt.clone().add(new ivec2(1 as Int, 0 as Int)), this.Border);
-          this.FloodFillAddNeighborBorder(pt.clone().add(new ivec2(0 as Int, -1 as Int)), this.Border);
-          this.FloodFillAddNeighborBorder(pt.clone().add(new ivec2(0 as Int, 1 as Int)), this.Border);
+          this.floodFillAddNeighborBorder(pt.clone().add(new ivec2(-1, 0)), this.Border);
+          this.floodFillAddNeighborBorder(pt.clone().add(new ivec2(1, 0)), this.Border);
+          this.floodFillAddNeighborBorder(pt.clone().add(new ivec2(0, -1)), this.Border);
+          this.floodFillAddNeighborBorder(pt.clone().add(new ivec2(0, 1)), this.Border);
         }
       }
-      else if (iTile_Door === TiledSpriteId.Door) {//this.DoorTilesLUT.indexOf(iTile) >= 0) {  Old method
+      else if (isDoor) {//this.DoorTilesLUT.indexOf(iTile) >= 0) {  Old method
         ///So the TODO here is to be able to figure out which side of the border the door is on
         if (!this.Border.has(pt)) {
           this.Doors.set(pt);
@@ -656,33 +1052,26 @@ export class MapArea {
         if (pt.y > this.Max.y) { this.Max.y = pt.y; }
 
         //Were not a border, continue to search.
-        toCheck.push(pt.clone().add(new ivec2(-1 as Int, 0 as Int)));
-        toCheck.push(pt.clone().add(new ivec2(1 as Int, 0 as Int)));
-        toCheck.push(pt.clone().add(new ivec2(0 as Int, -1 as Int)));
-        toCheck.push(pt.clone().add(new ivec2(0 as Int, 1 as Int)));
+        toCheck.push(pt.clone().add(new ivec2(-1, 0)));
+        toCheck.push(pt.clone().add(new ivec2(1, 0)));
+        toCheck.push(pt.clone().add(new ivec2(0, -1)));
+        toCheck.push(pt.clone().add(new ivec2(0, 1)));
       }
     }
   }
-  public FloodFillAddNeighborBorder(v: ivec2, border: IVec2Set) {
-    if (this.TileXY_World(v.x, v.y, TileLayer.Midground as Int) == TiledSpriteId.Border) {
+  public floodFillAddNeighborBorder(v: ivec2, border: IVec2Set) {
+    //Search for border on any layer (convenience thing)
+    if (this.Map.Data.cellHasTileXY(v.x, v.y, TiledSpriteId.Border as Int)) {
       if (!border.has(v)) {
         border.set(v);
       }
     }
   }
-  public TileXY_World(col: Int, row: Int, layer: Int): Int {
-    //**RETURN 0 FOR OUT OF BOUNDS
-    if (row >= this.Map.GenTiles.length || row < 0) {
-      return 0 as Int;
-    }
-    if (col >= this.Map.GenTiles[row].length || col < 0) {
-      return 0 as Int;
-    }
-    if (layer >= this.Map.GenTiles[row][col].length) {
-      return 0 as Int;
-    }
-    return this.Map.GenTiles[row][col][layer];
+  public tileIsInMapArea(x: Int, y: Int): boolean {
+    return this.Tiles.has(new ivec2(x, y));
   }
+
+
 }
 export class TileGrid {
   //This is the node BVH tree of the Master Map
@@ -694,6 +1083,7 @@ export class TileGrid {
   private dbg_numcells: Int = 0 as Int;
   private NumLayers: Int = 0 as Int;
   public Patterns: TilePatterns = null;
+  public errors: string = "";
 
   public constructor(area: MapArea, tilesW: Int, tilesH: Int, nLayers: Int) {
     this.Area = area;
@@ -749,7 +1139,10 @@ export class TileGrid {
         this.CellDict.set(cellPos, parent.Cell);
       }
 
-      this.setCellData(parent.Cell, cellPos);
+      //Make sure the tile is within the area before we compute it. We have divided a square region, but the area is probably not square.
+      if (this.Area.tileIsInMapArea(cellPos.x, cellPos.y)) {
+        this.setCellData(parent.Cell, cellPos);
+      }
 
       this.dbg_numcells++;
     }
@@ -786,14 +1179,15 @@ export class TileGrid {
   }
   private setCellData(c: Cell, cellPos: ivec2) {
     //Set the Cell Data.  This is where the love happens.
-    for (let iLayer = 0; iLayer < TileLayer.LayerCount; iLayer++) {
-      let iTileId: Int = this.Area.TileXY_World(cellPos.x, cellPos.y, iLayer as Int);
+    for (let iLayer = 0; iLayer < this.Area.Map.MapLayerCount; iLayer++) {
+      let iTileId: Int = this.Area.Map.Data.tileXY_World(cellPos.x, cellPos.y, iLayer as Int);
 
       if (iTileId !== MasterMap.EMPTY_TILE && iTileId !== TiledSpriteId.Border) {
-        let tileSprite: Sprite25D = this.Area.Map.Tiles.getTile(iTileId);
+        let tileSprite: Sprite25D = this.Area.Map.TileDefs.getTile(iTileId);
 
         if (!tileSprite) {
-          Globals.logError("Could not find tiled sprite for tile ID " + iTileId);
+          this.errors += "Could not find tile def (TileDef) for helix tile ID " + iTileId + "\r\n";
+
           if (iTileId > 1000) {
             //Globals.debugBreak();
           }
@@ -801,7 +1195,7 @@ export class TileGrid {
         else if (tileSprite.IsCellTile) {
           c.Blocks.push(new TileBlock());
           c.Blocks[c.Blocks.length - 1].SpriteRef = tileSprite;
-          c.Blocks[c.Blocks.length - 1].Layer = iLayer;
+          c.Blocks[c.Blocks.length - 1].Layer = toInt(iLayer);
           c.Blocks[c.Blocks.length - 1].AnimationData = tileSprite.Animation.TileData;
           c.Blocks[c.Blocks.length - 1].FrameIndex = this.getSpriteTileFrame(c.CellPos_World.x, c.CellPos_World.y, toInt(iLayer as number), tileSprite, iTileId);
         }
@@ -809,20 +1203,12 @@ export class TileGrid {
     }
 
   }
-  // public GetCellForPointi(gridpos: ivec2): Cell {
-  //   let v: vec2 = new vec2(
-  //     (gridpos.x as number) * (this.Area.Map.Atlas.TileWidthR3 as number) + (this.Area.Map.Atlas.TileWidthR3 as number) * 0.5,
-  //     (gridpos.y as number) * (this.Area.Map.Atlas.TileHeightR3 as number) + (this.Area.Map.Atlas.TileHeightR3 as number) * 0.5
-  //   );
-  //   return this.GetCellForPoint(v);
-  // }
   public GetCell(xy: ivec2): Cell {
     let cell: Cell = null;
     //Gets the cell at the grid pos
     cell = this.CellDict.get(xy);
     return cell;
   }
-
   public GetCellForPoint_WorldR3(pos: vec3): Cell {
     return this.GetCellForPoint_World(new vec2(pos.x, pos.y));
   }
@@ -929,8 +1315,11 @@ export class TileGrid {
     if (tileSprite.Tiling === Tiling.Random) {
       ret = Random.int(0, tileSprite.Animation.TileData.KeyFrames.length - 1);
     }
-    else if (tileSprite.Tiling === Tiling.SetEvenOdd2x2) {
-      ret = this.GetTileIndexEvenOdd2x2(x, y);
+    else if (tileSprite.Tiling === Tiling.FoliageBorderRules) {
+      ret = this.GetTileIndexFoliageBorder(x, y, layer, tileId);
+    }
+    else if (tileSprite.Tiling === Tiling.FenceBorderRules) {
+      ret = this.GetTileIndexFence(x, y, layer, tileId);
     }
     else if (tileSprite.Tiling === Tiling.Set3x3Block) {
       ret = this.GetTileIndex3x3Block(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
@@ -954,23 +1343,50 @@ export class TileGrid {
     return ret;
   }
 
-  public GetTileIndexEvenOdd2x2(col: Int, row: Int): Int {
+  public GetTileIndexFoliageBorder(col: Int, row: Int, layer: Int, tileId: Int): Int {
+    let ret: Int = toInt(0);
     let x: boolean = (col % 2) === 0;
     let y: boolean = (row % 2) === 0;
 
+    let arr = this.getSurroundingTiles3x3(col, row, tileId, layer, HashSet.construct<Int>([tileId]), true);
+
+    ret = toInt(2);//Bush
+
+    //Tree
     if (x && y) {
-      return toInt(0);
+      if (arr[5] && arr[7] && arr[8]) {
+        ret = toInt(0);
+      }
     }
     else if (!x && y) {
-      return toInt(1);
+      if (arr[3] && arr[7] && arr[6]) {
+        ret = toInt(1);
+      }
     }
     else if (x && !y) {
-      return toInt(2);
+      if (arr[1] && arr[5] && arr[2]) {
+        ret = toInt(3);
+
+      }
     }
     else if (!x && !y) {
-      return toInt(3);
+      if (arr[1] && arr[3] && arr[0]) {
+        ret = toInt(4);
+      }
     }
+
+    return ret;
   }
+  public GetTileIndexFence(col: Int, row: Int, layer: Int, tileId: Int): Int {
+    let ret: Int = toInt(0);
+
+    let arr = this.getSurroundingTiles3x3(col, row, tileId, layer, HashSet.construct<Int>([tileId]), true);
+
+    let pat: Int = this.crankPattern(this.Patterns.TilePatternsFence, arr, toInt(9), toInt(7), toInt(4));
+
+    return pat;
+  }
+
   public GetTileIndex3x3Block(col: Int, row: Int, layer: Int, tileId: Int, seamless_ids: HashSet<Int>, bContinue: boolean = true): Int {
     return this.GetTileIndex3x3(col, row, layer, tileId, seamless_ids, bContinue, true);
   }
@@ -985,6 +1401,14 @@ export class TileGrid {
       Globals.logError("Seamless ids of generated tiles  must at least contain the tile id.");
       Globals.debugBreak();
     }
+
+    let arr = this.getSurroundingTiles3x3(col, row, tileId, layer, seamless_ids, bContinue);
+
+    let pat: Int = this.crankPattern(block ? this.Patterns.TilePatterns3x3Block : this.Patterns.TilePatterns3x3Seamless, arr, toInt(9), toInt(7), toInt(4));
+
+    return pat;
+  }
+  public getSurroundingTiles3x3(col: Int, row: Int, tileId: Int, layer: Int, seamless_ids: HashSet<Int>, bContinue: boolean = true): Array<boolean> {
 
     //Create a boolean array
     let arr: Array<boolean> = new Array<boolean>(9);
@@ -1002,7 +1426,7 @@ export class TileGrid {
           arr[ind] = true;
         }
         else {
-          let txy: Int = this.Area.TileXY_World(toInt(cell_x), toInt(cell_y), layer);
+          let txy: Int = this.Area.Map.Data.tileXY_World(toInt(cell_x), toInt(cell_y), layer);
           if (txy === 0 && bContinue) {
             txy = tileId;  //continue outside the level border, 0 is null/no tile for TILED tiles.
           }
@@ -1012,52 +1436,32 @@ export class TileGrid {
         }
       }
     }
-
-    let pat: Int = this.CrankPattern(block ? this.Patterns.TilePatterns3x3Block : this.Patterns.TilePatterns3x3Seamless, arr, toInt(9), toInt(7), toInt(4));
-    if (pat === 21) {
-      let n: Int = toInt(0);
-      n++;
-    }
-    return pat;
+    return arr;
   }
-  public CrankPattern(list: MultiValueDictionary<Int, Array<Int>>, arr: boolean[], PatternTileCount: Int, Defaultvalue: Int, CenterPat: Int): Int {
+  public crankPattern(list: MultiValueDictionary<Int, Array<Int>>, arr: boolean[], patternTileCount: Int, defaultvalue: Int, centerPat: Int): Int {
     //This algorithm matches an input pattern of tiles, to the a configured pattern, to generate
     //a sprite.  This is essentially an automatic tiling algorithm.
     //Loop arr, match with every pattern in "list" and return the corresponding key
     //Center pat is the center index - the pattern we ignore  = 4 for 3x3 and 1 for 1x3 or 3x1
-    if (arr.length !== PatternTileCount) {
+    if (arr.length !== patternTileCount) {
       //Error
       Globals.debugBreak();
     }
 
-    let ret: Int = Defaultvalue;
+    let ret: Int = defaultvalue;
     for (let frame of list.keys()) {
       let values: HashSet<Array<Int>> = null;
 
       values = list.get(frame);
       if (values) {
         for (const pat of values.entries()) {
-          if (pat.length !== PatternTileCount) {
+
+          if (pat.length !== patternTileCount) {
             //Must have 9 tiles in the pattern.
             Globals.debugBreak();
           }
 
-          let match: boolean = true;
-          for (let iPat = 0; iPat < PatternTileCount; ++iPat) {
-            if (iPat === CenterPat) {
-              //Don't test the center square. That's what we're calculating.
-              continue;
-            }
-
-            if (pat[iPat] === 2) {
-              //2 = Don't care.  
-            }
-            else if ((pat[iPat] === 1) !== arr[iPat]) {
-              match = false;
-              break;
-            }
-          }
-
+          let match: boolean = this.matchPattern(pat, arr, patternTileCount, centerPat);
           if (match === true) {
             return frame;
           }
@@ -1066,16 +1470,34 @@ export class TileGrid {
       }
     }
 
-    return Defaultvalue;
+    return defaultvalue;
   }
+  private matchPattern(pat: Array<Int>, arr: Array<boolean>, patternTileCount: Int, centerPat: Int): boolean {
+    //Returns true if this pattern matches the input tile array.
+    for (let iPat = 0; iPat < patternTileCount; ++iPat) {
+      if (iPat === centerPat) {
+        //Don't test the center square. That's what we're calculating.
+        continue;
+      }
 
+      if (pat[iPat] === 2) {
+        //2 = any tile here matches if we are 2, even 0
+      }
+      else if ((pat[iPat] === 1) !== arr[iPat]) {
+        return false;
+      }
+    }
+
+
+    return true;
+  }
 }
 export class TileBlock {
   private _spriteRef: Sprite25D = null; //Reference to a Sprite25D, // Sprite for this block.  This also containst he TILE ID.  This is a REFERENCE to the tile.  Not a copy
   private _frameIndex: Int = 0 as Int;//The index of the frame that this sprite
-  private _layer: TileLayer = TileLayer.Unset;
-  private _animationData : SpriteAnimationData = null;
-  
+  private _layer: Int = -1 as Int;
+  private _animationData: SpriteAnimationData = null;
+
   public get AnimationData(): SpriteAnimationData { return this._animationData; }
   public set AnimationData(x: SpriteAnimationData) { this._animationData = x; }
 
@@ -1085,8 +1507,8 @@ export class TileBlock {
   public get SpriteRef(): Sprite25D { return this._spriteRef; }
   public set SpriteRef(x: Sprite25D) { this._spriteRef = x; }
 
-  public get Layer(): TileLayer { return this._layer; }
-  public set Layer(x: TileLayer) { this._layer = x; }
+  public get Layer(): Int { return this._layer; }
+  public set Layer(x: Int) { this._layer = x; }
 
   // public SpriteEffects SpriteEffects = SpriteEffects.None;
   public Box: Box2f;   // So we need custom boxes for things like ladders, &c
@@ -1110,7 +1532,6 @@ export class BvhNode {
   }
 
 }
-//public enum WaterType { Water, Lava, Tar }
 export class Cell {
   //This is a leaf node of the MapArea class, a single cell with fixed w/h
   private _cellPosWorld: ivec2;
@@ -1121,10 +1542,24 @@ export class Cell {
   public DebugVerts: Array<vec3> = new Array<vec3>();
   public static DebugFrame: SpriteFrame = null; // thisis just for debug
 
-  public removeBlock(block:TileBlock):boolean{
-    for(let bi=this.Blocks.length-1; bi>=0; bi--){
-      if(this.Blocks[bi]===block){
-        this.Blocks.splice(bi,1);
+  public isBlocked(layer: Int): boolean {
+    for (let block of this.Blocks) {
+      if (block.Layer === layer) {
+        if (block.SpriteRef) {
+
+          if (block.SpriteRef.canCollide()) {
+            return true;
+          }
+        }
+
+      }
+    }
+    return false;
+  }
+  public removeBlock(block: TileBlock): boolean {
+    for (let bi = this.Blocks.length - 1; bi >= 0; bi--) {
+      if (this.Blocks[bi] === block) {
+        this.Blocks.splice(bi, 1);
         return true;
       }
     }
@@ -1134,9 +1569,9 @@ export class Cell {
     //Returns the array of all blocks ordered from Front[0] to Back[n]
     //If this tile has multiple blocks on the same layer, then the order is the order in which they exist on the cell.
     let ret: Array<TileBlock> = new Array<TileBlock>();
-    for (let iLayer = TileLayer.LayerCount - 1; iLayer >= 0; --iLayer) {
+    for (let iLayer = this._parent.Area.Map.MapLayerCount - 1; iLayer >= 0; --iLayer) {
       for (let block of this.Blocks) {
-        if (block.Layer === iLayer as TileLayer) {
+        if (block.Layer === iLayer) {
           ret.push(block);
         }
       }
@@ -1200,16 +1635,14 @@ class TilePatterns {
   //Using numbers and converting to int later. Down the road... BigInt
   public TilePatterns3x3Seamless: MultiValueDictionary<Int, Array<Int>> = null;
   public TilePatterns3x3Block: MultiValueDictionary<Int, Array<Int>> = null;
-
-  private TilePatterns3x3Block_n: MultiValueDictionary<number, Array<number>> = null;
-  private TilePatterns3x3Seamless_n: MultiValueDictionary<number, Array<number>> = null;
-
+  public TilePatternsFence: MultiValueDictionary<Int, Array<Int>> = null;
   public constructor() {
-    this.set();
+
     //Convert numbered patterns to integer.
     //Why?  because we want to use Int type but having a toInt() on every number is hell.
     this.TilePatterns3x3Seamless = this.nPatToI(this.TilePatterns3x3Seamless_n);
     this.TilePatterns3x3Block = this.nPatToI(this.TilePatterns3x3Block_n);
+    this.TilePatternsFence = this.nPatToI(this.TilePatternsFence_n);
   }
   private nPatToI(input: MultiValueDictionary<number, Array<number>>): MultiValueDictionary<Int, Array<Int>> {
     //Simple method to 
@@ -1228,266 +1661,313 @@ class TilePatterns {
 
     return ret;
   }
-  private set() {
-    this.TilePatterns3x3Seamless_n = MultiValueDictionary.construct<number, Array<number>>([
-      [0, new Array<number>(
-        2, 0, 2,
-        0, 1, 1,
-        2, 1, 1)],
-      [1, new Array<number>(
-        2, 0, 2,
-        1, 1, 1,
-        1, 1, 1)],
-      [2, new Array<number>(
-        2, 0, 2,
-        1, 1, 0,
-        1, 1, 2)],
-      [3, new Array<number>(
-        0, 0, 0,
-        0, 1, 0,
-        2, 1, 2)],
-      [3, new Array<number>(
-        2, 0, 2,
-        0, 1, 0,
-        2, 1, 2)],
-      [4, new Array<number>(
-        2, 0, 2,
-        0, 1, 1,
-        2, 0, 2)],
-      [5, new Array<number>(
-        2, 0, 2,
-        1, 1, 0,
-        2, 0, 2)],
 
-      //Row2
-      [6, new Array<number>(
-        2, 1, 1,
-        0, 1, 1,
-        2, 1, 1)],
-      [7, new Array<number>(
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 1)],
-      [8, new Array<number>(
-        1, 1, 2,
-        1, 1, 0,
-        1, 1, 2)],
-      [9, new Array<number>(
-        2, 1, 2,
-        0, 1, 0,
-        2, 0, 2)],
-      [10, new Array<number>(
-        1, 1, 0,
-        1, 1, 1,
-        1, 1, 1)],
-      [11, new Array<number>(
-        0, 1, 1,
-        1, 1, 1,
-        1, 1, 1)],
-      //Row 3
-      [12, new Array<number>(
-        2, 1, 1,
-        0, 1, 1,
-        2, 0, 2)],
-      [13, new Array<number>(
-        1, 1, 1,
-        1, 1, 1,
-        2, 0, 2)],
+  private TilePatterns3x3Seamless_n = MultiValueDictionary.construct<number, Array<number>>([
+    [0, new Array<number>(
+      2, 0, 2,
+      0, 1, 1,
+      2, 1, 1)],
+    [1, new Array<number>(
+      2, 0, 2,
+      1, 1, 1,
+      1, 1, 1)],
+    [2, new Array<number>(
+      2, 0, 2,
+      1, 1, 0,
+      1, 1, 2)],
+    [3, new Array<number>(
+      0, 0, 0,
+      0, 1, 0,
+      2, 1, 2)],
+    [3, new Array<number>(
+      2, 0, 2,
+      0, 1, 0,
+      2, 1, 2)],
+    [4, new Array<number>(
+      2, 0, 2,
+      0, 1, 1,
+      2, 0, 2)],
+    [5, new Array<number>(
+      2, 0, 2,
+      1, 1, 0,
+      2, 0, 2)],
 
-      [14, new Array<number>(
-        1, 1, 2,
-        1, 1, 0,
-        2, 0, 2)],
+    //Row2
+    [6, new Array<number>(
+      2, 1, 1,
+      0, 1, 1,
+      2, 1, 1)],
+    [7, new Array<number>(
+      1, 1, 1,
+      1, 1, 1,
+      1, 1, 1)],
+    [8, new Array<number>(
+      1, 1, 2,
+      1, 1, 0,
+      1, 1, 2)],
+    [9, new Array<number>(
+      2, 1, 2,
+      0, 1, 0,
+      2, 0, 2)],
+    [10, new Array<number>(
+      1, 1, 0,
+      1, 1, 1,
+      1, 1, 1)],
+    [11, new Array<number>(
+      0, 1, 1,
+      1, 1, 1,
+      1, 1, 1)],
+    //Row 3
+    [12, new Array<number>(
+      2, 1, 1,
+      0, 1, 1,
+      2, 0, 2)],
+    [13, new Array<number>(
+      1, 1, 1,
+      1, 1, 1,
+      2, 0, 2)],
 
-
-      [15, new Array<number>( //*This goes with 4 and 5
-        2, 0, 2,
-        1, 1, 1,
-        2, 0, 2)],
-
-      [16, new Array<number>(
-        1, 1, 1,
-        1, 1, 1,
-        0, 1, 0)],
-
-      //Too many combos, use 2
-      [17, new Array<number>(
-        2, 1, 2,
-        0, 1, 0,
-        2, 1, 2)],
-
-      //Row 4
-      [18, new Array<number>(
-        2, 1, 0,
-        0, 1, 1,
-        2, 1, 1)],
-      [19, new Array<number>(
-        0, 1, 2,
-        1, 1, 0,
-        1, 1, 2)],
-      [20, new Array<number>(
-        2, 1, 0,
-        0, 1, 1,
-        2, 1, 0)],
-
-      [21, new Array<number>(
-        0, 1, 2,
-        1, 1, 0,
-        0, 1, 2)],
-
-      [22, new Array<number>(
-        1, 1, 0,
-        1, 1, 1,
-        1, 1, 0)],
-      [23, new Array<number>(
-        0, 1, 1,
-        1, 1, 1,
-        0, 1, 1)],
-      //Row 5
-      [24, new Array<number>(
-        2, 0, 2,
-        1, 1, 1,
-        1, 1, 0)],
-      [25, new Array<number>(
-        2, 0, 2,
-        1, 1, 1,
-        0, 1, 1)],
-      [26, new Array<number>(
-        2, 0, 2,
-        1, 1, 1,
-        0, 1, 0)],
-
-      [27, new Array<number>(
-        2, 1, 0,
-        0, 1, 1,
-        2, 0, 2)],
-
-      [28, new Array<number>(
-        0, 1, 2,
-        1, 1, 0,
-        2, 0, 2)],
-
-      [29, new Array<number>(
-        2, 0, 2,
-        0, 1, 0,
-        2, 0, 2)],
+    [14, new Array<number>(
+      1, 1, 2,
+      1, 1, 0,
+      2, 0, 2)],
 
 
-      //Rpw 6
-      [30, new Array<number>(
-        2, 0, 2,
-        0, 1, 1,
-        2, 1, 0)],
-      [31, new Array<number>(
-        2, 0, 2,
-        1, 1, 0,
-        0, 1, 2)],
+    [15, new Array<number>( //*This goes with 4 and 5
+      2, 0, 2,
+      1, 1, 1,
+      2, 0, 2)],
 
-      [32, new Array<number>(
-        0, 1, 0,
-        1, 1, 1,
-        0, 1, 0)],
-      [33, new Array<number>(
-        2, 1, 1,
-        0, 1, 1,
-        2, 1, 0)],
-      [34, new Array<number>(
-        1, 1, 2,
-        1, 1, 0,
-        0, 1, 2)],
-      [35, new Array<number>(
-        0, 1, 0,
-        1, 1, 1,
-        2, 0, 2)],
+    [16, new Array<number>(
+      1, 1, 1,
+      1, 1, 1,
+      0, 1, 0)],
 
-      //rOW 7
-      [36, new Array<number>(
-        0, 1, 0,
-        1, 1, 1,
-        1, 1, 0)],
-      [37, new Array<number>(
-        0, 1, 0,
-        1, 1, 1,
-        0, 1, 1)],
-      [38, new Array<number>(
-        0, 1, 1,
-        1, 1, 1,
-        2, 0, 2)],
+    //Too many combos, use 2
+    [17, new Array<number>(
+      2, 1, 2,
+      0, 1, 0,
+      2, 1, 2)],
 
-      [39, new Array<number>(
-        1, 1, 0,
-        1, 1, 1,
-        2, 0, 2)],
-      [40, new Array<number>(
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 0)],
-      [41, new Array<number>(
-        1, 1, 1,
-        1, 1, 1,
-        0, 1, 1)],
-      //Row 8
-      [42, new Array<number>(
-        1, 1, 0,
-        1, 1, 1,
-        0, 1, 0)],
-      [43, new Array<number>(
-        0, 1, 1,
-        1, 1, 1,
-        0, 1, 0)],
-      [44, new Array<number>(
-        0, 1, 0,
-        1, 1, 1,
-        1, 1, 1)],
-      [49, new Array<number>(
-        0, 1, 2,
-        1, 1, 1,
-        2, 1, 0)],
-      [48, new Array<number>(
-        2, 1, 0,
-        1, 1, 1,
-        0, 1, 2)],
+    //Row 4
+    [18, new Array<number>(
+      2, 1, 0,
+      0, 1, 1,
+      2, 1, 1)],
+    [19, new Array<number>(
+      0, 1, 2,
+      1, 1, 0,
+      1, 1, 2)],
+    [20, new Array<number>(
+      2, 1, 0,
+      0, 1, 1,
+      2, 1, 0)],
 
-    ]);
+    [21, new Array<number>(
+      0, 1, 2,
+      1, 1, 0,
+      0, 1, 2)],
 
-    this.TilePatterns3x3Block_n = MultiValueDictionary.construct<number, Array<number>>([
-      [0, new Array<number>(
-        0, 0, 0,
-        0, 1, 1,
-        0, 1, 1)],
-      [1, new Array<number>(
-        0, 0, 0,
-        1, 1, 1,
-        1, 1, 1)],
-      [2, new Array<number>(
-        0, 0, 0,
-        1, 1, 0,
-        1, 1, 0)],
-      [3, new Array<number>(
-        0, 1, 1,
-        0, 1, 1,
-        0, 1, 1)],
-      [4, new Array<number>(
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 1)],
-      [5, new Array<number>(
-        1, 1, 0,
-        1, 1, 0,
-        1, 1, 0)],
-      [6, new Array<number>(
-        0, 1, 1,
-        0, 1, 1,
-        0, 0, 0)],
-      [7, new Array<number>(
-        1, 1, 1,
-        1, 1, 1,
-        0, 0, 0)],
-      [8, new Array<number>(
-        1, 1, 0,
-        1, 1, 0,
-        0, 0, 0)],
-    ]);
-  }
+    [22, new Array<number>(
+      1, 1, 0,
+      1, 1, 1,
+      1, 1, 0)],
+    [23, new Array<number>(
+      0, 1, 1,
+      1, 1, 1,
+      0, 1, 1)],
+    //Row 5
+    [24, new Array<number>(
+      2, 0, 2,
+      1, 1, 1,
+      1, 1, 0)],
+    [25, new Array<number>(
+      2, 0, 2,
+      1, 1, 1,
+      0, 1, 1)],
+    [26, new Array<number>(
+      2, 0, 2,
+      1, 1, 1,
+      0, 1, 0)],
+
+    [27, new Array<number>(
+      2, 1, 0,
+      0, 1, 1,
+      2, 0, 2)],
+
+    [28, new Array<number>(
+      0, 1, 2,
+      1, 1, 0,
+      2, 0, 2)],
+
+    [29, new Array<number>(
+      2, 0, 2,
+      0, 1, 0,
+      2, 0, 2)],
+
+
+    //Rpw 6
+    [30, new Array<number>(
+      2, 0, 2,
+      0, 1, 1,
+      2, 1, 0)],
+    [31, new Array<number>(
+      2, 0, 2,
+      1, 1, 0,
+      0, 1, 2)],
+
+    [32, new Array<number>(
+      0, 1, 0,
+      1, 1, 1,
+      0, 1, 0)],
+    [33, new Array<number>(
+      2, 1, 1,
+      0, 1, 1,
+      2, 1, 0)],
+    [34, new Array<number>(
+      1, 1, 2,
+      1, 1, 0,
+      0, 1, 2)],
+    [35, new Array<number>(
+      0, 1, 0,
+      1, 1, 1,
+      2, 0, 2)],
+
+    //rOW 7
+    [36, new Array<number>(
+      0, 1, 0,
+      1, 1, 1,
+      1, 1, 0)],
+    [37, new Array<number>(
+      0, 1, 0,
+      1, 1, 1,
+      0, 1, 1)],
+    [38, new Array<number>(
+      0, 1, 1,
+      1, 1, 1,
+      2, 0, 2)],
+
+    [39, new Array<number>(
+      1, 1, 0,
+      1, 1, 1,
+      2, 0, 2)],
+    [40, new Array<number>(
+      1, 1, 1,
+      1, 1, 1,
+      1, 1, 0)],
+    [41, new Array<number>(
+      1, 1, 1,
+      1, 1, 1,
+      0, 1, 1)],
+    //Row 8
+    [42, new Array<number>(
+      1, 1, 0,
+      1, 1, 1,
+      0, 1, 0)],
+    [43, new Array<number>(
+      0, 1, 1,
+      1, 1, 1,
+      0, 1, 0)],
+    [44, new Array<number>(
+      0, 1, 0,
+      1, 1, 1,
+      1, 1, 1)],
+    [49, new Array<number>(
+      0, 1, 2,
+      1, 1, 1,
+      2, 1, 0)],
+    [48, new Array<number>(
+      2, 1, 0,
+      1, 1, 1,
+      0, 1, 2)],
+
+  ]);
+
+  private TilePatterns3x3Block_n = MultiValueDictionary.construct<number, Array<number>>([
+    [0, new Array<number>(
+      0, 0, 0,
+      0, 1, 1,
+      0, 1, 1)],
+    [1, new Array<number>(
+      0, 0, 0,
+      1, 1, 1,
+      1, 1, 1)],
+    [2, new Array<number>(
+      0, 0, 0,
+      1, 1, 0,
+      1, 1, 0)],
+    [3, new Array<number>(
+      0, 1, 1,
+      0, 1, 1,
+      0, 1, 1)],
+    [4, new Array<number>(
+      1, 1, 1,
+      1, 1, 1,
+      1, 1, 1)],
+    [5, new Array<number>(
+      1, 1, 0,
+      1, 1, 0,
+      1, 1, 0)],
+    [6, new Array<number>(
+      0, 1, 1,
+      0, 1, 1,
+      0, 0, 0)],
+    [7, new Array<number>(
+      1, 1, 1,
+      1, 1, 1,
+      0, 0, 0)],
+    [8, new Array<number>(
+      1, 1, 0,
+      1, 1, 0,
+      0, 0, 0)],
+  ]);
+
+  private TilePatternsFence_n = MultiValueDictionary.construct<number, Array<number>>([
+    [0, new Array<number>(
+      2, 1, 2,
+      0, 1, 0,
+      2, 0, 2)],
+    [1, new Array<number>(
+      2, 1, 2,
+      0, 1, 0,
+      2, 1, 2)],
+    [2, new Array<number>(
+      2, 0, 2,
+      0, 1, 0,
+      0, 1, 0)],
+    [3, new Array<number>(
+      2, 0, 0,
+      0, 1, 1,
+      0, 1, 2)],
+    [4, new Array<number>(
+      0, 0, 2,
+      1, 1, 0,
+      2, 1, 0)],
+    [5, new Array<number>(
+      2, 0, 0,
+      0, 1, 1,
+      2, 0, 0)],
+    [6, new Array<number>(
+      2, 0, 2,
+      1, 1, 1,
+      2, 0, 2)],
+    [7, new Array<number>(
+      0, 0, 2,
+      1, 1, 0,
+      0, 0, 2)],
+    [8, new Array<number>(
+      0, 1, 2,
+      0, 1, 1,
+      2, 0, 0)],
+    [9, new Array<number>(
+      2, 1, 0,
+      1, 1, 0,
+      0, 0, 2)],
+    [10, new Array<number>(
+      2, 0, 2,
+      0, 1, 0,
+      2, 0, 2)],
+  ]);
+
 
 }

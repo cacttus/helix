@@ -3,12 +3,6 @@ Helix is a 2D game in VR.  The purpose of this project is to demonstrate how VR 
 
 Graduate Seminar Term Project Fall 2019
 
-Not working in Firefox, or IE, due to some dank code,  Adding support for dynamic VR device addition.
-Added a quick UI
-Added title screen.
-
-TODO character is now negative due to new UI update.
-
 
 ## Trello
 https://trello.com/b/d4cSwyt3
