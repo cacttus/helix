@@ -123,7 +123,7 @@
                 {
                  "name":"name",
                  "type":"string",
-                 "value":"water"
+                 "value":"ocean_water"
                 }]
         }, 
         {
@@ -142,6 +142,33 @@
                  "name":"name",
                  "type":"string",
                  "value":"npc"
+                }]
+        }, 
+        {
+         "id":123,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"vial_item"
+                }]
+        }, 
+        {
+         "id":124,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"hard_border"
+                }]
+        }, 
+        {
+         "id":180,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"pond_water"
                 }]
         }, 
         {

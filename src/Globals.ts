@@ -184,7 +184,7 @@ export class _Globals {
       this._console3d.log(str);
     }
   }
-  public logError(e: any): void {
+  public logError(e: any): string {
     let str: string = ">>E:" + e;
     console.error(str);
 
@@ -197,6 +197,8 @@ export class _Globals {
     if(Globals.isDebug()){
      // Globals.debugBreak();
     }
+
+    return str;
   }
   public logWarn(e: any): void {
     let str: string = ">>W:" + e;
@@ -594,10 +596,13 @@ export class _Globals {
 
     let bk = szGrid;
 
-    let side = 'dat/img/side_cube-128.png';
-    let top = 'dat/img/top_cube-128.png';
-    let bot = 'dat/img/bot_cube-128.png';
+    // let side = 'dat/img/side_cube-128.png';
+    // let top = 'dat/img/top_cube-128.png';
+    // let bot = 'dat/img/bot_cube-128.png';
 
+    let side ='dat/img/black-128.png';
+    let top ='dat/img/black-128.png' ;
+    let bot = 'dat/img/black-128.png';
 
     this.scene = new THREE.Scene();
     {

@@ -221,10 +221,13 @@ export enum TiledSpriteId {
   , Door
   , Hole
   , Conduit
-  , Water
+  , Ocean_Water
   , Fence
   , Npc
   , Area_Props
+  , Pond_Water
+  , vial_item //base item
+  , Hard_Border //border above water to make it look less "dense"
   , Empty // ?, not sure.
 }
 export enum TileLayerID {
@@ -233,11 +236,12 @@ export enum TileLayerID {
   Border = 0,
   Background = 1,
   Water = 2, //Midground = 2,
-  Objects = 3,
-  Foreground = 4,
-  Conduit = 5,
-  Data_Objects = 6,
-  LayerCountEnum = 7,
+  AboveWater = 3,
+  Objects = 4,
+  Foreground = 5,
+  Conduit = 6,
+  Data_Objects = 7,
+  LayerCountEnum = 8,
   Unset = 999, // Special layer type indicating that the layer of this
 }
 interface MakeTileFn { (): Sprite25D }
@@ -349,7 +353,7 @@ export class TileDefs {
       return tile;
     });
     this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Water", TiledSpriteId.Water);
+      let tile = new Sprite25D(atlas, "Ocean_Water", TiledSpriteId.Ocean_Water);
       let off_x = 5;
       let off_y = 5;
 
@@ -357,6 +361,26 @@ export class TileDefs {
       tile.Animation.addTileFrame(new ivec2(off_x + 0, off_y + 0), atlas, new ivec2(1, 1), null, 2.4);
       tile.Animation.addTileFrame(new ivec2(off_x + 1, off_y + 0), atlas, new ivec2(1, 1), null, 2.1);
       tile.Animation.addTileFrame(new ivec2(off_x + 2, off_y + 0), atlas, new ivec2(1, 1), null, 2.0);
+
+      tile.Tiling = Tiling.Single;
+
+      //Tiled animation for static tile.  Set TilingAnimated to true and play the animation.
+      tile.TilingAnimated = true;
+      tile.Animation.play(Animation25D.c_strDefaultTileAnimation);
+
+      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
+
+      return tile;
+    });
+    this.addTile(function () {
+      let tile = new Sprite25D(atlas, "Pond_Water", TiledSpriteId.Pond_Water);
+      let off_x = 8;
+      let off_y = 5;
+
+      //add an animated tileframe
+      tile.Animation.addTileFrame(new ivec2(off_x + 0, off_y + 0), atlas, new ivec2(1, 1), null, 3.4);
+      tile.Animation.addTileFrame(new ivec2(off_x + 1, off_y + 0), atlas, new ivec2(1, 1), null, 3.1);
 
       tile.Tiling = Tiling.Single;
 
@@ -409,6 +433,27 @@ export class TileDefs {
       // }
       return tile;
     });
+    this.addTile(function () {
+      let tile = new Sprite25D(atlas, "Hard_Border", TiledSpriteId.Hard_Border);
+
+      that.addFrameGrid(11, 7, 4, 6, tile, atlas);
+
+      tile.Tiling = Tiling.HardBorderRules;
+      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
+      return tile;
+      return tile;
+    });
+  }
+  private addFrameGrid(xoff: number, yoff: number, width: number, height: number, sprite: Sprite25D, atlas: Atlas) {
+
+    let off_x = xoff;
+    let off_y = yoff;
+    for (let j = 0; j < height; ++j) {
+      for (let i = 0; i < width; ++i) {
+        sprite.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas);
+      }
+    }
 
   }
   public getTile(id: TiledSpriteId): Sprite25D {
@@ -890,7 +935,7 @@ export class MasterMap {
 
 
   }
-  public update(dt:number){
+  public update(dt: number) {
     this.TileDefs.update(dt);
   }
   private makeMapArea(startxy: ivec2) {
@@ -1327,6 +1372,9 @@ export class TileGrid {
     else if (tileSprite.Tiling === Tiling.Set3x3Seamless) {
       ret = this.GetTileIndex3x3Seamless(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
     }
+    else if (tileSprite.Tiling === Tiling.HardBorderRules) {
+      ret = this.GetTileIndexHardBorder(x, y, layer, tileId);
+    }
     else if (tileSprite.Tiling === Tiling.Single) {
       ret = 0 as Int;
     }
@@ -1377,6 +1425,20 @@ export class TileGrid {
 
     return ret;
   }
+  public GetTileIndexHardBorder(col: Int, row: Int, layer: Int, tileId: Int): Int {
+    let ret: Int = toInt(0);
+
+    //**For the border sprites we use the layer below. 
+    let layerBelow = layer - 1;
+    let tileBelow: Int = this.Area.Map.Data.tileXY_World(col, row, layerBelow as Int);
+    let arr = this.getSurroundingTiles3x3(col, row, tileBelow, layerBelow as Int, HashSet.construct<Int>([tileBelow]), true);
+
+    let pat: Int = this.crankPattern(this.Patterns.TilePatternsHardBorder, arr, toInt(9), toInt(7), toInt(4));
+
+    return pat;
+  }
+
+
   public GetTileIndexFence(col: Int, row: Int, layer: Int, tileId: Int): Int {
     let ret: Int = toInt(0);
 
@@ -1636,13 +1698,14 @@ class TilePatterns {
   public TilePatterns3x3Seamless: MultiValueDictionary<Int, Array<Int>> = null;
   public TilePatterns3x3Block: MultiValueDictionary<Int, Array<Int>> = null;
   public TilePatternsFence: MultiValueDictionary<Int, Array<Int>> = null;
+  public TilePatternsHardBorder: MultiValueDictionary<Int, Array<Int>> = null;
   public constructor() {
-
     //Convert numbered patterns to integer.
     //Why?  because we want to use Int type but having a toInt() on every number is hell.
     this.TilePatterns3x3Seamless = this.nPatToI(this.TilePatterns3x3Seamless_n);
     this.TilePatterns3x3Block = this.nPatToI(this.TilePatterns3x3Block_n);
     this.TilePatternsFence = this.nPatToI(this.TilePatternsFence_n);
+    this.TilePatternsHardBorder = this.nPatToI(this.TilePatternsHardBorder_n);
   }
   private nPatToI(input: MultiValueDictionary<number, Array<number>>): MultiValueDictionary<Int, Array<Int>> {
     //Simple method to 
@@ -1967,7 +2030,95 @@ class TilePatterns {
       2, 0, 2,
       0, 1, 0,
       2, 0, 2)],
+    [11, new Array<number>(
+      2, 1, 2,
+      1, 1, 1,
+      2, 1, 2)],      
   ]);
 
+  private TilePatternsHardBorder_n = MultiValueDictionary.construct<number, Array<number>>([
+    [0, new Array<number>(
+      2, 0, 2,
+      0, 1, 1,
+      2, 1, 2)],
+    [1, new Array<number>(
+      2, 0, 2,
+      1, 1, 1,
+      2, 1, 2)],
+    [2, new Array<number>(
+      2, 0, 2,
+      1, 1, 0,
+      2, 1, 2)],
+    [3, new Array<number>(
+      2, 0, 2,
+      0, 1, 0,
+      2, 0, 2)],
+    [4, new Array<number>(
+      2, 1, 2,
+      0, 1, 1,
+      2, 1, 2)],
+    //**IGNORE pattern 5 (blank)
+    [5, new Array<number>(
+      0, 0, 0,
+      0, 0, 0,
+      0, 0, 0)],
+    [6, new Array<number>(
+      2, 1, 2,
+      1, 1, 0,
+      2, 1, 2)],
+    [7, new Array<number>(
+      2, 0, 2,
+      0, 1, 0,
+      2, 1, 2)],
+    [8, new Array<number>(
+      2, 1, 2,
+      0, 1, 1,
+      2, 0, 2)],
+    [9, new Array<number>(
+      2, 1, 2,
+      1, 1, 1,
+      2, 0, 2)],
+    [10, new Array<number>(
+      2, 1, 2,
+      1, 1, 0,
+      2, 0, 2)],
+    [11, new Array<number>(
+      2, 1, 2,
+      0, 1, 0,
+      2, 1, 2)],
+    [12, new Array<number>(
+      2, 0, 2,
+      0, 1, 1,
+      2, 0, 2)],
+    [13, new Array<number>(
+      2, 0, 2,
+      1, 1, 1,
+      2, 0, 2)],
+    [14, new Array<number>(
+      2, 0, 2,
+      1, 1, 0,
+      2, 0, 2)],
+    [15, new Array<number>(
+      2, 1, 2,
+      0, 1, 0,
+      2, 0, 2)],
+    //Start of corners
+    [16, new Array<number>(
+      0, 1, 2,
+      1, 1, 1,
+      2, 1, 2)],
+    [17, new Array<number>(
+      2, 1, 0,
+      1, 1, 1,
+      2, 1, 2)],
+    [18, new Array<number>(
+      2, 1, 2,
+      1, 1, 1,
+      2, 1, 0)],
+    [19, new Array<number>(
+      2, 1, 2,
+      1, 1, 1,
+      0, 1, 2)],
+  ]);
 
 }

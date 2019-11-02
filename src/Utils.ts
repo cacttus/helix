@@ -10,6 +10,8 @@ type WithProperty<K extends string, V = {}> = {
 
 export class Utils {
   public static enumKeyVals(kv: Array<string>): Map<string, number> {
+    //Typescript is weird.  Returns an enum's keys and values with object.keys.
+    //This turns this into a simple map of key=>val ex. MyEnum { MyEnumKey=0 } turns into ["MyEnumKey", 0]
     //Returns a map that you can iterate over enum:
     //Usage:
     //    for(let [k,v] of enumKeyVals(Object.keys(MyEnum)))

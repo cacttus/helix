@@ -26,20 +26,371 @@ export class Color4 {
     return b;
   }
 }
-function getPixel(x: number, y: number, imageData: ImageData): Color4 {
-  let position = (x + imageData.width * y) * 4;
-  let data = imageData.data;
-  let c: Color4 = new Color4(data[position], data[position + 1], data[position + 2], data[position + 3]);
-  return c;
+enum ImageGradient { Base, Blue, Red, Green, Yellow, }
+enum TimeOfDayEnum { Dawn, Day, Dusk, Night };
+class TimeOfDay {
+  //holds the time of day and image colors representative of it
+  public time: TimeOfDayEnum = TimeOfDayEnum.Day;
+  public color: ImageGradient = ImageGradient.Green;
+  public gradientLocation: ivec2 = new ivec2(0, 0);
+  public image: ImageData = null; // This is set asynchronously
+  public interpolation_duration: number = 1;
+  public constructor(dtime: TimeOfDayEnum, dcolor: ImageGradient, dlocation: ivec2, dinterp_duration: number) {
+    this.time = dtime;
+    this.color = dcolor;
+    this.gradientLocation = dlocation.clone();
+    this.interpolation_duration = dinterp_duration;
+  }
 }
-function setPixel(x: number, y: number, color: Color4, imageData: ImageData) {
-  let position = (x + imageData.width * y) * 4;
-  let data = imageData.data;
+class Environment {
+  //Handles time and the changing of the image colors due to changes in the time.
+  public WorldTime_Seconds: number = (5.9) * 60 * 60; /*12=noon*/ // World time in seconds = 24 * 60 * 60 hours [0,86400] 12 = noon
+  public WorldSpeed: number = 120; //Testing -- 60 for 1 hour = 1 minute.
+  public readonly c_WorldTimeMax = 24 * 60 * 60; // 86400;
 
-  data[position + 0] = color.r;
-  data[position + 1] = color.g;
-  data[position + 2] = color.b;
-  data[position + 3] = color.a;
+  private _world: WorldView25D = null;
+  private _times: Array<TimeOfDay> = new Array<TimeOfDay>();
+
+  public get WorldTime_Hours(): number { return this.WorldTime_Seconds / 60 / 60; }
+
+  private _bInterpolatingTimeOfDay: boolean = false;
+  private _timeOfDayInterpolation: number = 0; //[0,1] color interpolation
+  private _timeOfDayInterpolation0: TimeOfDay;
+  private _timeOfDayInterpolation1: TimeOfDay;
+
+  public constructor(world: WorldView25D) {
+    this._world = world;
+
+    this._times = new Array<TimeOfDay>(
+      new TimeOfDay(TimeOfDayEnum.Dawn, ImageGradient.Yellow, new ivec2(4, 1), 5),
+      new TimeOfDay(TimeOfDayEnum.Day, ImageGradient.Green, new ivec2(1, 1), 5),
+      new TimeOfDay(TimeOfDayEnum.Dusk, ImageGradient.Red, new ivec2(3, 1), 5),
+      new TimeOfDay(TimeOfDayEnum.Night, ImageGradient.Blue, new ivec2(2, 1), 5),
+    );
+
+    let baseImageData = ImageUtils.getImageDataFromTexture(this._world.SpriteSheetMaterial.map);
+
+    ImageUtils.computeImageGradients(baseImageData, this._times, TimeOfDayEnum.Day).then((resolve: boolean) => {
+      if (Globals.isDebug()) {
+
+        for (let t of this._times) {
+          ImageUtils.debug_drawImageToCanvas(t.image);
+        }
+      }
+
+      Globals.logInfo("Setting initial time of day.");
+      //Set initial time of day
+      let tod: TimeOfDay = this.getTimeOfDay();
+      ImageUtils.swapMaterialImage(this._world.SpriteSheetMaterial, tod.image);
+
+    }, (reject: any) => { });
+  }
+  private getTimeOfDay(): TimeOfDay {
+    if (this.WorldTime_Hours > (12 + 7)) {
+      return this._times[TimeOfDayEnum.Night];
+    }
+    else if (this.WorldTime_Hours > (12 + 6)) {
+      return this._times[TimeOfDayEnum.Dusk];
+    }
+    else if (this.WorldTime_Hours > (7)) {
+      return this._times[TimeOfDayEnum.Day];
+    }
+    else if (this.WorldTime_Hours > (6)) {
+      return this._times[TimeOfDayEnum.Dawn];
+    }
+    return this._times[TimeOfDayEnum.Night];//from 0 to 6am
+  }
+
+  public update(dt: number) {
+    let lastTimeOfDay = this.getTimeOfDay();
+
+    this.WorldTime_Seconds = (this.WorldTime_Seconds + dt * this.WorldSpeed) % this.c_WorldTimeMax;
+
+    let currentTimeOfDay = this.getTimeOfDay();
+
+    if (lastTimeOfDay !== currentTimeOfDay) {
+      //Transition the image.
+      this._bInterpolatingTimeOfDay = true;
+      this._timeOfDayInterpolation = 0;
+      this._timeOfDayInterpolation0 = lastTimeOfDay;
+      this._timeOfDayInterpolation1 = currentTimeOfDay;
+    }
+
+    if (this._bInterpolatingTimeOfDay) {
+      if (this._timeOfDayInterpolation0.image && this._timeOfDayInterpolation1.image) {
+        let steps = 20;
+        let step_value = this._timeOfDayInterpolation1.interpolation_duration / steps;
+
+        let cur_step_value = Math.floor(this._timeOfDayInterpolation / step_value);
+
+        this._timeOfDayInterpolation = Utils.clampScalar(this._timeOfDayInterpolation + dt, 0, this._timeOfDayInterpolation1.interpolation_duration);
+
+        //So, since this is slow, in order to prevent lag, we'll divide this into discrete steps.
+
+        let next_step_value = Math.floor(this._timeOfDayInterpolation / step_value);
+
+        //If we have incremented one step, or we are on the last interpolation.
+        if (cur_step_value !== next_step_value || (this._timeOfDayInterpolation >= this._timeOfDayInterpolation1.interpolation_duration - 0.0001)) {
+
+          let interp_value_01 = this._timeOfDayInterpolation / this._timeOfDayInterpolation1.interpolation_duration;
+
+          let newImage = ImageUtils.interpolateImages(this._timeOfDayInterpolation0.image, this._timeOfDayInterpolation1.image, interp_value_01);
+          ImageUtils.swapMaterialImage(this._world.SpriteSheetMaterial, newImage);
+
+          if (this._timeOfDayInterpolation >= this._timeOfDayInterpolation1.interpolation_duration - 0.0001) {
+            this._bInterpolatingTimeOfDay = false;
+
+          }
+        }
+
+      }//if images not null
+
+    }//If interpolating
+
+  }
+}
+
+export class ImageUtils {
+  //Basically this class was creatd to handle the changing of image colors based on time of day.
+  private static scaleImageData(imageData:ImageData, scale:number) {
+    let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
+    var scaled = canvasxx.getContext('2d').createImageData(imageData.width * scale, imageData.height * scale);
+  
+    for(var row = 0; row < imageData.height; row++) {
+      for(var col = 0; col < imageData.width; col++) {
+        var sourcePixel = [
+          imageData.data[(row * imageData.width + col) * 4 + 0],
+          imageData.data[(row * imageData.width + col) * 4 + 1],
+          imageData.data[(row * imageData.width + col) * 4 + 2],
+          imageData.data[(row * imageData.width + col) * 4 + 3]
+        ];
+        for(var y = 0; y < scale; y++) {
+          var destRow = row * scale + y;
+          for(var x = 0; x < scale; x++) {
+            var destCol = col * scale + x;
+            for(var i = 0; i < 4; i++) {
+              scaled.data[(destRow * scaled.width + destCol) * 4 + i] =
+                sourcePixel[i];
+            }
+          }
+        }
+      }
+    }
+  
+    return scaled;
+  }
+  public static swapMaterialImage(mat: MeshBasicMaterial, image: ImageData) {
+    //Swap a material's image for some imagedata
+    //**NOTE** - We're using putImageData here, but drawImage() might be faster.  Keep this in mind if porting.
+    //https://stackoverflow.com/questions/7721898/is-putimagedata-faster-than-drawimage
+    
+    let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
+    canvasxx.width = image.width;
+    canvasxx.height = image.height;
+    let context = canvasxx.getContext('2d');
+    
+    //https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
+ //   image = ImageUtils.scaleImageData(image, 2);
+    
+    
+    context.putImageData(image, 0, 0);
+   // g_atlas.multiply2();
+
+    mat.map = new THREE.Texture(canvasxx);
+    Atlas.applyParamsToAtlas(mat.map);
+    mat.needsUpdate = true;
+    mat.map.needsUpdate = true;
+
+
+    //     ImageUtils.getImage(image).then((value: ImageBitmap) => {
+//       let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
+//       canvasxx.width = image.width;
+//       canvasxx.height = image.height;
+//       let context = canvasxx.getContext('2d');
+//       context.drawImage(value, 0, 0);
+// //https://stackoverflow.com/questions/7721898/is-putimagedata-faster-than-drawimage
+//     //  canvasxx.getContext("2d").putImageData(imageData, 0, 0);
+
+//     //https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
+    
+//     // let canvas2: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
+//     // canvas2.width = image.width;
+//     // canvas2.height = image.height;
+//     // canvas2.getContext('2d').putImageData(image,0,0);
+//     // context.scale(2, 2);
+    
+//     // context.drawImage(canvas2, 0, 0);
+
+
+//       mat.map = new THREE.Texture(canvasxx);
+//       Atlas.applyParamsToAtlas(mat.map);
+//       mat.needsUpdate = true;
+//       mat.map.needsUpdate = true;
+
+//     }, (reject: any) => {
+//       Globals.logError(reject ? reject : "swapMaterialImage failed without an error message");
+//     });
+  }
+  public static debug_drawImageToCanvas(idata: ImageData): Promise<boolean> {
+    return new Promise<boolean>(function (resolve, reject) {
+      createImageBitmap(idata).then(function (imgBitmap) {
+        try {
+          let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
+          canvasxx.width = idata.width;
+          canvasxx.height = idata.height;
+          let context = canvasxx.getContext('2d');
+          context.drawImage(imgBitmap, 0, 0);
+
+          document.body.append(canvasxx);
+
+          resolve(true);
+        }
+        catch (ex) {
+          reject(ex);
+        }
+      });
+    });
+  }
+  private static getImage(idata: ImageData): Promise<ImageBitmap> {
+    return new Promise<ImageBitmap>(function (resolve, reject) {
+      createImageBitmap(idata).then(function (imgBitmap) {
+        try {
+          resolve(imgBitmap);//context.getImageData(0, 0, idata.width, idata.height));
+        }
+        catch (ex) {
+          reject(ex);
+        }
+      });
+    });
+  }
+  private static applyGradient(baseImage: ImageData, converted_image: ImageData, baseGrad: Array<Color4>, toGrad: Array<Color4>) {
+    let width = baseImage.width;
+    for (let iy = 0; iy < baseImage.height; ++iy) {
+      for (let ix = 0; ix < baseImage.width; ++ix) {
+        let c0 = ImageUtils.getPixel(ix, iy, baseImage, width);
+        let grad_index = -1;
+        for (let ig = 0; ig < baseGrad.length; ++ig) {
+          if (baseGrad[ig].equals(c0)) {
+            grad_index = ig;
+          }
+        }
+        if (grad_index >= 0) {
+          ImageUtils.setPixel(ix, iy, toGrad[grad_index], converted_image, width);
+        }
+        else {
+          ImageUtils.setPixel(ix, iy, c0, converted_image, width);
+        }
+      }
+    }
+  }
+  public static computeImageGradients(baseImage: ImageData, times: Array<TimeOfDay>, baseImageTimeOfDay: TimeOfDayEnum = TimeOfDayEnum.Day): Promise<boolean> {
+    //Returns base images applied in each timeofday calss.
+    //The baseimage is the base image.
+
+    return new Promise<boolean>((resolve, reject) => {
+      let c_numGradientVals = 8;
+
+      let resolveCount = 0;
+      let rejectCount = 0;
+
+      try {
+        //Find our baseimage and base gradient
+        if (!baseImage) {
+          reject(Globals.logError("invalid input to computeImageGradients"))
+          return null;
+        }
+        let basetime = times.find(x => x.time === baseImageTimeOfDay);
+        if (!basetime) {
+          reject(Globals.logError("Base gradient could not be found."));
+          return null;
+        }
+        let baseGrad = ImageUtils.getGradient(basetime.gradientLocation, c_numGradientVals, baseImage);
+
+        //Apply the baseimage gradient to a set of images and create their bitmaps asynchronously
+        for (let time of times) {
+          let toGrad = ImageUtils.getGradient(time.gradientLocation, c_numGradientVals, baseImage);
+
+          let converted_image: ImageData = new ImageData(baseImage.width, baseImage.height);
+          this.applyGradient(baseImage, converted_image, baseGrad, toGrad);
+
+          times[time.time].image = converted_image;
+        } //End of for loop
+
+        resolve(true);
+      }
+      catch (ex) {
+        reject(ex);
+      }
+
+    });//end of promise
+
+  }
+  public static interpolateImages(image0: ImageData, image1: ImageData, value: number): ImageData {
+    let converted_image: ImageData = new ImageData(image0.width, image0.height);
+    let width = image0.width;
+    for (let iy = 0; iy < image0.height; ++iy) {
+      for (let ix = 0; ix < image0.width; ++ix) {
+        let c0 = ImageUtils.getPixel(ix, iy, image0, width);
+        let c1 = ImageUtils.getPixel(ix, iy, image1, width);
+
+        let c2: Color4 = new Color4(
+          c0.r * (1 - value) + c1.r * (value),
+          c0.g * (1 - value) + c1.g * (value),
+          c0.b * (1 - value) + c1.b * (value),
+          c0.a * (1 - value) + c1.a * (value)
+        );
+
+        ImageUtils.setPixel(ix, iy, c2, converted_image, width);
+      }
+    }
+
+    return converted_image;
+  }
+
+  public static getGradient(gradient_start: ivec2, numColors: number, tex_data: ImageData): Array<Color4> {
+    //Alter the image color. 
+    //Set the color of the image.
+    let width = tex_data.width;
+    let gradient = new Array<Color4>();
+    for (let iy = 0; iy < numColors * 2; iy += 2) {
+      gradient.push(ImageUtils.getPixel(gradient_start.x, gradient_start.y + iy, tex_data, width)); //1,1
+    }
+    return gradient;
+  }
+  public changeMaterialImage(material: Material, img: ImageResource) {
+
+  }
+  public applyGradientToImage(tex: Texture, grad: ImageGradient, fadeTime: number) {
+    //This method is an attempt to make a "day/night" in this game with the restricted GB pallete.
+
+  }
+  public static getPixel(x: number, y: number, imageData: ImageData, imageDataWidth: number): Color4 {
+    //Running the profileer this was HELLA SLOW, it was because of imageData.width for some reason.  So we pass width in now.
+    let position = (x + imageDataWidth * y) * 4;
+    let data = imageData.data;
+    let c: Color4 = new Color4(data[position], data[position + 1], data[position + 2], data[position + 3]);
+    return c;
+  }
+  public static setPixel(x: number, y: number, color: Color4, imageData: ImageData, imageDataWidth: number) {
+    //Running the profileer this was HELLA SLOW, it was because of imageData.width for some reason.  So we pass width in now.
+    let position = (x + imageDataWidth * y) * 4;
+    let data = imageData.data;
+
+    data[position + 0] = color.r;
+    data[position + 1] = color.g;
+    data[position + 2] = color.b;
+    data[position + 3] = color.a;
+  }
+  public static getImageDataFromTexture(tex: Texture): ImageData {
+    var canvas_texdata = document.createElement('canvas');
+    canvas_texdata.width = tex.image.width;
+    canvas_texdata.height = tex.image.height;
+
+    var context = canvas_texdata.getContext('2d');
+    context.drawImage(tex.image, 0, 0);
+    let tex_data = context.getImageData(0, 0, tex.image.width, tex.image.height);
+    return tex_data;
+  }
 }
 export class ImageResource {
   private _location: string = "";
@@ -53,95 +404,16 @@ export class ImageResource {
     this._location = loc;
 
     let that = this;
-    //THREE.ImageUtils.loadTexture(loc), transparent: true, opacity: 0.5, color: 0xFF0000 }))
     new THREE.TextureLoader().load(loc, function (tex: THREE.Texture) {
-      var canvas_texdata = document.createElement('canvas');
-      canvas_texdata.width = tex.image.width;
-      canvas_texdata.height = tex.image.height;
+      that.Texture = tex;
 
-      var context = canvas_texdata.getContext('2d');
-      context.drawImage(tex.image, 0, 0);
-      let tex_data = context.getImageData(0, 0, tex.image.width, tex.image.height);
+      Atlas.applyParamsToAtlas(tex);
 
-
-
-      //Alter the image color. 
-      //Set the color of the image.
-      let numColors = 8; //2 pixels downward per color
-      let baseGradient = new Array<Color4>();
-      for (let iy = 0; iy < numColors * 2; iy += 2) {
-        baseGradient.push(getPixel(1, 1 + iy, tex_data));
+      if (afterLoad) {
+        afterLoad(that);
       }
-
-      let blueGradient = new Array<Color4>();
-      for (let iy = 0; iy < numColors * 2; iy += 2) {
-        blueGradient.push(getPixel(2, 1 + iy, tex_data));
-      }
-
-      let redGradient = new Array<Color4>();
-      for (let iy = 0; iy < numColors * 2; iy += 2) {
-        redGradient.push(getPixel(3, 1 + iy, tex_data));
-      }
-
-      let idata: ImageData = new ImageData(tex.image.width, tex.image.height);
-
-      //Change texture color
-      for (let iy = 0; iy < tex.image.height; ++iy) {
-        for (let ix = 0; ix < tex.image.width; ++ix) {
-
-
-          //    setPixel(ix, iy, new Color4(255,255,255,255), idata);
-          //   continue;
-          let c0 = getPixel(ix, iy, tex_data);
-          let grad_index = -1;
-          for (let ig = 0; ig < blueGradient.length; ++ig) {
-            if (baseGradient[ig].equals(c0)) {
-              grad_index = ig;
-            }
-          }
-          if (grad_index >= 0) {
-            setPixel(ix, iy, blueGradient[grad_index], idata);
-          }
-          else {
-            setPixel(ix, iy, c0, idata);
-          }
-        }
-      }
-
-      //https://stackoverflow.com/questions/25108574/update-texture-map-in-threejs
-      // that.Texture.image.data = id;// = { data: id, width: that.Texture.image.width, height: that.Texture.image.height };
-
-      //let gl = Globals.canvas.getContext("webgl2");
-      createImageBitmap(idata).then(function (imgBitmap) {
-        //Asynchronously create a new texture and darw the stuff.
-        let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
-        canvasxx.width = tex.image.width;
-        canvasxx.height = tex.image.height;
-        let context = canvasxx.getContext('2d');
-        context.drawImage(imgBitmap, 0, 0);
-
-        //this.Texture = 
-        that.Texture = new THREE.Texture(canvasxx);
-
-        //that.Texture.image;
-        that.Texture.magFilter = THREE.NearestFilter;
-        that.Texture.minFilter = THREE.NearestMipmapNearestFilter;
-        that.Texture.generateMipmaps = true;
-        that.Texture.needsUpdate = true;
-
-        if (afterLoad) {
-          afterLoad(that);
-        }
-      });
-
-
-      //afterLoad(that);
 
     });
-    // that.Texture.magFilter = THREE.NearestFilter;
-    // that.Texture.minFilter = THREE.NearestMipmapNearestFilter;
-    // that.Texture.generateMipmaps = true;
-
   }
 
   // private _imageData: ImageData = null;
@@ -195,6 +467,26 @@ export class Atlas extends ImageResource {
   private _tileWidthR3: number = 1;
   private _tileHeightR3: number = 1;
 
+  // public multiply2(){
+  //   this._tileWidthPixels = 32 as Int;
+  //   this._tileHeightPixels = 32 as Int;
+  //   this._xSpace = 2 as Int;
+  //   this._ySpace = 2 as Int;
+  //   this._topPad= 2 as Int;
+  //   this._leftPad= 2 as Int;
+  //   this._rightPad= 2 as Int;
+  //   this._botPad= 2 as Int;
+  // }
+
+
+  public static applyParamsToAtlas(tex: Texture) {
+    //hacky method to set the filtering and such.
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter; //NearestMipmapNearestFilter;
+    //tex.generateMipmaps = true;
+    tex.needsUpdate = true;
+  }
+
   //Number of frames across the atlas.
   public get FramesWidth(): Int {
     return ((this.ImageWidth - this.RightPad - this.LeftPad + this.SpaceX) / (this.TileWidthPixels + this.SpaceX)) as Int;
@@ -235,6 +527,8 @@ export class Atlas extends ImageResource {
 
     this._tileWidthPixels = tile_w;
     this._tileHeightPixels = tile_h;
+
+    //this.multiply2();
 
     this.load(tex, afterLoad);
   }
@@ -479,11 +773,6 @@ export class Animation25D {
     }
     return toInt(-1);
   }
-
-  //Tileblock Data - static tile data used by background sprites & such.
-  // private _tileData: SpriteAnimationData = null;
-
-  // public get TileData(): SpriteAnimationData { return this._tileData; }
 
   public get Playback(): AnimationPlayback { return this._playback; }
 
@@ -898,6 +1187,7 @@ export enum Tiling {
   Random,
   FoliageBorderRules,
   FenceBorderRules,
+  HardBorderRules,
 }
 export interface CollisionFunction25D { (thisObj: Phyobj25D, other: Phyobj25D, this_block: TileBlock, other_block: TileBlock): void; }
 export interface GestureCallback { (thisObj: Sprite25D, this_block: TileBlock, hand: Tickler): void; }
@@ -1690,7 +1980,7 @@ class InputControls {
   }
   private zoomPlayerChar() {
     let zoomPerWheel = 0.1;
-    let maxZoom: number = 20;
+    let maxZoom: number = 200;
     let minZoom: number = 3;
 
     if (Globals.isDebug()) {
@@ -1734,7 +2024,6 @@ class InputControls {
     }
   }
 }
-let g_material: THREE.MeshBasicMaterial;
 export class WorldView25D extends Object3D {
   //*Note the difference between downR3 World and Grid.  The TileGrid's down is opposite.
   public static readonly DownR3Grid: vec3 = new vec3(0, 1, 0);
@@ -1755,6 +2044,7 @@ export class WorldView25D extends Object3D {
   private _masterMap: MasterMap = null;
   private _inputControls: InputControls = null;
 
+  private _environment: Environment = null;
 
   private _quickUI: QuickUI = null;
 
@@ -1766,6 +2056,10 @@ export class WorldView25D extends Object3D {
   public set Player(p: Character) { this._playerchar = p; }
   public get Player(): Character { return this._playerchar; }
   public get Viewport(): Viewport25D { return this._viewport; }
+  public get Environment(): Environment { return this._environment; }
+
+  private _spriteSheetMaterial: MeshBasicMaterial = null;
+  public get SpriteSheetMaterial(): MeshBasicMaterial { return this._spriteSheetMaterial; }
 
   public constructor(r: Atlas) {
     super();
@@ -1781,52 +2075,39 @@ export class WorldView25D extends Object3D {
 
     this._buffer = new TileBuffer(bufSizeTiles * 4, this);
 
-    g_material = new THREE.MeshBasicMaterial({
+    this._spriteSheetMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff
       , side: THREE.DoubleSide
       , map: this.Atlas.Texture
       , vertexColors: THREE.VertexColors
       , flatShading: false
-      , transparent: true //This is used for the tree shadows.
+      , transparent: true// false //true //This is used for the tree shadows.
       , wireframe: false
       , alphaTest: 0.01 // Quickly cut out shitty transparency
       //blending - if we really do end up with blended keyframes we can add this, but right now it's messing stuff up
       //, blending: THREE.MultiplyBlending // or Normalblending (unsure)
     });
 
-    this._mesh = new THREE.Mesh(this._buffer, g_material);
+    this._mesh = new THREE.Mesh(this._buffer, this._spriteSheetMaterial);
 
     this.add(this._mesh);
 
+    //Must be called after spritemap load
     this._quickUI = new QuickUI(this);
     this._quickUI.Elements.push(new UIElement(this._quickUI, 0, 6, 11, 11));
-  }
-  public addObject25(ob: Sprite25D) {
-    if (ob.Destroyed === false) {
-      ob.WorldView = this;
-      this._objects.set(ob, ob);
-      ob.markDirty();
-    }
-  }
-  public removeObject25(ob: Sprite25D) {
-    if (ob.Destroyed === false) {
-      ob.WorldView = null;
-      this._objects.delete(ob);
-    }
-  }
-  public destroyObject25(ob: Sprite25D) {
-    this._destroyed.set(ob, ob);
-    ob.Destroyed = true;
+
+    //Must be called after spritemap load
+    this._environment = new Environment(this);
   }
   public update(dt: number) {
-    this.InputControls.update(dt);
     this.updateViewport(dt);
+    this.InputControls.update(dt);
     this._quickUI.update();
 
     if (Globals.gameState === GameState.Play) {
       //Update map tile sprites
       this.MasterMap.update(dt);
-
+      this.Environment.update(dt);
 
       //Update Objects
       for (const [key, value] of this._objects) {
@@ -1861,6 +2142,24 @@ export class WorldView25D extends Object3D {
       this.add(this._boxHelper);
     }
   }
+  public addObject25(ob: Sprite25D) {
+    if (ob.Destroyed === false) {
+      ob.WorldView = this;
+      this._objects.set(ob, ob);
+      ob.markDirty();
+    }
+  }
+  public removeObject25(ob: Sprite25D) {
+    if (ob.Destroyed === false) {
+      ob.WorldView = null;
+      this._objects.delete(ob);
+    }
+  }
+  public destroyObject25(ob: Sprite25D) {
+    this._destroyed.set(ob, ob);
+    ob.Destroyed = true;
+  }
+
   private copyObjectTiles(ob: Sprite25D) {
     let depth = this.getLayerDepth(ob.Layer);
     this._buffer.copyObjectTile(ob, depth);
@@ -1963,6 +2262,9 @@ export class WorldView25D extends Object3D {
 
               ret.R3Parent = tickler.ActionPoint;
               tickler.Held = ret;
+
+              Globals.audio.play(Files.Audio.HandGrab, this.position);
+
             }
 
             //Do callback if needed
@@ -2082,7 +2384,9 @@ export class TileBuffer extends THREE.BufferGeometry {
 
     this.updateBufferRange();
     this.computeBoundingBox();
-    this.computeBoundingSphere();
+    
+    //This is in fact very slow.
+    //this.computeBoundingSphere();
   }
   private _debugNumCopies = 0;
   public copyObjectTile(tile: Sprite25D, depth: number) {
