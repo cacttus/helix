@@ -163,12 +163,75 @@
                 }]
         }, 
         {
+         "id":125,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"wall_elevation"
+                }]
+        }, 
+        {
          "id":180,
          "properties":[
                 {
                  "name":"name",
                  "type":"string",
                  "value":"pond_water"
+                }]
+        }, 
+        {
+         "id":181,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"sand_base"
+                }]
+        }, 
+        {
+         "id":182,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"steps_v"
+                }]
+        }, 
+        {
+         "id":183,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"steps_h"
+                }]
+        }, 
+        {
+         "id":184,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"dock"
+                }]
+        }, 
+        {
+         "id":185,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"chest_gold"
+                }]
+        }, 
+        {
+         "id":240,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"sewer_base"
                 }]
         }, 
         {

@@ -152,23 +152,23 @@ class Environment {
 
 export class ImageUtils {
   //Basically this class was creatd to handle the changing of image colors based on time of day.
-  private static scaleImageData(imageData:ImageData, scale:number) {
+  private static scaleImageData(imageData: ImageData, scale: number) {
     let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
     var scaled = canvasxx.getContext('2d').createImageData(imageData.width * scale, imageData.height * scale);
-  
-    for(var row = 0; row < imageData.height; row++) {
-      for(var col = 0; col < imageData.width; col++) {
+
+    for (var row = 0; row < imageData.height; row++) {
+      for (var col = 0; col < imageData.width; col++) {
         var sourcePixel = [
           imageData.data[(row * imageData.width + col) * 4 + 0],
           imageData.data[(row * imageData.width + col) * 4 + 1],
           imageData.data[(row * imageData.width + col) * 4 + 2],
           imageData.data[(row * imageData.width + col) * 4 + 3]
         ];
-        for(var y = 0; y < scale; y++) {
+        for (var y = 0; y < scale; y++) {
           var destRow = row * scale + y;
-          for(var x = 0; x < scale; x++) {
+          for (var x = 0; x < scale; x++) {
             var destCol = col * scale + x;
-            for(var i = 0; i < 4; i++) {
+            for (var i = 0; i < 4; i++) {
               scaled.data[(destRow * scaled.width + destCol) * 4 + i] =
                 sourcePixel[i];
             }
@@ -176,25 +176,25 @@ export class ImageUtils {
         }
       }
     }
-  
+
     return scaled;
   }
   public static swapMaterialImage(mat: MeshBasicMaterial, image: ImageData) {
     //Swap a material's image for some imagedata
     //**NOTE** - We're using putImageData here, but drawImage() might be faster.  Keep this in mind if porting.
     //https://stackoverflow.com/questions/7721898/is-putimagedata-faster-than-drawimage
-    
+
     let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
     canvasxx.width = image.width;
     canvasxx.height = image.height;
     let context = canvasxx.getContext('2d');
-    
+
     //https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
- //   image = ImageUtils.scaleImageData(image, 2);
-    
-    
+    //   image = ImageUtils.scaleImageData(image, 2);
+
+
     context.putImageData(image, 0, 0);
-   // g_atlas.multiply2();
+    // g_atlas.multiply2();
 
     mat.map = new THREE.Texture(canvasxx);
     Atlas.applyParamsToAtlas(mat.map);
@@ -203,33 +203,33 @@ export class ImageUtils {
 
 
     //     ImageUtils.getImage(image).then((value: ImageBitmap) => {
-//       let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
-//       canvasxx.width = image.width;
-//       canvasxx.height = image.height;
-//       let context = canvasxx.getContext('2d');
-//       context.drawImage(value, 0, 0);
-// //https://stackoverflow.com/questions/7721898/is-putimagedata-faster-than-drawimage
-//     //  canvasxx.getContext("2d").putImageData(imageData, 0, 0);
+    //       let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
+    //       canvasxx.width = image.width;
+    //       canvasxx.height = image.height;
+    //       let context = canvasxx.getContext('2d');
+    //       context.drawImage(value, 0, 0);
+    // //https://stackoverflow.com/questions/7721898/is-putimagedata-faster-than-drawimage
+    //     //  canvasxx.getContext("2d").putImageData(imageData, 0, 0);
 
-//     //https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
-    
-//     // let canvas2: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
-//     // canvas2.width = image.width;
-//     // canvas2.height = image.height;
-//     // canvas2.getContext('2d').putImageData(image,0,0);
-//     // context.scale(2, 2);
-    
-//     // context.drawImage(canvas2, 0, 0);
+    //     //https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
+
+    //     // let canvas2: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
+    //     // canvas2.width = image.width;
+    //     // canvas2.height = image.height;
+    //     // canvas2.getContext('2d').putImageData(image,0,0);
+    //     // context.scale(2, 2);
+
+    //     // context.drawImage(canvas2, 0, 0);
 
 
-//       mat.map = new THREE.Texture(canvasxx);
-//       Atlas.applyParamsToAtlas(mat.map);
-//       mat.needsUpdate = true;
-//       mat.map.needsUpdate = true;
+    //       mat.map = new THREE.Texture(canvasxx);
+    //       Atlas.applyParamsToAtlas(mat.map);
+    //       mat.needsUpdate = true;
+    //       mat.map.needsUpdate = true;
 
-//     }, (reject: any) => {
-//       Globals.logError(reject ? reject : "swapMaterialImage failed without an error message");
-//     });
+    //     }, (reject: any) => {
+    //       Globals.logError(reject ? reject : "swapMaterialImage failed without an error message");
+    //     });
   }
   public static debug_drawImageToCanvas(idata: ImageData): Promise<boolean> {
     return new Promise<boolean>(function (resolve, reject) {
@@ -1685,6 +1685,12 @@ export class Character extends Phyobj25D {
   private _runSoundTimer: WaitTimer = new WaitTimer(.6);
 
   public update(dt: number) {
+
+    if(Globals.input.keyboard && Globals.input.keyboard.getKey(32 as Int).pressOrHold()){
+      Globals.audio.stopMusic(Files.Audio.MusicBeepy);
+
+    }
+
     this._hitSoundTimer.update(dt);
     this._runSoundTimer.update(dt);
     this.updateMovement(dt);
@@ -2384,7 +2390,7 @@ export class TileBuffer extends THREE.BufferGeometry {
 
     this.updateBufferRange();
     this.computeBoundingBox();
-    
+
     //This is in fact very slow.
     //this.computeBoundingSphere();
   }
@@ -2649,11 +2655,15 @@ export class Tickler extends PhysicsObject3D {
       }
     }
     else {
+
       if (Globals.input.mouse.Left.releaseOrUp()) {
         //Essentially this would work best if we used a PhysicsObject with velocity and gravity.
         this.Held.R3Parent = null;
         this.Held = null;
         this.Gesture = HandGesture.None;
+        if (Globals.input.mouse.Left.released()) {
+          Globals.audio.play(Files.Audio.HandRelease, this.position);
+        }
       }
     }
 
@@ -2826,6 +2836,8 @@ function initializeGame() {
   Globals.prof.frameEnd();
   $('#outPopUp').hide();
 
+
+
   Globals.startGameEngine(gameLoop);
 }
 function createWorld() {
@@ -2854,6 +2866,9 @@ function gameLoop(dt: number) {
   if (Globals.gameState === GameState.Title) {
     if (Globals.input.right.A.pressed() || Globals.input.right.Trigger.pressed() || Globals.input.left.A.pressed() || Globals.input.left.Trigger.pressed()) {
       Globals.gameState = GameState.Play;
+
+      //You can only play music when the user has interacted wit the page.
+      Globals.audio.playMusic(Files.Audio.MusicBeepy);
     }
   }
 

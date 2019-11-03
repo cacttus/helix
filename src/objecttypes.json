@@ -1,0 +1,35 @@
+[
+    {
+        "color": "#ff26a44a",
+        "name": "Chest",
+        "properties": [
+            {
+                "name": "Wand",
+                "type": "string",
+                "value": "asdf"
+            }
+        ]
+    },
+    {
+        "color": "#ffa0a0a4",
+        "name": "Morph_Area",
+        "properties": [
+        ]
+    },
+    {
+        "color": "#ffb4d131",
+        "name": "Npc",
+        "properties": [
+            {
+                "name": "dialogue",
+                "type": "string",
+                "value": "Default_Dialogue"
+            },
+            {
+                "name": "npc_name",
+                "type": "string",
+                "value": "Default_Name"
+            }
+        ]
+    }
+]

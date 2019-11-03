@@ -228,6 +228,7 @@ export enum TiledSpriteId {
   , Pond_Water
   , vial_item //base item
   , Hard_Border //border above water to make it look less "dense"
+  , sand_base
   , Empty // ?, not sure.
 }
 export enum TileLayerID {
@@ -279,6 +280,16 @@ export class TileDefs {
       tile.Animation.addTileFrame(new ivec2(3, 0), atlas);
       tile.Animation.addTileFrame(new ivec2(4, 0), atlas);
       tile.Animation.addTileFrame(new ivec2(5, 0), atlas);
+
+      tile.Tiling = Tiling.Random;
+      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+      return tile;
+    });
+    this.addTile(function () {
+      let tile = new Sprite25D(atlas, "sand_base", TiledSpriteId.sand_base);
+      tile.Animation.addTileFrame(new ivec2(6, 0), atlas);
+      tile.Animation.addTileFrame(new ivec2(7, 0), atlas);
+      tile.Animation.addTileFrame(new ivec2(8, 0), atlas);
 
       tile.Tiling = Tiling.Random;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
@@ -576,6 +587,8 @@ export class TileMapData {
 
             //Jesus christ typescript is so fucked up.
 
+            //Match the string value of the 'name' property of the tile in TILED with the ENUM value of the tile here.
+            //TODO: in the future we'll just move all definition stuff to TILED.
             let keyvals = Utils.enumKeyVals(Object.keys(TiledSpriteId));
             for (let [k, v] of keyvals) {
 

@@ -222,7 +222,8 @@ export class AudioManager {
 
     if (file in this._music && this._music[file] && this._music[file].audio && this._music[file].audio.source) {
       this._music[file].stop();
-      this._music[file].play();
+        Globals.logDebug("Playing music " + music_file)
+        this._music[file].play();
     }
     else {
       let that = this;
@@ -233,6 +234,7 @@ export class AudioManager {
         ret.setBuffer(buffer);
         ret.setLoop(true);
         ret.setVolume(.55);
+        Globals.logDebug("Playing music " + music_file)
         ret.play();
         that._music[file] = new AsyncMusic(ret);
       }, function (xhr: any) {
