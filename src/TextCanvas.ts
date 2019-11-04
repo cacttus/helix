@@ -183,12 +183,9 @@ export class TextCanvas extends THREE.Object3D {
   private alignToScreen(camera: THREE.PerspectiveCamera, user: THREE.Group): void {
     //This method needs a serious overhaul.
     //Move the object to the screen
-    let cn: Vector3 = new Vector3();
-    camera.getWorldDirection(cn);
-    let cp: Vector3 = new Vector3();
-    camera.getWorldPosition(cp);
+    
 
-    let f: Frustum = new Frustum(cn, cp);
+    let f: Frustum = Globals.frustum; //new Frustum(cn, cp);
     let dist: number = camera.near;  // our camera has a near plane of 1 unit
 
     //This is kind of dumb

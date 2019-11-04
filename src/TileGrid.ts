@@ -6,124 +6,8 @@ import { Atlas, Sprite25D, FDef, SpriteFrame, Tiling, Character, Direction4Way, 
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 import world_data from './tiles_world.json';
 import world_tiles from './tiles_tileset.json';
-import { Random } from './Base';
+import { Random, MultiValueDictionary,HashSet, IVec2Set, IVec2Map } from './Base';
 
-class IVec2Map<K> {
-  private map: Map<Int, Map<Int, K>> = new Map<Int, Map<Int, K>>();
-
-  public constructor() {
-  }
-  public get count(): Int {
-    return this.map.size as Int;
-  }
-  public set(key: ivec2, value: K = null) {
-    let m: Map<Int, K> = null;
-    if (this.map.has(key.x)) {
-      m = this.map.get(key.x)
-    }
-    else {
-      m = new Map<Int, K>();
-      this.map.set(key.x, m);
-    }
-
-    m.set(key.y, value);
-  }
-  public has(key: ivec2): boolean {
-    if (this.map.has(key.x)) {
-      let m: Map<Int, K> = this.map.get(key.x);
-      return m.has(key.y);
-    }
-    else {
-      return false;
-    }
-  }
-  public get(key: ivec2): K {
-    if (this.map.has(key.x)) {
-      let m: Map<Int, K> = this.map.get(key.x);
-      let ret = m.get(key.y);
-      if (!ret) {
-        //Map actually returns undefined so we want null to be consistent.
-        return null;
-      }
-      return ret;
-    }
-    return null;
-  }
-
-}
-class IVec2Set extends IVec2Map<Int> {
-}
-class HashSet<T> {
-  private _map: Map<T, T> = new Map<T, T>();
-
-  public static construct<T>(arr: Array<T>): HashSet<T> {
-    let ret: HashSet<T> = new HashSet<T>();
-    for (let tx of arr) {
-      ret.push(tx);
-    }
-    return ret;
-  }
-  public push(t: T) {
-    this._map.set(t, t);
-  }
-  public get(t: T): T {
-    return this._map.get(t);
-  }
-  public has(t: T): boolean {
-    return this._map.has(t);
-  }
-  public entries(): IterableIterator<T> {
-    return this._map.keys();
-  }
-  public get length(): number {
-    return this._map.size;
-  }
-
-}
-class MultiValueDictionary<K, V>  {
-  private _map: Map<K, HashSet<V>> = new Map<K, HashSet<V>>();
-  public constructor() {
-  }
-  public static construct<K, V>(values: Array<Array<any>>): MultiValueDictionary<K, V> {
-    let ret: MultiValueDictionary<K, V> = new MultiValueDictionary<K, V>();
-    for (let entry of values) {
-      if (Globals.isNotNullorUndefined(entry)) {
-        if (entry.length === 2) {
-          let key: K = entry[0] as K;
-          let vals: V = entry[1] as V;
-          ret.add(key, vals);
-        }
-        else {
-          Globals.logError("Invalid multimap entry, too many items (must be 2).");
-          Globals.debugBreak();
-        }
-      }
-      else {
-        //Sometimes I add a ,, on accident.  TS should catch this.
-        Globals.logError("Invalid multimap entry, entry was null or undefined.");
-        Globals.debugBreak();
-      }
-    }
-    return ret;
-  }
-  public get(k: K): HashSet<V> {
-    return this._map.get(k);
-  }
-  public keys(): IterableIterator<K> {
-    return this._map.keys();
-  }
-  public add(k: K, v: V) {
-    let h: HashSet<V> = this._map.get(k);
-
-    if (!h) {
-      h = new HashSet<V>();
-      this._map.set(k, h);
-    }
-
-    h.push(v);
-  }
-
-}
 
 
 class TmxProperty {
@@ -449,12 +333,24 @@ export class TileDefs {
 
       that.addFrameGrid(11, 7, 4, 6, tile, atlas);
 
+      tile.Tiling = Tiling.HardBorderRules; 
+      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
+      return tile;
+      return tile;
+    });
+    this.addTile(function () {
+      let tile = new Sprite25D(atlas, "Hard_Border", TiledSpriteId.Hard_Border);
+
+      that.addFrameGrid(11, 7, 4, 6, tile, atlas);
+
       tile.Tiling = Tiling.HardBorderRules;
       tile.IsCellTile = true; // This must be set for cell tiles to get populated.
       tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
       return tile;
       return tile;
     });
+
   }
   private addFrameGrid(xoff: number, yoff: number, width: number, height: number, sprite: Sprite25D, atlas: Atlas) {
 
@@ -1573,6 +1469,8 @@ export class TileBlock {
   private _layer: Int = -1 as Int;
   private _animationData: SpriteAnimationData = null;
 
+  public Verts: Array<vec3> = new Array<vec3>();
+
   public get AnimationData(): SpriteAnimationData { return this._animationData; }
   public set AnimationData(x: SpriteAnimationData) { this._animationData = x; }
 
@@ -1670,12 +1568,9 @@ export class Cell {
   public get BoundBox_World(): Box2f {
     return this.Parent.Box;
   }
+  private _cached_tilepos_r3 : vec3 = null;
   public get TilePosR3(): vec3 {
-    //The position in R3 Tile Space
-    let dx = this._cellPosWorld.x;
-    let dy = this._cellPosWorld.y; // Flipping y to turn into OpenGL coordinates.
-    let dz = 0;
-    return new vec3(dx, dy, dz);
+    return this._cached_tilepos_r3;
   }
   public constructor(parent: BvhNode, nLayers: number, cellPos: ivec2) {
     this._cellPosWorld = cellPos;
@@ -1683,6 +1578,13 @@ export class Cell {
     let g = (this._cellPosWorld.y / 44);
     let e = (this._cellPosWorld.x / 60);
     this.DebugColor = new Color(g, 0, e);//= Random.randomColor(0.4, 1.0);
+
+
+    //Cache the R3 Pos - performance
+    let cdx = this._cellPosWorld.x;
+    let cdy = this._cellPosWorld.y; // Flipping y to turn into OpenGL coordinates.
+    let cdz = 0;
+    this._cached_tilepos_r3  = new vec3(cdx, cdy, cdz);
   }
 
   // public  GetTilePosGlobal() : ivec2

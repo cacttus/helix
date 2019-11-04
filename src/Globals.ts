@@ -16,7 +16,7 @@ import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js';
 
 import { Console3D } from './Console3D';
 import { PhysicsObject3D, PhysicsManager3D } from './Physics3D';
-import { Screen2D, AudioManager, ModelManager, Input } from './Base';
+import { Screen2D, AudioManager, ModelManager, Input, Frustum } from './Base';
 import { Prof } from "./Prof";
 
 export enum GameState { Title, Play, GameOver }
@@ -58,6 +58,7 @@ export class _Globals {
   private _renderHeight: number = 768;
   private _resizeMode: ResizeMode = ResizeMode.Fullscreen;
   private _barColor: Color = new Color(0, 0, 0); // Color of the bars when in ResizeMode.Fit mode.
+  private _frustum:Frustum = null;
 
   public isNotNullorUndefined(x: any) {
     return (x !== null) && (x !== undefined);
@@ -70,6 +71,7 @@ export class _Globals {
     this._renderHeight = canvasHeight;
     this._resizeMode = resize;
     this._barColor = barColor;
+    
 
     this._screen = new Screen2D(this._canvas);
     this.createCamera();
@@ -106,6 +108,7 @@ export class _Globals {
 
     this.createPlayer();
   }
+  public get frustum() : Frustum { return this._frustum; }
 
   public get canvas(): HTMLCanvasElement { return this._canvas; }
   public get scene(): Scene { return this._scene; }
@@ -242,6 +245,8 @@ export class _Globals {
         time *= 0.001;//convert to seconds I think
         let delta: number = time - last_time;
         last_time = time;
+        
+     //   that.frustum.construct();//Constructed when we actually update camera.
 
         Globals.prof.begin('update globals');
         {
@@ -276,7 +281,6 @@ export class _Globals {
           that.render();
         }
         Globals.prof.end("render");
-
 
         Globals.audio._listener.position.copy(Globals.player.WorldPosition);
 
@@ -583,6 +587,8 @@ export class _Globals {
   private createCamera() {
     //  const canvas: HTMLCanvasElement = document.querySelector('#page_canvas');
     this._camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 1000);
+
+    this._frustum = new Frustum();
 
     //https://stackoverflow.com/questions/49471653/in-three-js-while-using-webvr-how-do-i-move-the-camera-position
     //In VR we actually add the camera to a group since user actually moves the camera(s) reltaive to origin

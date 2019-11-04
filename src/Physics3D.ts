@@ -62,10 +62,16 @@ export class PhysicsObject3D extends THREE.Object3D {
   get DestroyCheck(): PhysicsObjectDestroyCheck { return this._destroy; }
   set DestroyCheck(v: PhysicsObjectDestroyCheck) { this._destroy = v; }
 
+  //setFromObject has performance penalties.
+  //It also may be causing the memory leak.
+  public UpdateBox: boolean = false;
 
   private _box_cached: Box3 = new Box3();
 
   get Box(): Box3 {
+    if(this.UpdateBox === false){
+      return null;
+    }
     return this._box_cached;
   }
   get IsDestroyed(): boolean { return this._isDestroyed; }
@@ -123,6 +129,7 @@ export class PhysicsObject3D extends THREE.Object3D {
     this.createMaterialDuplicate();
     this._flash.flash(color, durationInSeconds, saturation);
   }
+
   public update(dt: number) {
 
     this.position.add(this.Velocity.clone().multiplyScalar(dt));
@@ -156,7 +163,11 @@ export class PhysicsObject3D extends THREE.Object3D {
     //Make sure to remove helpers BEFORE calculating the actual box.
     this.removeHelpers();
     //Compute BB
-    this._box_cached = new THREE.Box3().setFromObject(this);
+    if (this.UpdateBox) {
+
+      this._box_cached = new THREE.Box3().setFromObject(this);
+    }
+
     if (Globals.isDebug()) {
       //Must come in this order 
       this._box3Helper = new THREE.Box3Helper(this._box_cached, new THREE.Color(0x00ff00));

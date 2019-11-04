@@ -12,15 +12,134 @@ import { PhysicsObject3D, PhysicsManager3D } from './Physics3D';
 import { Globals } from './Globals';
 import { Utils } from './Utils';
 import * as Files from './Files';
-import { vec4, vec3, vec2 } from './Math';
+import { vec4, vec3, vec2, ivec2 } from './Math';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 
 export interface AfterLoadFunction { (x: any): void; };
-
+ 
 
 //https://stackoverflow.com/questions/38213926/interface-for-associative-object-array-in-typescript
 export interface Dictionary<T> {
   [key: string]: T;
+}
+
+export class IVec2Map<K> {
+  private map: Map<Int, Map<Int, K>> = new Map<Int, Map<Int, K>>();
+
+  public constructor() {
+  }
+  public get count(): Int {
+    return this.map.size as Int;
+  }
+  public set(key: ivec2, value: K = null) {
+    let m: Map<Int, K> = null;
+    if (this.map.has(key.x)) {
+      m = this.map.get(key.x)
+    }
+    else {
+      m = new Map<Int, K>();
+      this.map.set(key.x, m);
+    }
+
+    m.set(key.y, value);
+  }
+  public has(key: ivec2): boolean {
+    if (this.map.has(key.x)) {
+      let m: Map<Int, K> = this.map.get(key.x);
+      return m.has(key.y);
+    }
+    else {
+      return false;
+    }
+  }
+  public get(key: ivec2): K {
+    if (this.map.has(key.x)) {
+      let m: Map<Int, K> = this.map.get(key.x);
+      let ret = m.get(key.y);
+      if (!ret) {
+        //Map actually returns undefined so we want null to be consistent.
+        return null;
+      }
+      return ret;
+    }
+    return null;
+  }
+
+}
+
+export class IVec2Set extends IVec2Map<Int> {
+}
+
+export class HashSet<T> {
+  private _map: Map<T, T> = new Map<T, T>();
+
+  public static construct<T>(arr: Array<T>): HashSet<T> {
+    let ret: HashSet<T> = new HashSet<T>();
+    for (let tx of arr) {
+      ret.push(tx);
+    }
+    return ret;
+  }
+  public push(t: T) {
+    this._map.set(t, t);
+  }
+  public get(t: T): T {
+    return this._map.get(t);
+  }
+  public has(t: T): boolean {
+    return this._map.has(t);
+  }
+  public entries(): IterableIterator<T> {
+    return this._map.keys();
+  }
+  public get length(): number {
+    return this._map.size;
+  }
+
+}
+export class MultiValueDictionary<K, V>  {
+  private _map: Map<K, HashSet<V>> = new Map<K, HashSet<V>>();
+  public constructor() {
+  }
+  public static construct<K, V>(values: Array<Array<any>>): MultiValueDictionary<K, V> {
+    let ret: MultiValueDictionary<K, V> = new MultiValueDictionary<K, V>();
+    for (let entry of values) {
+      if (Globals.isNotNullorUndefined(entry)) {
+        if (entry.length === 2) {
+          let key: K = entry[0] as K;
+          let vals: V = entry[1] as V;
+          ret.add(key, vals);
+        }
+        else {
+          Globals.logError("Invalid multimap entry, too many items (must be 2).");
+          Globals.debugBreak();
+        }
+      }
+      else {
+        //Sometimes I add a ,, on accident.  TS should catch this.
+        Globals.logError("Invalid multimap entry, entry was null or undefined.");
+        Globals.debugBreak();
+      }
+    }
+    return ret;
+  }
+  public get(k: K): HashSet<V> {
+    return this._map.get(k);
+  }
+  public keys(): IterableIterator<K> {
+    return this._map.keys();
+  }
+  public add(k: K, v: V) {
+    let h: HashSet<V> = this._map.get(k);
+
+    if (!h) {
+      h = new HashSet<V>();
+      this._map.set(k, h);
+    }
+
+    h.push(v);
+  }
+
 }
 
 export class Random {
@@ -719,8 +838,8 @@ export class Screen2D {
   //Input is NON-RELATIVE mouse point ( passed in from mousemove event )
   public project3D(clientX: number, clientY: number, distance: number): Vector3 {
     let v2: Vector2 = this.getCanvasRelativeXY(clientX, clientY);
-    let f: Frustum = new Frustum();
-    let mouse_pos = f.project(v2.x, v2.y, distance);
+    
+    let mouse_pos = Globals.frustum.project(v2.x, v2.y, distance);
     return mouse_pos;
   }
 }
@@ -880,10 +999,9 @@ export class Mouse extends Vector3 {
     if (Math.abs(dx) > maxPixel) { dx = Math.sign(dx) * maxPixel }
     if (Math.abs(dy) > maxPixel) { dy = Math.sign(dy) * maxPixel }
 
-    let campos = new vec3();
-    Globals.camera.getWorldPosition(campos);
-    let camdir = new vec3();
-    Globals.camera.getWorldDirection(camdir);
+    let campos = Globals.frustum.CamPos.clone();
+    
+    let camdir = Globals.frustum.CamDir.clone();//new vec3();
 
     let rot_speed = 0.01; // Change this to change rotation speed.
 
@@ -1259,6 +1377,13 @@ export class Frustum {
   public get down(): Vector3 { return this._down; }
   public get normal(): Vector3 { return this._normal; }
 
+  private _camPos : vec3 = new vec3(0,0,0);
+  private _camDir : vec3 = new vec3(0,0,0);
+  private _camUp : vec3 = new vec3(0,0,0);
+  public get CamPos() : vec3 { return this._camPos; }
+  public get CamDir() : vec3 { return this._camDir; }
+  public get CamUp() : vec3 { return this._camUp; }
+
   //private Points_fpt_ntl: Vector3;//back bottomleft
   public constructor(cam_dir: Vector3 = null, cam_pos: Vector3 = null) {
     this.construct(cam_dir, cam_pos);
@@ -1279,8 +1404,7 @@ export class Frustum {
 
     let back_plane: vec3 = this._ftl.clone().add(dx).add(dy);
 
-    let cam_pos: vec3 = new vec3();
-    Globals.camera.getWorldPosition(cam_pos);
+    let cam_pos: vec3 = this.CamPos.clone();
 
     let projected: vec3 = back_plane.clone().sub(cam_pos).normalize().multiplyScalar(dist);
 
@@ -1289,16 +1413,18 @@ export class Frustum {
     return projected;
   }
   public construct(cam_dir: vec3 = null, cam_pos: vec3 = null) {
-    //Doing this the old way
+    //This should be the only place where we use getWorldXX because they seem to have a memory leak.
     if (cam_dir === null) {
-      cam_dir = new vec3();
-      Globals.camera.getWorldDirection(cam_dir);
+      Globals.camera.getWorldDirection(this._camDir);
     }
     if (cam_pos === null) {
-      cam_pos = new vec3();
-      Globals.camera.getWorldPosition(cam_pos);
+      Globals.camera.getWorldPosition(this._camPos);
     }
-    let camup = Globals.camera.up.clone().normalize();
+    this._camUp = Globals.camera.up.clone().normalize();
+
+    cam_dir = this.CamDir;
+    cam_pos = this.CamPos;
+    let camup = this.CamUp;
 
     let nearCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.near));
     let farCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.far));

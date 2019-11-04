@@ -61,29 +61,29 @@ class Environment {
   public constructor(world: WorldView25D) {
     this._world = world;
 
-    this._times = new Array<TimeOfDay>(
-      new TimeOfDay(TimeOfDayEnum.Dawn, ImageGradient.Yellow, new ivec2(4, 1), 5),
-      new TimeOfDay(TimeOfDayEnum.Day, ImageGradient.Green, new ivec2(1, 1), 5),
-      new TimeOfDay(TimeOfDayEnum.Dusk, ImageGradient.Red, new ivec2(3, 1), 5),
-      new TimeOfDay(TimeOfDayEnum.Night, ImageGradient.Blue, new ivec2(2, 1), 5),
-    );
+   // this._times = new Array<TimeOfDay>(
+    //   new TimeOfDay(TimeOfDayEnum.Dawn, ImageGradient.Yellow, new ivec2(4, 1), 5),
+    //   new TimeOfDay(TimeOfDayEnum.Day, ImageGradient.Green, new ivec2(1, 1), 5),
+    //   new TimeOfDay(TimeOfDayEnum.Dusk, ImageGradient.Red, new ivec2(3, 1), 5),
+    //   new TimeOfDay(TimeOfDayEnum.Night, ImageGradient.Blue, new ivec2(2, 1), 5),
+    // );
 
-    let baseImageData = ImageUtils.getImageDataFromTexture(this._world.SpriteSheetMaterial.map);
+    // let baseImageData = ImageUtils.getImageDataFromTexture(this._world.SpriteSheetMaterial.map);
 
-    ImageUtils.computeImageGradients(baseImageData, this._times, TimeOfDayEnum.Day).then((resolve: boolean) => {
-      if (Globals.isDebug()) {
+    // ImageUtils.computeImageGradients(baseImageData, this._times, TimeOfDayEnum.Day).then((resolve: boolean) => {
+    //   if (Globals.isDebug()) {
 
-        for (let t of this._times) {
-          ImageUtils.debug_drawImageToCanvas(t.image);
-        }
-      }
+    //     for (let t of this._times) {
+    //       ImageUtils.debug_drawImageToCanvas(t.image);
+    //     }
+    //   }
 
-      Globals.logInfo("Setting initial time of day.");
-      //Set initial time of day
-      let tod: TimeOfDay = this.getTimeOfDay();
-      ImageUtils.swapMaterialImage(this._world.SpriteSheetMaterial, tod.image);
+    //   Globals.logInfo("Setting initial time of day.");
+    //   //Set initial time of day
+    //   let tod: TimeOfDay = this.getTimeOfDay();
+    //   ImageUtils.swapMaterialImage(this._world.SpriteSheetMaterial, tod.image);
 
-    }, (reject: any) => { });
+    // }, (reject: any) => { });
   }
   private getTimeOfDay(): TimeOfDay {
     if (this.WorldTime_Hours > (12 + 7)) {
@@ -102,50 +102,50 @@ class Environment {
   }
 
   public update(dt: number) {
-    let lastTimeOfDay = this.getTimeOfDay();
+    // let lastTimeOfDay = this.getTimeOfDay();
 
-    this.WorldTime_Seconds = (this.WorldTime_Seconds + dt * this.WorldSpeed) % this.c_WorldTimeMax;
+    // this.WorldTime_Seconds = (this.WorldTime_Seconds + dt * this.WorldSpeed) % this.c_WorldTimeMax;
 
-    let currentTimeOfDay = this.getTimeOfDay();
+    // let currentTimeOfDay = this.getTimeOfDay();
 
-    if (lastTimeOfDay !== currentTimeOfDay) {
-      //Transition the image.
-      this._bInterpolatingTimeOfDay = true;
-      this._timeOfDayInterpolation = 0;
-      this._timeOfDayInterpolation0 = lastTimeOfDay;
-      this._timeOfDayInterpolation1 = currentTimeOfDay;
-    }
+    // if (lastTimeOfDay !== currentTimeOfDay) {
+    //   //Transition the image.
+    //   this._bInterpolatingTimeOfDay = true;
+    //   this._timeOfDayInterpolation = 0;
+    //   this._timeOfDayInterpolation0 = lastTimeOfDay;
+    //   this._timeOfDayInterpolation1 = currentTimeOfDay;
+    // }
 
-    if (this._bInterpolatingTimeOfDay) {
-      if (this._timeOfDayInterpolation0.image && this._timeOfDayInterpolation1.image) {
-        let steps = 20;
-        let step_value = this._timeOfDayInterpolation1.interpolation_duration / steps;
+    // if (this._bInterpolatingTimeOfDay) {
+    //   if (this._timeOfDayInterpolation0.image && this._timeOfDayInterpolation1.image) {
+    //     let steps = 20;
+    //     let step_value = this._timeOfDayInterpolation1.interpolation_duration / steps;
 
-        let cur_step_value = Math.floor(this._timeOfDayInterpolation / step_value);
+    //     let cur_step_value = Math.floor(this._timeOfDayInterpolation / step_value);
 
-        this._timeOfDayInterpolation = Utils.clampScalar(this._timeOfDayInterpolation + dt, 0, this._timeOfDayInterpolation1.interpolation_duration);
+    //     this._timeOfDayInterpolation = Utils.clampScalar(this._timeOfDayInterpolation + dt, 0, this._timeOfDayInterpolation1.interpolation_duration);
 
-        //So, since this is slow, in order to prevent lag, we'll divide this into discrete steps.
+    //     //So, since this is slow, in order to prevent lag, we'll divide this into discrete steps.
 
-        let next_step_value = Math.floor(this._timeOfDayInterpolation / step_value);
+    //     let next_step_value = Math.floor(this._timeOfDayInterpolation / step_value);
 
-        //If we have incremented one step, or we are on the last interpolation.
-        if (cur_step_value !== next_step_value || (this._timeOfDayInterpolation >= this._timeOfDayInterpolation1.interpolation_duration - 0.0001)) {
+    //     //If we have incremented one step, or we are on the last interpolation.
+    //     if (cur_step_value !== next_step_value || (this._timeOfDayInterpolation >= this._timeOfDayInterpolation1.interpolation_duration - 0.0001)) {
 
-          let interp_value_01 = this._timeOfDayInterpolation / this._timeOfDayInterpolation1.interpolation_duration;
+    //       let interp_value_01 = this._timeOfDayInterpolation / this._timeOfDayInterpolation1.interpolation_duration;
 
-          let newImage = ImageUtils.interpolateImages(this._timeOfDayInterpolation0.image, this._timeOfDayInterpolation1.image, interp_value_01);
-          ImageUtils.swapMaterialImage(this._world.SpriteSheetMaterial, newImage);
+    //       let newImage = ImageUtils.interpolateImages(this._timeOfDayInterpolation0.image, this._timeOfDayInterpolation1.image, interp_value_01);
+    //       ImageUtils.swapMaterialImage(this._world.SpriteSheetMaterial, newImage);
 
-          if (this._timeOfDayInterpolation >= this._timeOfDayInterpolation1.interpolation_duration - 0.0001) {
-            this._bInterpolatingTimeOfDay = false;
+    //       if (this._timeOfDayInterpolation >= this._timeOfDayInterpolation1.interpolation_duration - 0.0001) {
+    //         this._bInterpolatingTimeOfDay = false;
 
-          }
-        }
+    //       }
+    //     }
 
-      }//if images not null
+    //   }//if images not null
 
-    }//If interpolating
+    // }//If interpolating
 
   }
 }
@@ -1686,7 +1686,7 @@ export class Character extends Phyobj25D {
 
   public update(dt: number) {
 
-    if(Globals.input.keyboard && Globals.input.keyboard.getKey(32 as Int).pressOrHold()){
+    if (Globals.input.keyboard && Globals.input.keyboard.getKey(32 as Int).pressOrHold()) {
       Globals.audio.stopMusic(Files.Audio.MusicBeepy);
 
     }
@@ -1955,18 +1955,17 @@ class InputControls {
     let spd = 12;
     let amtstr = spd * Globals.input.MovementController.Axis.x * dt;
     if (amtstr !== 0) {
-      let n: vec3 = new vec3(0, 0, 0);
-      Globals.camera.getWorldDirection(n);
-      let r: vec3 = n.clone().cross(new vec3(0, 1, 0)).normalize();
-
+      let r: vec3 = Globals.frustum.CamDir.clone().cross(new vec3(0, 1, 0)).normalize();
       player.position.add(r.multiplyScalar(amtstr));
     }
 
     let amtfw: number = spd * Globals.input.MovementController.Axis.y * dt;
     if (amtfw !== 0) {
-      let n: vec3 = new vec3(0, 0, 0);
-      Globals.camera.getWorldDirection(n);
+      let n: vec3 = Globals.frustum.CamDir.clone();
       player.position.add(n.multiplyScalar(amtfw));
+    }
+    if (amtfw !== 0 || amtstr !== 0) {
+      Globals.frustum.construct();
     }
   }
   public lookAtPlayerChar() {
@@ -1981,6 +1980,7 @@ class InputControls {
 
     //If in VR the user may not have to look at this exact thing.
     Globals.camera.lookAt(center);
+    Globals.frustum.construct();
 
     this._viewport.Center = center;
   }
@@ -2111,20 +2111,22 @@ export class WorldView25D extends Object3D {
     this._quickUI.update();
 
     if (Globals.gameState === GameState.Play) {
-      //Update map tile sprites
-      this.MasterMap.update(dt);
-      this.Environment.update(dt);
-
-      //Update Objects
-      for (const [key, value] of this._objects) {
-        //There may be a faster way to do this. For instance, static objects don't update.
-        key.update(dt);
-      }
-
-      this.updatePostPhysics();
+      this.updateMapAndObjects(dt);
     }
 
     //Copy Render Data
+    this.copySprites();
+
+    //Box
+    if (Globals.isDebug()) {
+      if (this._boxHelper !== null) {
+        this.remove(this._boxHelper);
+      }
+      this._boxHelper = new THREE.BoxHelper(this._mesh, new THREE.Color(0xffff00));
+      this.add(this._boxHelper);
+    }
+  }
+  private copySprites() {
     this._buffer.beginCopy();
 
     if (Globals.gameState === GameState.Play) {
@@ -2138,15 +2140,19 @@ export class WorldView25D extends Object3D {
     }
 
     this._buffer.endCopy();
+  }
+  private updateMapAndObjects(dt: number) {
+    //Update map tile sprites
+    this.MasterMap.update(dt);
+    this.Environment.update(dt);
 
-    //Box
-    if (Globals.isDebug()) {
-      if (this._boxHelper !== null) {
-        this.remove(this._boxHelper);
-      }
-      this._boxHelper = new THREE.BoxHelper(this._mesh, new THREE.Color(0xffff00));
-      this.add(this._boxHelper);
+    //Update Objects
+    for (const [key, value] of this._objects) {
+      //There may be a faster way to do this. For instance, static objects don't update.
+      key.update(dt);
     }
+
+    this.updatePostPhysics();
   }
   public addObject25(ob: Sprite25D) {
     if (ob.Destroyed === false) {
@@ -2175,14 +2181,14 @@ export class WorldView25D extends Object3D {
       this.copyObjectTiles(ob.Children[ci]);
     }
   }
-  private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, depth: number) {
+  private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, depth: number, block:TileBlock) {
     //You can override tile layer depth by setting the layer manually on the sprite.
     depth = (ob.Layer === TileLayerID.Unset ? depth : this.getLayerDepth(ob.Layer));
-    this._buffer.copyCellTile(cell, ob, frame, depth);
+    this._buffer.copyCellTile(cell, ob, frame, depth, block);
     ob.clearDirty();
 
     for (let ci = 0; ci < ob.Children.length; ci++) {
-      this.copyCellTiles(cell, ob.Children[ci], frame, depth);
+      this.copyCellTiles(cell, ob.Children[ci], frame, depth, block);
     }
   }
   private updateViewport(dt: number) {
@@ -2206,9 +2212,7 @@ export class WorldView25D extends Object3D {
     if (Cell.DebugFrame === null) {
       Cell.DebugFrame = this.Atlas.getFrame(2 as Int, 0 as Int);
     }
-    if (c.DebugVerts === null || c.DebugVerts.length < 4) {
-      SpriteFrame.createQuadVerts(c.DebugVerts, c.TilePosR3, new Quaternion(1, 1, 1, 1), new vec2(1, 1), this.Atlas.TileWidthR3, this.Atlas.TileHeightR3);
-    }
+
     this._buffer.copyFrameQuad(Cell.DebugFrame, c.DebugVerts, WorldView25D.Normal, new vec4(c.DebugColor.r, c.DebugColor.g, c.DebugColor.b, 1), 1, false, false, DirtyFlag.All);
   }
   private drawEverything() {
@@ -2241,7 +2245,7 @@ export class WorldView25D extends Object3D {
       frame = block.SpriteRef.Animation.CurrentFrameIndex;
     }
 
-    this.copyCellTiles(c, block.SpriteRef, frame, this.getLayerDepth(block.Layer));
+    this.copyCellTiles(c, block.SpriteRef, frame, this.getLayerDepth(block.Layer), block);
   }
   private getLayerDepth(layer: TileLayerID): number {
     let ret = (layer as number) * WorldView25D.LayerDepth;
@@ -2321,6 +2325,12 @@ export class TileBuffer extends THREE.BufferGeometry {
 
   private _updFlags: number = 0;
 
+
+  private _vert_floats: Float32Array = null;
+  private _norms_floats: Float32Array = null;
+  private _colors_floats: Float32Array =null;
+  private _uvs_floats: Float32Array = null;
+
   //Custom shaders
   //https://bl.ocks.org/duhaime/c8375f1c313587ac629e04e0253481f9
   //Updateing buffers
@@ -2340,6 +2350,7 @@ export class TileBuffer extends THREE.BufferGeometry {
     let colors: Float32Array = new Float32Array(numTiles * 4 * this._csiz);
     let texs: Float32Array = new Float32Array(numTiles * 4 * this._tsiz);
 
+    //Sets colors + normals to default.
     this.fillDefault(verts, texs, norms, colors);
 
     this._attrPosition = new THREE.BufferAttribute(verts, this._vsiz);
@@ -2356,6 +2367,12 @@ export class TileBuffer extends THREE.BufferGeometry {
     this.addAttribute('normal', this._attrNormal);
     this.addAttribute('color', this._attrColor);
     this.addAttribute('uv', this._attrTexture);
+
+    //Does this make it faster
+    this._vert_floats = (this._attrPosition.array as Float32Array);
+    this._norms_floats = (this._attrNormal.array as Float32Array);
+    this._colors_floats = (this._attrColor.array as Float32Array);
+    this._uvs_floats = (this._attrTexture.array as Float32Array);
 
     //Threejs uses CCW default winding https://threejs.org/docs/#api/en/constants/Renderer
     let indexes = new Array<number>/*Int16Array*/(numTiles * 6);
@@ -2377,6 +2394,7 @@ export class TileBuffer extends THREE.BufferGeometry {
     this._updFlags = 0;
     this._usedBufferLengthTiles = 0; //reset
   }
+  // private _didUpdateNormsAndColors = false;
   public endCopy() {
     let p: boolean = true; //From now on always update tile transform (since tiles will almost always be needing update)
     let n: boolean = (this._updFlags & DirtyFlag.Normals) > 0;
@@ -2384,15 +2402,24 @@ export class TileBuffer extends THREE.BufferGeometry {
     let t: boolean = (this._updFlags & DirtyFlag.UVs) > 0;
 
     this._attrPosition.needsUpdate = p;
-    this._attrNormal.needsUpdate = n;
-    this._attrColor.needsUpdate = c;
     this._attrTexture.needsUpdate = t;
 
+    //**Due to slow performance Disabling color + normal udpates.
+    // if (this._didUpdateNormsAndColors === false) {
+    //   this._didUpdateNormsAndColors = true;
+    // this._attrNormal.needsUpdate = n;
+    // this._attrColor.needsUpdate = c;
+    // }
+
+  //https://gamedev.stackexchange.com/questions/88031/keeping-sprites-nice-and-pixelated
+
     this.updateBufferRange();
-    this.computeBoundingBox();
+
+    //**this is also very slow 
+    //this.computeBoundingBox();
 
     //This is in fact very slow.
-    //this.computeBoundingSphere();
+    //this.computeBoundingSphere(); 
   }
   private _debugNumCopies = 0;
   public copyObjectTile(tile: Sprite25D, depth: number) {
@@ -2412,20 +2439,20 @@ export class TileBuffer extends THREE.BufferGeometry {
       Globals.debugBreak();
     }
   }
-  public copyCellTile(cell: Cell, tile: Sprite25D, frame: Int, depth: number) {
+  public copyCellTile(cell: Cell, tile: Sprite25D, frame: Int, depth: number, block:TileBlock) {
     if (!tile.QuadVerts || tile.QuadVerts.length < 4) {
       tile.calcQuadVerts();
     }
     //Copy a static Tile Sprite
     if (tile.Animation.TileData && tile.Animation.TileData.KeyFrames.length > frame) {
-      this.copyTileFrame(tile, tile.Animation.TileData.KeyFrames[frame].Frame, 1, cell, depth);
+      this.copyTileFrame(tile, tile.Animation.TileData.KeyFrames[frame].Frame, 1, cell, depth, block);
     }
     else {
       //Error.
       Globals.debugBreak();
     }
   }
-  public copyTileFrame(tile: Sprite25D, frame: SpriteFrame, blend: number = 1, cell: Cell = null, depth: number) {
+  public copyTileFrame(tile: Sprite25D, frame: SpriteFrame, blend: number = 1, cell: Cell = null, depth: number = -1, block:TileBlock = null) {
     let v: Array<vec3> = new Array<vec3>(4);
     let flags = tile.DirtyFlags;
     if (blend) {
@@ -2441,24 +2468,34 @@ export class TileBuffer extends THREE.BufferGeometry {
     |     |
     2 --- 3
     */
-    v[0] = tile.QuadVerts[0].clone();
-    v[1] = tile.QuadVerts[1].clone();
-    v[2] = tile.QuadVerts[2].clone();
-    v[3] = tile.QuadVerts[3].clone();
+    if (cell) {
+      //An attempt to speed this method up.
+      if (block.Verts.length < 4) {
+        block.Verts[0] = tile.QuadVerts[0].clone();
+        block.Verts[1] = tile.QuadVerts[1].clone();
+        block.Verts[2] = tile.QuadVerts[2].clone();
+        block.Verts[3] = tile.QuadVerts[3].clone();
+
+        let cp: vec2 = new vec2(cell.TilePosR3.x, cell.TilePosR3.y * -1); //-1 for the "down" here.  Too lazy to multiply by the normals.
+        for (let vi = 0; vi < 4; ++vi) {
+          block.Verts[vi].x += cp.x;
+          block.Verts[vi].y += cp.y;
+        }
+      }
+      v = block.Verts;
+    }
+    else {
+      v[0] = tile.QuadVerts[0].clone();
+      v[1] = tile.QuadVerts[1].clone();
+      v[2] = tile.QuadVerts[2].clone();
+      v[3] = tile.QuadVerts[3].clone();
+    }
+
 
     //If we have an object parent then we're relative to that instead.
     if (tile.R3Parent === null) {
       for (let vi = 0; vi < 4; ++vi) {
         v[vi].z = depth;
-      }
-    }
-
-    if (cell) {
-      //If we pass a cell in here, then the sprite is a TileSprite, so add the cell parent as an absolute offset.
-      let cp: vec2 = new vec2(cell.TilePosR3.x, cell.TilePosR3.y * -1); //-1 for the "down" here.  I'm too lazy to multiply by the normals.
-      for (let vi = 0; vi < 4; ++vi) {
-        v[vi].x += cp.x;
-        v[vi].y += cp.y;
       }
     }
 
@@ -2469,41 +2506,42 @@ export class TileBuffer extends THREE.BufferGeometry {
 
     this._updFlags |= flags;
 
-    let verts: Float32Array = (this._attrPosition.array as Float32Array);
-    let norms: Float32Array = (this._attrNormal.array as Float32Array);
-    let colors: Float32Array = (this._attrColor.array as Float32Array);
-    let uvs: Float32Array = (this._attrTexture.array as Float32Array);
+    // let verts: Float32Array = (this._attrPosition.array as Float32Array);
+    // let norms: Float32Array = (this._attrNormal.array as Float32Array);
+    // let colors: Float32Array = (this._attrColor.array as Float32Array);
+    // let uvs: Float32Array = (this._attrTexture.array as Float32Array);
 
     for (let vi = 0; vi < 4; ++vi) {
       let vv = off + vi;
 
-      verts[vv * this._vsiz + 0] = v[vi].x;
-      verts[vv * this._vsiz + 1] = v[vi].y;
-      verts[vv * this._vsiz + 2] = v[vi].z;
+      this._vert_floats[vv * this._vsiz + 0] = v[vi].x;
+      this._vert_floats[vv * this._vsiz + 1] = v[vi].y;
+      this._vert_floats[vv * this._vsiz + 2] = v[vi].z;
 
-      // if (flags & DirtyFlag.Normals) {
-      norms[vv * this._nsiz + 0] = normal.x;//this._view.Normal.x;
-      norms[vv * this._nsiz + 1] = normal.y;
-      norms[vv * this._nsiz + 2] = normal.z;
-      //  }
-      //  if (flags & DirtyFlag.Colors) {
-      colors[vv * this._csiz + 0] = color.x;
-      colors[vv * this._csiz + 1] = color.y;
-      colors[vv * this._csiz + 2] = color.z;
-      colors[vv * this._csiz + 3] = color.w * blend;
-      //   }
+      //Removed colors and normals because buffersubdata is getting slow.
+      //   if (flags & DirtyFlag.Normals) {
+      // norms[vv * this._nsiz + 0] = normal.x;//this._view.Normal.x;
+      // norms[vv * this._nsiz + 1] = normal.y;
+      // norms[vv * this._nsiz + 2] = normal.z;
+      //    }
+      //    if (flags & DirtyFlag.Colors) {
+      // colors[vv * this._csiz + 0] = color.x;
+      // colors[vv * this._csiz + 1] = color.y;
+      // colors[vv * this._csiz + 2] = color.z;
+      // colors[vv * this._csiz + 3] = color.w * blend;
+      //     }
     }
 
     //  if (flags & DirtyFlag.UVs) {
     if (frame) {
-      this.copyFrameUVs(uvs, frame, fliph, flipv, off);
+      this.copyFrameUVs(frame, fliph, flipv, off);
     }
     //  }
 
     this._debugNumCopies++;
     this._usedBufferLengthTiles++;
   }
-  private copyFrameUVs(uvs: Float32Array, frame: SpriteFrame, fliph: boolean, flipv: boolean, off: number) {
+  private copyFrameUVs( frame: SpriteFrame, fliph: boolean, flipv: boolean, off: number) {
     let f = frame;
     let x0 = f.x;
     let y0 = f.y;
@@ -2521,50 +2559,54 @@ export class TileBuffer extends THREE.BufferGeometry {
       y1 = t;
     }
 
-    uvs[off * 2 + 0] = x0;
-    uvs[off * 2 + 1] = y1;
-    uvs[off * 2 + 2] = x1;
-    uvs[off * 2 + 3] = y1;
-    uvs[off * 2 + 4] = x0;
-    uvs[off * 2 + 5] = y0;
-    uvs[off * 2 + 6] = x1;
-    uvs[off * 2 + 7] = y0;
+    this._uvs_floats[off * 2 + 0] = x0;
+    this._uvs_floats[off * 2 + 1] = y1;
+    this._uvs_floats[off * 2 + 2] = x1;
+    this._uvs_floats[off * 2 + 3] = y1;
+    this._uvs_floats[off * 2 + 4] = x0;
+    this._uvs_floats[off * 2 + 5] = y0;
+    this._uvs_floats[off * 2 + 6] = x1;
+    this._uvs_floats[off * 2 + 7] = y0;
   }
   private fillDefault(vb: Float32Array, tb: Float32Array, nb: Float32Array, cb: Float32Array) {
-    vb[0] = 0;
-    vb[1] = 0;
-    vb[2] = 0;
+    for (let vi = 0; vi < vb.length; ++vi) {
+      vb[vi + 0] = 0;
+      vb[vi + 1] = 0;
+      vb[vi + 2] = 0;
 
-    vb[3] = 1;
-    vb[4] = 0;
-    vb[5] = 0;
+      vb[vi + 3] = 1;
+      vb[vi + 4] = 0;
+      vb[vi + 5] = 0;
 
-    vb[6] = 0;
-    vb[7] = -1;
-    vb[8] = 0;
+      vb[vi + 6] = 0;
+      vb[vi + 7] = -1;
+      vb[vi + 8] = 0;
 
-    vb[9] = 1;
-    vb[10] = -1;
-    vb[11] = 0;
+      vb[vi + 9] = 1;
+      vb[vi + 10] = -1;
+      vb[vi + 11] = 0;
 
-    tb[0] = 0;
-    tb[1] = 1;
-    tb[2] = 1;
-    tb[3] = 1;
-    tb[4] = 0;
-    tb[5] = 0;
-    tb[6] = 1;
-    tb[7] = 0;
+      tb[vi + 0] = 0;
+      tb[vi + 1] = 1;
+      tb[vi + 2] = 1;
+      tb[vi + 3] = 1;
+      tb[vi + 4] = 0;
+      tb[vi + 5] = 0;
+      tb[vi + 6] = 1;
+      tb[vi + 7] = 0;
 
-    for (let xx = 0; xx < 4; ++xx) {
-      nb[xx * 3 + 0] = 0;
-      nb[xx * 3 + 1] = 0;
-      nb[xx * 3 + 2] = 1;
-      cb[xx * 4 + 0] = 1;
-      cb[xx * 4 + 1] = 0;
-      cb[xx * 4 + 2] = 1;
-      cb[xx * 4 + 3] = 1;
+      for (let xx = 0; xx < 4; ++xx) {
+        nb[vi + xx * 3 + 0] = 0;
+        nb[vi + xx * 3 + 1] = 0;
+        nb[vi + xx * 3 + 2] = 1;
+        cb[vi + xx * 4 + 0] = 1;
+        cb[vi + xx * 4 + 1] = 0;
+        cb[vi + xx * 4 + 2] = 1;
+        cb[vi + xx * 4 + 3] = 1;
+      }
     }
+
+    //Draw first quad to test.
     this.setDrawRange(0, 6);
   }
   private updateBufferRange() {
@@ -2710,14 +2752,13 @@ export class UIElement {
     //  let campos = new vec3();
     //  Globals.player.getWorldPosition(campos);
 
-    let frust: Frustum = new Frustum();
-    let delta = frust.ftl.clone().sub(frust.ntl);
-    let pos: vec3 = frust.ntl.clone().add(delta.normalize().multiplyScalar(dist));
+    let delta = Globals.frustum.ftl.clone().sub(Globals.frustum.ntl);
+    let pos: vec3 = Globals.frustum.ntl.clone().add(delta.normalize().multiplyScalar(dist));
 
     //let pos: vec3 = new vec3(this._ui.WorldView.Viewport.BoxR2.Min.x, this._ui.WorldView.Viewport.BoxR2.Min.y, 0);
 
     SpriteFrame.createQuadVerts(this.Verts, pos, rot, scale, this._frame.tile_width_tiles, this._frame.tile_height_tiles,
-      frust.right.clone(), frust.down.clone(), frust.normal.clone());
+      Globals.frustum.right.clone(), Globals.frustum.down.clone(), Globals.frustum.normal.clone());
 
     //compute the distance needed to keep this in the correct distance so it fills the screen.
 
@@ -2868,7 +2909,7 @@ function gameLoop(dt: number) {
       Globals.gameState = GameState.Play;
 
       //You can only play music when the user has interacted wit the page.
-      Globals.audio.playMusic(Files.Audio.MusicBeepy);
+      //Globals.audio.playMusic(Files.Audio.MusicBeepy);
     }
   }
 
