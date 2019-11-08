@@ -1058,3 +1058,246 @@
 // }
 
 
+
+
+
+
+
+  // public constructor(atlas: Atlas) {
+  //   this._tileMap = new Map<TiledSpriteId, Sprite25D>();
+  // //  let that = this;
+
+  //   // this.addTile(function () {
+  //   //   let player = new Character(atlas, "Player", TiledSpriteId.Player, TileLayerID.Objects);
+  //   //   that.addCharacterAnimation(player, atlas,
+  //   //     [[3, 1], [4, 1], [3, 1], [5, 1]],//left
+  //   //     [[3, 1], [4, 1], [3, 1], [5, 1]],//right
+  //   //     [[6, 1], [7, 1], [6, 1], [8, 1]],//up
+  //   //     [[0, 1], [1, 1], [0, 1], [2, 1]]//down
+  //   //   );
+
+  //   //   player.face(Direction4Way.Down);
+
+  //   //   player.IsCellTile = false; // This must be set for cell tiles to get populated.
+  //   //   player.calcQuadVerts();
+
+  //   //   return player;
+  //   // });
+
+  //   // //Testing grass..
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "Grass_Base", TiledSpriteId.Grass_Base);
+  //   //   tile.Animation.addTileFrame(new ivec2(1, 0), atlas);
+  //   //   tile.Animation.addTileFrame(new ivec2(2, 0), atlas);
+  //   //   tile.Animation.addTileFrame(new ivec2(3, 0), atlas);
+  //   //   tile.Animation.addTileFrame(new ivec2(4, 0), atlas);
+  //   //   tile.Animation.addTileFrame(new ivec2(5, 0), atlas);
+
+  //   //   tile.Tiling = Tiling.Random;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "sand_base", TiledSpriteId.sand_base);
+  //   //   tile.Animation.addTileFrame(new ivec2(6, 0), atlas);
+  //   //   tile.Animation.addTileFrame(new ivec2(7, 0), atlas);
+  //   //   tile.Animation.addTileFrame(new ivec2(8, 0), atlas);
+
+  //   //   tile.Tiling = Tiling.Random;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   return tile;
+  //   // });
+
+  //   // //9,0
+  //   // this.addTile(function () {
+  //   //   let props = [
+  //   //     new SpriteTileInfo(new ivec2(0, 0), TileLayerID.Foreground, CollisionHandling.None), // Tree Top
+  //   //     new SpriteTileInfo(new ivec2(1, 0), TileLayerID.Foreground, CollisionHandling.None),
+  //   //     new SpriteTileInfo(new ivec2(2, 0), TileLayerID.Objects, CollisionHandling.Layer), //Bush
+  //   //     new SpriteTileInfo(new ivec2(0, 1), TileLayerID.Objects, CollisionHandling.Layer),
+  //   //     new SpriteTileInfo(new ivec2(1, 1), TileLayerID.Objects, CollisionHandling.Layer),
+  //   //     new SpriteTileInfo(new ivec2(2, 1), TileLayerID.Objects, CollisionHandling.Layer), // Bush
+  //   //   ]
+
+  //   //   let tile = new Sprite25D(atlas, "Tree", TiledSpriteId.Tree);
+  //   //   let off_x = 9;
+  //   //   let off_y = 0;
+  //   //   for (let j = 0; j < 3; ++j) {
+  //   //     for (let i = 0; i < 3; ++i) {
+  //   //       tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas, new ivec2(1, 1), props);
+  //   //     }
+  //   //   }
+  //   //   tile.Tiling = Tiling.FoliageTiling;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+  //   //   tile.Gesture = HandGesture.Poke;
+
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let props = [
+  //   //     new SpriteTileInfo(new ivec2(0, 0), TileLayerID.Objects, CollisionHandling.Layer), // Tree Top
+  //   //     new SpriteTileInfo(new ivec2(1, 0), TileLayerID.Objects, CollisionHandling.Layer),
+  //   //     new SpriteTileInfo(new ivec2(2, 0), TileLayerID.Objects, CollisionHandling.Layer), //Bush
+  //   //     new SpriteTileInfo(new ivec2(3, 0), TileLayerID.Objects, CollisionHandling.Layer), //Bush
+  //   //     new SpriteTileInfo(new ivec2(0, 1), TileLayerID.Objects, CollisionHandling.Layer), //Bush
+  //   //     new SpriteTileInfo(new ivec2(1, 1), TileLayerID.Objects, CollisionHandling.Layer),
+  //   //     new SpriteTileInfo(new ivec2(2, 1), TileLayerID.Objects, CollisionHandling.Layer),
+  //   //     new SpriteTileInfo(new ivec2(3, 1), TileLayerID.Objects, CollisionHandling.Layer), // Bush
+  //   //   ]
+
+  //   //   let tile = new Sprite25D(atlas, "Fence", TiledSpriteId.Fence);
+  //   //   let off_x = 0;
+  //   //   let off_y = 3;
+  //   //   for (let j = 0; j < 3; ++j) {
+  //   //     for (let i = 0; i < 5; ++i) {
+  //   //       tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas, new ivec2(1, 1), props);
+  //   //     }
+  //   //   }
+  //   //   tile.Tiling = Tiling.FenceBorderRules;
+  //   //   tile.IsCellTile = true;
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+  //   //   tile.Gesture = HandGesture.Poke;
+
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "House", TiledSpriteId.House);
+  //   //   let off_x = 12;
+  //   //   let off_y = 0;
+  //   //   for (let j = 0; j < 3; ++j) {
+  //   //     for (let i = 0; i < 3; ++i) {
+  //   //       tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas);
+  //   //     }
+  //   //   }
+  //   //   tile.Tiling = Tiling.Set3x3Block;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "Ocean_Water", TiledSpriteId.Ocean_Water);
+  //   //   let off_x = 5;
+  //   //   let off_y = 5;
+
+  //   //   //add an animated tileframe
+  //   //   tile.Animation.addTileFrame(new ivec2(off_x + 0, off_y + 0), atlas, new ivec2(1, 1), null, 2.4);
+  //   //   tile.Animation.addTileFrame(new ivec2(off_x + 1, off_y + 0), atlas, new ivec2(1, 1), null, 2.1);
+  //   //   tile.Animation.addTileFrame(new ivec2(off_x + 2, off_y + 0), atlas, new ivec2(1, 1), null, 2.0);
+
+  //   //   tile.Tiling = Tiling.None;
+
+  //   //   //Tiled animation for static tile.  Set TilingAnimated to true and play the animation.
+  //   //   tile.TilingAnimated = true;
+  //   //   tile.Animation.play(Animation25D.c_strDefaultTileAnimation);
+
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "Pond_Water", TiledSpriteId.Pond_Water);
+  //   //   let off_x = 8;
+  //   //   let off_y = 5;
+
+  //   //   //add an animated tileframe
+  //   //   tile.Animation.addTileFrame(new ivec2(off_x + 0, off_y + 0), atlas, new ivec2(1, 1), null, 3.4);
+  //   //   tile.Animation.addTileFrame(new ivec2(off_x + 1, off_y + 0), atlas, new ivec2(1, 1), null, 3.1);
+
+  //   //   tile.Tiling = Tiling.None;
+
+  //   //   //Tiled animation for static tile.  Set TilingAnimated to true and play the animation.
+  //   //   tile.TilingAnimated = true;
+  //   //   tile.Animation.play(Animation25D.c_strDefaultTileAnimation);
+
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "Rock", TiledSpriteId.Rock);
+  //   //   tile.Animation.addTileFrame(new ivec2(9, 3), atlas);
+  //   //   tile.Tiling = Tiling.None;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+  //   //   tile.Gesture = HandGesture.Grab;
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "Hole", TiledSpriteId.Hole);
+  //   //   tile.Animation.addTileFrame(new ivec2(10, 3), atlas);
+  //   //   tile.Tiling = Tiling.None;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "Monster_Grass", TiledSpriteId.Monster_Grass);
+  //   //   tile.Animation.addTileFrame(new ivec2(11, 3), atlas);
+  //   //   tile.Animation.addTileFrame(new ivec2(12, 3), atlas);
+  //   //   tile.Tiling = Tiling.None;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+  //   //   tile.Gesture = HandGesture.Poke;
+
+
+  //   //   // tile.PreCollisionFunction = function (this_block: TileBlock) {
+  //   //   //   this.Layer = TileLayer.Objects;
+  //   //   //   this_block.FrameIndex = toInt(0); // reset
+  //   //   // }
+  //   //   // tile.CollisionFunction = function (this_block: TileBlock, thisObj: Phyobj25D, other: Phyobj25D) {
+  //   //   //   //Move the grass into the foreground and change its sprite
+  //   //   //   if (this_block) {
+  //   //   //     this_block.Layer = TileLayer.Foreground;
+  //   //   //     this_block.FrameIndex = toInt(1); // reset
+  //   //   //   }
+  //   //   // }
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "Hard_Border", TiledSpriteId.Hard_Border);
+
+  //   //   that.addFrameGrid(11, 7, 4, 6, tile, atlas);
+
+  //   //   tile.Tiling = Tiling.HardBorderRules;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.Layer;
+  //   //   return tile;
+  //   //   return tile;
+  //   // });
+  //   // this.addTile(function () {
+  //   //   let tile = new Sprite25D(atlas, "dock", TiledSpriteId.dock);
+
+  //   //   that.addFrameGrid(13, 3, 2, 1, tile, atlas);
+
+  //   //   tile.Tiling = Tiling.DockRules;
+  //   //   tile.IsCellTile = true; // This must be set for cell tiles to get populated.
+  //   //   tile.CollisionHandling = CollisionHandling.None;
+  //   //   return tile;
+  //   // });
+
+  // }
+
+
+
+
+    // private addFrameGrid(xoff: number, yoff: number, width: number, height: number, sprite: Sprite25D, atlas: Atlas) {
+
+  //   let off_x = xoff;
+  //   let off_y = yoff;
+  //   for (let j = 0; j < height; ++j) {
+  //     for (let i = 0; i < width; ++i) {
+  //       sprite.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas);
+  //     }
+  //   }
+
+  // }
+  // public getTile(id: TiledSpriteId): SpriteFrameDefinition {
+  //   return this._sprites.get(id);
+  // }
+  // private addTile(x: MakeTileFn) {
+  //   let tile = x();
+  //   this._sprites.set(tile.HelixSpriteId, tile);
+  // }

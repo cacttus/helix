@@ -1,16 +1,13 @@
 import * as THREE from 'three';
-import {
-  Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D,
-  AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, MeshPhongMaterial, BufferAttribute, Quaternion, ObjectSpaceNormalMap, Float32Attribute, NormalBlending, WrapAroundEnding, InvertStencilOp, Box3Helper, Int8BufferAttribute, Texture
-} from 'three';
+import { Color, Box3, Object3D, MeshBasicMaterial, Material, Quaternion, Box3Helper, Texture } from 'three';
 import { Globals, GameState, ResizeMode } from './Globals';
-import { basename } from 'upath';
+//import { basename } from 'upath';
 import { Utils } from './Utils';
 import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
-import { TileGrid, MasterMap, Cell, TileBlock, TiledSpriteId, TileLayerID } from './TileGrid';
+import { Tiling, TileGrid, MasterMap, Cell, TileBlock, TiledTileId, HelixTileId, TileLayerId, HelixTileType } from './TileGrid';
 import { PhysicsObject3D } from './Physics3D';
 
 export class Color4 {
@@ -61,7 +58,7 @@ class Environment {
   public constructor(world: WorldView25D) {
     this._world = world;
 
-   // this._times = new Array<TimeOfDay>(
+    // this._times = new Array<TimeOfDay>(
     //   new TimeOfDay(TimeOfDayEnum.Dawn, ImageGradient.Yellow, new ivec2(4, 1), 5),
     //   new TimeOfDay(TimeOfDayEnum.Day, ImageGradient.Green, new ivec2(1, 1), 5),
     //   new TimeOfDay(TimeOfDayEnum.Dusk, ImageGradient.Red, new ivec2(3, 1), 5),
@@ -69,6 +66,8 @@ class Environment {
     // );
 
     // let baseImageData = ImageUtils.getImageDataFromTexture(this._world.SpriteSheetMaterial.map);
+    // let id2  = ImageUtils.scaleImageData(baseImageData, 4);
+    // ImageUtils.swapMaterialImage(this._world.SpriteSheetMaterial, id2);
 
     // ImageUtils.computeImageGradients(baseImageData, this._times, TimeOfDayEnum.Day).then((resolve: boolean) => {
     //   if (Globals.isDebug()) {
@@ -152,7 +151,7 @@ class Environment {
 
 export class ImageUtils {
   //Basically this class was creatd to handle the changing of image colors based on time of day.
-  private static scaleImageData(imageData: ImageData, scale: number) {
+  public static scaleImageData(imageData: ImageData, scale: number) {
     let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
     var scaled = canvasxx.getContext('2d').createImageData(imageData.width * scale, imageData.height * scale);
 
@@ -189,47 +188,12 @@ export class ImageUtils {
     canvasxx.height = image.height;
     let context = canvasxx.getContext('2d');
 
-    //https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
-    //   image = ImageUtils.scaleImageData(image, 2);
-
-
     context.putImageData(image, 0, 0);
-    // g_atlas.multiply2();
 
     mat.map = new THREE.Texture(canvasxx);
     Atlas.applyParamsToAtlas(mat.map);
     mat.needsUpdate = true;
     mat.map.needsUpdate = true;
-
-
-    //     ImageUtils.getImage(image).then((value: ImageBitmap) => {
-    //       let canvasxx: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
-    //       canvasxx.width = image.width;
-    //       canvasxx.height = image.height;
-    //       let context = canvasxx.getContext('2d');
-    //       context.drawImage(value, 0, 0);
-    // //https://stackoverflow.com/questions/7721898/is-putimagedata-faster-than-drawimage
-    //     //  canvasxx.getContext("2d").putImageData(imageData, 0, 0);
-
-    //     //https://stackoverflow.com/questions/3448347/how-to-scale-an-imagedata-in-html-canvas
-
-    //     // let canvas2: HTMLCanvasElement = document.createElement('canvas') as HTMLCanvasElement;
-    //     // canvas2.width = image.width;
-    //     // canvas2.height = image.height;
-    //     // canvas2.getContext('2d').putImageData(image,0,0);
-    //     // context.scale(2, 2);
-
-    //     // context.drawImage(canvas2, 0, 0);
-
-
-    //       mat.map = new THREE.Texture(canvasxx);
-    //       Atlas.applyParamsToAtlas(mat.map);
-    //       mat.needsUpdate = true;
-    //       mat.map.needsUpdate = true;
-
-    //     }, (reject: any) => {
-    //       Globals.logError(reject ? reject : "swapMaterialImage failed without an error message");
-    //     });
   }
   public static debug_drawImageToCanvas(idata: ImageData): Promise<boolean> {
     return new Promise<boolean>(function (resolve, reject) {
@@ -467,32 +431,31 @@ export class Atlas extends ImageResource {
   private _tileWidthR3: number = 1;
   private _tileHeightR3: number = 1;
 
-  // public multiply2(){
-  //   this._tileWidthPixels = 32 as Int;
-  //   this._tileHeightPixels = 32 as Int;
-  //   this._xSpace = 2 as Int;
-  //   this._ySpace = 2 as Int;
-  //   this._topPad= 2 as Int;
-  //   this._leftPad= 2 as Int;
-  //   this._rightPad= 2 as Int;
-  //   this._botPad= 2 as Int;
-  // }
-
+  public tiledFrameIdToTuple(id: Int): ivec2 {
+    let ret: ivec2 = new ivec2();
+    ret.x = toInt(id % this.FramesWidth);
+    ret.y = toInt(id / this.FramesWidth);
+    return ret;
+  }
 
   public static applyParamsToAtlas(tex: Texture) {
     //hacky method to set the filtering and such.
     tex.magFilter = THREE.NearestFilter;
     tex.minFilter = THREE.NearestFilter; //NearestMipmapNearestFilter;
-    //tex.generateMipmaps = true;
+    // tex.generateMipmaps = true;
     tex.needsUpdate = true;
   }
 
   //Number of frames across the atlas.
   public get FramesWidth(): Int {
-    return ((this.ImageWidth - this.RightPad - this.LeftPad + this.SpaceX) / (this.TileWidthPixels + this.SpaceX)) as Int;
+    let x = ((this.ImageWidth - this.RightPad - this.LeftPad + this.SpaceX) / (this.TileWidthPixels + this.SpaceX));
+    let xi = toInt(x);
+    return xi;
   }
   public get FramesHeight(): Int {
-    return ((this.ImageHeight - this.BotPad - this.TopPad + this.SpaceY) / (this.TileHeightPixels + this.SpaceY)) as Int;
+    let x = ((this.ImageHeight - this.BotPad - this.TopPad + this.SpaceY) / (this.TileHeightPixels + this.SpaceY));
+    let xi = toInt(x);
+    return xi;
   }
 
   public get ImageWidth(): Int {
@@ -725,15 +688,15 @@ export class SpriteTileInfo {
   //This class defines sprite properties at the sprite level for animation definitions.
   //specifically, which layer the sprite props should be.
   public RelativeTileOffset: ivec2 = new ivec2(0, 0);
-  public Layer: TileLayerID = TileLayerID.Unset; // If left unset, we set the sprite to the layer that it comes in in the map.
+  public Layer: TileLayerId = TileLayerId.Unset; // If left unset, we set the sprite to the layer that it comes in in the map.
   public Collision: CollisionHandling = CollisionHandling.None;
-  public constructor(tileoff: ivec2, layer: TileLayerID, collision: CollisionHandling) {
+  public constructor(tileoff: ivec2, layer: TileLayerId, collision: CollisionHandling) {
     this.RelativeTileOffset = tileoff;
     this.Layer = layer;
     this.Collision = collision;
   }
 }
-export enum CollisionHandling { None, CollideWithLayerObjects }
+export enum CollisionHandling { None, Layer }
 export enum AnimationPlayback { Playing, Pauseed, Stopped }
 export class Animation25D {
   //Separate class to deal with animations and transitinos.  Just because Sprite25D was getting big.
@@ -962,7 +925,7 @@ export class Animation25D {
 
         //Find sprite prop if we have one defined.
         let prop: SpriteTileInfo = null;
-        if (props) {
+        if (props && props.length > 0) {
           for (let ob_prop of props) {
             if (ob_prop.RelativeTileOffset.x === toInt(itile) && ob_prop.RelativeTileOffset.y === toInt(jtile)) {
               prop = ob_prop;
@@ -993,7 +956,8 @@ export class Animation25D {
           //Get the given sub-tile sprite, or create and add it to this sprite.
           let sp: Sprite25D = this.Sprite.getSubTile(itile, jtile);
           if (sp === null) {
-            sp = new Sprite25D(atlas, this.Sprite.Name + "_subtile_" + itile + "_" + jtile);
+            sp = new Sprite25D(atlas);
+            sp.Name = this.Sprite.Name + "_subtile_" + itile + "_" + jtile;
             sp.Layer = this.Sprite.Layer;
             sp.SubTile = new vec2(itile, jtile);
             this.Sprite.add(sp);
@@ -1179,24 +1143,14 @@ export class Animation25D {
     }
   }
 }
-export enum Tiling {
-  None,
-  Single,
-  Set3x3Block /*a solid 3x3 block with no corners (9 tiles) */,
-  Set3x3Seamless /* a terrain master tileset 40+ tiles */,
-  Random,
-  FoliageBorderRules,
-  FenceBorderRules,
-  HardBorderRules,
-}
+
 export interface CollisionFunction25D { (thisObj: Phyobj25D, other: Phyobj25D, this_block: TileBlock, other_block: TileBlock): void; }
 export interface GestureCallback { (thisObj: Sprite25D, this_block: TileBlock, hand: Tickler): void; }
 export enum DirtyFlag { /*Transform = 0x01,*/ UVs = 0x02, Normals = 0x04, Colors = 0x08, All = 0x01 | 0x02 | 0x04 | 0x08 }
 export class Sprite25D {
-  private _subTile: vec2 = null; //If set, this tile is a collection of other subtiles.
 
   private static _idGen = 1; // Do not clone
-  private _tiledSpriteId: TiledSpriteId = TiledSpriteId.None;
+  private _helixTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
   private _name: string = "";
   private _uniqueId: number = 0;// DO NOT CLONE
   private _worldView: WorldView25D = null; // Do not clone
@@ -1211,6 +1165,9 @@ export class Sprite25D {
   private _worldrotation: Quaternion = new Quaternion(0, 0, 0, 0);
   private _worldscale: vec2 = new vec2(1, 1);
   private _worldcolor: vec4 = new vec4(1, 1, 1, 1);
+
+  public _tilingAnimated: boolean = false; // True if the tiling for this tile is animated
+  private _subTile: vec2 = null; //If set, this tile is a collection of other subtiles.
 
   private _size: vec2 = new vec2(1, 1); // this is actual size of rendered geometry.  This is initially set by Atlas.TileWidthR3
   private _origin: vec3 = new vec3(0, 0, 0);
@@ -1229,9 +1186,9 @@ export class Sprite25D {
   private _quadVerts: Array<vec3> = new Array<vec3>();  //Quad Verts - do not clone
   private _quadNormal: vec3 = new vec3(0, 0, 1); // do not clone
 
-  private _isCellTile: boolean = false;
-  public _layer: TileLayerID = TileLayerID.Unset;
-  private _atlas: Atlas = null;
+  // private _isCellTile: boolean = false;
+  public _layer: TileLayerId = TileLayerId.Unset;
+  protected _atlas: Atlas = null;
   private _collisionHandling: CollisionHandling = CollisionHandling.None;
 
   private _tiling: Tiling = Tiling.None;
@@ -1240,16 +1197,26 @@ export class Sprite25D {
   private _preCollisionFunction: CollisionFunction25D = null;
   private _postCollisionFunction: CollisionFunction25D = null;
   private _collisionFunction: CollisionFunction25D = null;
+  private _collisionBits: Int = toInt(0); // Use the CollisioNbits enum
 
   private _gestureCallback: GestureCallback = null;
   private _gesture: HandGesture = HandGesture.None;
-  private _r3Parent: Object3D = null;
+  private _r3Parent: Object3D = null; // Do not clone - Remove this when we've created gesture sprites as PhysicsObjects 
+
+  public AfterLoadCallback: Function = null; //Called after the sprite is created.
+
+  private _tileType: HelixTileType = HelixTileType.Unset;
 
   public snapToCell(c: Cell) {
     if (c) {
       this.Position = new vec3(c.CellPos_World.x, c.CellPos_World.y, 0);
     }
   }
+
+  public get TileType(): HelixTileType { return this._tileType; }
+  public set TileType(x: HelixTileType) { this._tileType = x; }
+  // public get IsBorderBlocker(): boolean { return this._tileType === HelixTileType.BorderBlocker; }
+  // public get IsDoorTrigger(): boolean { return this._tileType === HelixTileType.DoorTrigger; }
 
   //Hand Gesture stuff
   public get GestureCallback(): GestureCallback { return this._gestureCallback; }
@@ -1273,22 +1240,26 @@ export class Sprite25D {
   public get CollisionHandling(): CollisionHandling { return this._collisionHandling; }
   public set CollisionHandling(x: CollisionHandling) { this._collisionHandling = x; }
 
-  public get Layer(): TileLayerID { return this._layer; }
-  public set Layer(x: TileLayerID) { this._layer = x; }
+  public get CollisionBits(): Int { return this._collisionBits; }
+  public set CollisionBits(x: Int) { this._collisionBits = x; }
 
-  public get IsCellTile(): boolean { return this._isCellTile; }
-  public set IsCellTile(x: boolean) { this._isCellTile = x; }
+  public get Layer(): TileLayerId { return this._layer; }
+  public set Layer(x: TileLayerId) { this._layer = x; }
+
+  // public get IsCellTile(): boolean { return this._isCellTile; }
+  // public set IsCellTile(x: boolean) { this._isCellTile = x; }
 
   public get Tiling(): Tiling { return this._tiling; }
   public set Tiling(x: Tiling) { this._tiling = x; }
 
-  public _tilingAnimated: boolean = false; // True if the tiling for this tile is animated
   public get TilingAnimated(): boolean { return this._tilingAnimated; }
   public set TilingAnimated(x: boolean) { this._tilingAnimated = x; }
 
   public get BoundBox_Grid(): Box2f { return this._boundBox_grid; }
   public get BoundBox_World(): Box2f { return this._boundBox_world; }
-  public get TiledSpriteId(): TiledSpriteId { return this._tiledSpriteId; }
+
+  public get HelixTileId(): HelixTileId { return this._helixTileId; }
+  public set HelixTileId(x: HelixTileId) { this._helixTileId = x; }
 
   public get QuadVerts(): Array<vec3> { return this._quadVerts; }
   public get QuadNormal(): vec3 { return this._quadNormal; }
@@ -1304,7 +1275,6 @@ export class Sprite25D {
   //This is for multi-tiled sprite animations, for example a character that is 2 tiles high (ex. pokemon char sprite)
   public get SubTile(): vec2 { return this._subTile; }
   public set SubTile(x: vec2) { this._subTile = x; }
-
 
   public get FlipH(): boolean { return this._flipH; }
   public set FlipH(x: boolean) { this._flipH = x; }
@@ -1362,15 +1332,15 @@ export class Sprite25D {
 
   private _debugBox: THREE.Box3Helper = null;
 
-  public constructor(atlas: Atlas, name: string = null, spriteId: TiledSpriteId = TiledSpriteId.None, layer: TileLayerID = null) {
+  public constructor(atlas: Atlas/*, name: string = null, tileId: HelixTileId = MasterMap.UNDEFINED_TILE, layer: TileLayerId = null*/) {
     this._atlas = atlas;
     if (name) {
       this._name = name;
     }
-    if (layer) {
-      this._layer = layer;
-    }
-    this._tiledSpriteId = spriteId;
+    // if (layer) {
+    //   this._layer = layer;
+    // }
+    // this._helixTileId = tileId;
 
     this._uniqueId = Sprite25D._idGen++;
     this._animation = new Animation25D(this);
@@ -1381,20 +1351,34 @@ export class Sprite25D {
 
   public copy(other: Sprite25D) {
     //We do not clone every member, see comments above.
-    this._subTile = other._subTile.clone();
 
+    //idgen
+    this._helixTileId = other._helixTileId;
+    this._name = other._name;
+    //uniqueid
+    //worldview
+    //dirty
+    //destroyed
     this._location = other._location.clone();
     this._rotation = other._rotation.clone();
     this._scale = other._scale.clone();
+
+    this._worldlocation = other._worldlocation.clone();
+    this._worldrotation = other._worldrotation.clone();
+    this._worldscale = other._worldscale.clone();
+    this._worldcolor = other._worldcolor.clone();
+
+    this._tilingAnimated = other._tilingAnimated;
+    this._subTile = other._subTile.clone();
+
     this._size = other._size.clone();
     this._origin = other._origin.clone();
-
     for (let ci = 0; ci < other._children.length; ci++) {
       this._children.push(other._children[ci].clone());
     }
-
+    //parent
     this._visible = other._visible;
-
+    //dirtyflags
     this._color = other._color;
     this._flipH = other._flipH;
     this._flipV = other._flipV;
@@ -1402,23 +1386,30 @@ export class Sprite25D {
 
     this._boundBox_grid = other._boundBox_grid.clone();
     this._boundBox_world = other._boundBox_world.clone();
-    //private _quadVerts: Array<vec3> = new Array<vec3>();  //Quad Verts - do not clone
-    //private _quadNormal: vec3 = new vec3(0, 0, 1); // do not clone
-    this._tiledSpriteId = other._tiledSpriteId;
-    this._isCellTile = other._isCellTile;
-
+    //quad verts
+    //quadnormal
     this._layer = other._layer;
     this._atlas = other._atlas;
-    this._tiling = other._tiling;
     this._collisionHandling = other._collisionHandling;
 
-    this._preCollisionFunction = other._preCollisionFunction;
-    this._collisionFunction = other._collisionFunction;
-    this._postCollisionFunction = other._postCollisionFunction;
+    this._tiling = other._tiling;
+
+    if (other._preCollisionFunction) {
+      this._preCollisionFunction = Object.assign(other._preCollisionFunction);
+    }
+    if (other._collisionFunction) {
+      this._collisionFunction = Object.assign(other._collisionFunction);
+    }
+    if (other._postCollisionFunction) {
+      this._postCollisionFunction = Object.assign(other._postCollisionFunction);
+    }
+    this._collisionBits = other._collisionBits;
 
     this._gestureCallback = other._gestureCallback;
     this._gesture = other._gesture;
-    //this._r3Parent = other._r3Parent; // This may not be somethnig we shoudl copy
+    //r3parent
+    //afterloadcallback
+    this._tileType = other._tileType;
   }
   public clone(): Sprite25D {
     let ret = new Sprite25D(this._atlas);
@@ -1602,7 +1593,15 @@ export class Sprite25D {
 
   }
   public canCollide(): boolean {
-    return this.CollisionHandling === CollisionHandling.CollideWithLayerObjects;
+    return this.CollisionHandling === CollisionHandling.Layer;
+  }
+  public getTileBounds() : Box2f{
+    let ret = new Box2f();
+    ret.GenResetExtents();
+    for(let kf of this.Animation.TileData.KeyFrames){
+      ret.ExpandByPoint(new vec2(kf.Frame.tile_x_tiles, kf.Frame.tile_y_tiles));
+    }
+    return ret;
   }
 }
 export class Phyobj25D extends Sprite25D {
@@ -1612,6 +1611,18 @@ export class Phyobj25D extends Sprite25D {
 
   public ApplySnap: boolean = false;
 
+  public constructor(atlas: Atlas) {
+    super(atlas);
+  }
+  public copy(other: Phyobj25D) {
+    super.copy(other);
+    this._velocity = other._velocity.clone();
+  }
+  public clone(): Phyobj25D {
+    let ret = new Phyobj25D(this._atlas);
+    ret.copy(this);
+    return ret;
+  }
   public update(dt: number) {
     //Update physics.
     let next_pos: vec3 = this.Position.clone().add(this.Velocity);
@@ -1675,14 +1686,38 @@ export class Character extends Phyobj25D {
   private _eCommandedDirection: Direction4Way = Direction4Way.None;//The direction the player commanded.
   private _speedMultiplier: number = 1;
   private _carryover_velocity: number = 0;//Carryover, if we are moving in the same direction but we've hit a tile boundary. This prevents hiccups in a low frame rate.
+  private _hitSoundTimer: WaitTimer = new WaitTimer(.6);
+  private _runSoundTimer: WaitTimer = new WaitTimer(.6);
 
   public set SpeedMultiplier(x: number) { this._speedMultiplier = x; }
   public get SpeedMultiplier(): number { return this._speedMultiplier; }
   public get IsPlayer(): boolean { return this._isPlayer; }
   public set IsPlayer(x: boolean) { this._isPlayer = x; }
 
-  private _hitSoundTimer: WaitTimer = new WaitTimer(.6);
-  private _runSoundTimer: WaitTimer = new WaitTimer(.6);
+
+  public constructor(atlas: Atlas) {
+    super(atlas);
+  }
+  public copy(other: Character) {
+    super.copy(other);
+    //_bMoving
+    this._eMoveDirection = other._eMoveDirection;
+    this._startPosition = other._startPosition.clone();
+    //this._destination = other._destination.clone();
+    this._speed = other._speed;
+    this._isPlayer = other._isPlayer;
+    //this._eCommandedDirection = 
+    //speedmultiplier
+    //carryover_vloecity
+    //hittimer
+    //runtimer
+
+  }
+  public clone(): Character {
+    let ret = new Character(this._atlas);
+    ret.copy(this);
+    return ret;
+  }
 
   public update(dt: number) {
 
@@ -1914,6 +1949,8 @@ export class Viewport25D {
   }
 }
 class InputControls {
+  //Handles the movement of the player with controls, KB,Mouse or VR controllers (in the future, hands)
+
   private _playerChar: Character = null;
   private _playerCharZoom: number = 13;
   private _viewport: Viewport25D = null;
@@ -2100,7 +2137,10 @@ export class WorldView25D extends Object3D {
 
     //Must be called after spritemap load
     this._quickUI = new QuickUI(this);
-    this._quickUI.Elements.push(new UIElement(this._quickUI, 0, 6, 11, 11));
+
+    let spr = g_mainWorld.MasterMap.MapData.Sprites.getSpriteByName("ui_title");
+    let bounds :Box2f = spr.getTileBounds();
+    this._quickUI.Elements.push(new UIElement(this._quickUI, bounds.Min.x, bounds.Min.y, bounds.Width(), bounds.Height()));
 
     //Must be called after spritemap load
     this._environment = new Environment(this);
@@ -2130,9 +2170,9 @@ export class WorldView25D extends Object3D {
     this._buffer.beginCopy();
 
     if (Globals.gameState === GameState.Play) {
-      if (Globals.isDebug()) {
-        this.debug_DrawCells();
-      }
+      // if (Globals.isDebug()) {
+      //   this.debug_DrawCells();
+      // }
       this.drawEverything();
     }
     else if (Globals.gameState === GameState.Title) {
@@ -2154,11 +2194,24 @@ export class WorldView25D extends Object3D {
 
     this.updatePostPhysics();
   }
-  public addObject25(ob: Sprite25D) {
+  public addObject25(ob: Sprite25D, cell_position: ivec2 = null) {
     if (ob.Destroyed === false) {
       ob.WorldView = this;
       this._objects.set(ob, ob);
       ob.markDirty();
+      if (cell_position) {
+        this.warpObject(ob, cell_position);
+      }
+    }
+  }
+  public warpObject(ob: Sprite25D, cell_pos: ivec2) {
+    //Set the object to be at a position, regardless of what is there.
+    if (!this._objects.get(ob)) {
+      Globals.logError("Could not warp object, object was not added tow orld.")
+    }
+    else {
+      ob.Position.x = cell_pos.x * this.Atlas.TileWidthR3;
+      ob.Position.y = cell_pos.y * this.Atlas.TileHeightR3;
     }
   }
   public removeObject25(ob: Sprite25D) {
@@ -2181,9 +2234,9 @@ export class WorldView25D extends Object3D {
       this.copyObjectTiles(ob.Children[ci]);
     }
   }
-  private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, depth: number, block:TileBlock) {
+  private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, depth: number, block: TileBlock) {
     //You can override tile layer depth by setting the layer manually on the sprite.
-    depth = (ob.Layer === TileLayerID.Unset ? depth : this.getLayerDepth(ob.Layer));
+    depth = (ob.Layer === TileLayerId.Unset ? depth : this.getLayerDepth(ob.Layer));
     this._buffer.copyCellTile(cell, ob, frame, depth, block);
     ob.clearDirty();
 
@@ -2200,21 +2253,21 @@ export class WorldView25D extends Object3D {
   private updatePostPhysics() {
     this._viewportCellsFrame = this._masterMap.Area.Grid.GetCellManifoldForBox(this._viewport.BoxR2)
   }
-  private debug_DrawCells() {
-    for (let c of this._viewportCellsFrame) {
-      if (c) {
-        this.debug_drawCell(c);
-      }
-    }
+  // private debug_DrawCells() {
+  //   for (let c of this._viewportCellsFrame) {
+  //     if (c) {
+  //       this.debug_drawCell(c);
+  //     }
+  //   }
 
-  }
-  private debug_drawCell(c: Cell) {
-    if (Cell.DebugFrame === null) {
-      Cell.DebugFrame = this.Atlas.getFrame(2 as Int, 0 as Int);
-    }
+  // }
+  // private debug_drawCell(c: Cell) {
+  //   if (Cell.DebugFrame === null) {
+  //     Cell.DebugFrame = this.Atlas.getFrame(2 as Int, 0 as Int);
+  //   }
 
-    this._buffer.copyFrameQuad(Cell.DebugFrame, c.DebugVerts, WorldView25D.Normal, new vec4(c.DebugColor.r, c.DebugColor.g, c.DebugColor.b, 1), 1, false, false, DirtyFlag.All);
-  }
+  //   this._buffer.copyCellTile(Cell.DebugFrame, c.DebugVerts, WorldView25D.Normal, new vec4(c.DebugColor.r, c.DebugColor.g, c.DebugColor.b, 1), 1, false, false, DirtyFlag.All);
+  // }
   private drawEverything() {
     this.drawTiles();
     //Draw Objects
@@ -2247,7 +2300,7 @@ export class WorldView25D extends Object3D {
 
     this.copyCellTiles(c, block.SpriteRef, frame, this.getLayerDepth(block.Layer), block);
   }
-  private getLayerDepth(layer: TileLayerID): number {
+  private getLayerDepth(layer: TileLayerId): number {
     let ret = (layer as number) * WorldView25D.LayerDepth;
     return ret;
   }
@@ -2297,7 +2350,7 @@ export class WorldView25D extends Object3D {
 
     ret.Animation.setKeyFrame(block.FrameIndex, block.AnimationData.Name);
 
-    g_mainWorld.addObject25(ret);
+    g_mainWorld.addObject25(ret, null);
 
     cell.removeBlock(block);
 
@@ -2328,7 +2381,7 @@ export class TileBuffer extends THREE.BufferGeometry {
 
   private _vert_floats: Float32Array = null;
   private _norms_floats: Float32Array = null;
-  private _colors_floats: Float32Array =null;
+  private _colors_floats: Float32Array = null;
   private _uvs_floats: Float32Array = null;
 
   //Custom shaders
@@ -2411,7 +2464,7 @@ export class TileBuffer extends THREE.BufferGeometry {
     // this._attrColor.needsUpdate = c;
     // }
 
-  //https://gamedev.stackexchange.com/questions/88031/keeping-sprites-nice-and-pixelated
+    //https://gamedev.stackexchange.com/questions/88031/keeping-sprites-nice-and-pixelated
 
     this.updateBufferRange();
 
@@ -2439,7 +2492,7 @@ export class TileBuffer extends THREE.BufferGeometry {
       Globals.debugBreak();
     }
   }
-  public copyCellTile(cell: Cell, tile: Sprite25D, frame: Int, depth: number, block:TileBlock) {
+  public copyCellTile(cell: Cell, tile: Sprite25D, frame: Int, depth: number, block: TileBlock) {
     if (!tile.QuadVerts || tile.QuadVerts.length < 4) {
       tile.calcQuadVerts();
     }
@@ -2452,7 +2505,7 @@ export class TileBuffer extends THREE.BufferGeometry {
       Globals.debugBreak();
     }
   }
-  public copyTileFrame(tile: Sprite25D, frame: SpriteFrame, blend: number = 1, cell: Cell = null, depth: number = -1, block:TileBlock = null) {
+  public copyTileFrame(tile: Sprite25D, frame: SpriteFrame, blend: number = 1, cell: Cell = null, depth: number = -1, block: TileBlock = null) {
     let v: Array<vec3> = new Array<vec3>(4);
     let flags = tile.DirtyFlags;
     if (blend) {
@@ -2541,7 +2594,7 @@ export class TileBuffer extends THREE.BufferGeometry {
     this._debugNumCopies++;
     this._usedBufferLengthTiles++;
   }
-  private copyFrameUVs( frame: SpriteFrame, fliph: boolean, flipv: boolean, off: number) {
+  private copyFrameUVs(frame: SpriteFrame, fliph: boolean, flipv: boolean, off: number) {
     let f = frame;
     let x0 = f.x;
     let y0 = f.y;
@@ -2647,16 +2700,6 @@ export class Tickler extends PhysicsObject3D {
     }
     return null;
   }
-  // private setActionPoint() {
-  //   let that = this;
-  //   that.traverse(function (ob_child: any) {
-  //     if (ob_child instanceof Object3D) {
-  //       if (ob_child.name === "Action_Point") {
-  //         that._actionPoint = ob_child;
-  //       }
-  //     }
-  //   });
-  // }
   public update(dt: number) {
     super.update(dt);
 
@@ -2887,16 +2930,13 @@ function createWorld() {
   g_mainWorld.init(2048 as Int);
   Globals.scene.add(g_mainWorld);
 
-  let player = g_mainWorld.MasterMap.TileDefs.getTile(TiledSpriteId.Player) as Character;
+  let playerTile = g_mainWorld.MasterMap.MapData.Sprites.getPlayerTile();
+  let player: Character = (playerTile as Character).clone() as Character;
 
   let inputControls = new InputControls(player, g_mainWorld.Viewport);
-  g_mainWorld.addObject25(player);
+  g_mainWorld.addObject25(player, g_mainWorld.MasterMap.MapData.PlayerStartXY);
   g_mainWorld.Player = player;
   g_mainWorld.InputControls = inputControls;
-
-  //Drop player
-  inputControls.PlayerChar.Position.x = g_mainWorld.MasterMap.Data.PlayerStartXY.x * g_atlas.TileWidthR3;
-  inputControls.PlayerChar.Position.y = g_mainWorld.MasterMap.Data.PlayerStartXY.y * g_atlas.TileHeightR3;
 
   player.update(0.0001);
 }

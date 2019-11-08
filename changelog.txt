@@ -1,3 +1,21 @@
+11.08.19
+Got the base world to show with new data format.
+This makes it easier to define sprites in Tiled.  Optimally a sprite object definition would be much cleaner.
+Next step is to fix tiling and the characters.
+After this, character interaction, User Interface, and of course Sprite Grabbing will be the final addition.
+
+
+11.06.19
+due to the necessity of using actual decals to prevent having to code each tile, we're chainging our data model.
+reading in the tile frame data
+
+TODO
+set
+is_door
+is_player
+is_..
+.
+
 11.02.19
 Walls
 Stairs

@@ -60,10 +60,6 @@ export class _Globals {
   private _barColor: Color = new Color(0, 0, 0); // Color of the bars when in ResizeMode.Fit mode.
   private _frustum:Frustum = null;
 
-  public isNotNullorUndefined(x: any) {
-    return (x !== null) && (x !== undefined);
-  }
-
   public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor: Color = new Color(0, 0, 0)) {
     this._canvas = document.querySelector('#page_canvas');
 

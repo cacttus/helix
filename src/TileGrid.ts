@@ -2,11 +2,12 @@ import { Color, EqualStencilFunc } from 'three';
 import { ivec2, vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import { Globals } from './Globals';
 import { Utils } from './Utils';
-import { Atlas, Sprite25D, FDef, SpriteFrame, Tiling, Character, Direction4Way, SpriteTileInfo as SpriteTileInfo, CollisionHandling, Phyobj25D, HandGesture, SpriteAnimationData, Animation25D } from './Main';
+import { Atlas, Sprite25D, FDef, SpriteFrame, Character, Direction4Way, SpriteTileInfo as SpriteTileInfo, CollisionHandling, Phyobj25D, HandGesture, SpriteAnimationData, Animation25D } from './Main';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 import world_data from './tiles_world.json';
-import world_tiles from './tiles_tileset.json';
-import { Random, MultiValueDictionary,HashSet, IVec2Set, IVec2Map } from './Base';
+//import tiles_modular from './modular_tileset.json';
+import master_tileset from './decal_tileset.json';
+import { Random, MultiValueDictionary, HashSet, IVec2Set, IVec2Map } from './Base';
 
 
 
@@ -90,32 +91,18 @@ class TmxMap {
   public tilesets: Array<TmxMapTileset>;///":
 }
 
-
-export enum TiledSpriteId {
-  //Note: the actual exported Tiled ID is +1 greater than the 0 based offset in the program.
-  //Note: The code string value here must exactly match the string in tiled "name" property on the tileset.
-  None
-  , Border // 1
-  , Tree
-  , House
-  , Player
-  , Monster_Grass
-  , Grass_Base
-  , Rock
-  , Door
-  , Hole
-  , Conduit
-  , Ocean_Water
-  , Fence
-  , Npc
-  , Area_Props
-  , Pond_Water
-  , vial_item //base item
-  , Hard_Border //border above water to make it look less "dense"
-  , sand_base
-  , Empty // ?, not sure.
+export type TiledTileId = Int;
+export type HelixTileId = Int;
+export enum HelixTileType {
+  //This is different from old tiledspriteid because this is determines the class/function of the sprite not just its tileset.
+  Unset,
+  Character,
+  DoorTrigger,
+  BorderBlocker,
+  CellTile,
+  UI,
 }
-export enum TileLayerID {
+export enum TileLayerId {
   /* THESE MUST BE IN ORDER TO GET CELL BLOCKS ARRAY */
   DebugBackground = -1,
   Border = 0,
@@ -129,253 +116,460 @@ export enum TileLayerID {
   LayerCountEnum = 8,
   Unset = 999, // Special layer type indicating that the layer of this
 }
-interface MakeTileFn { (): Sprite25D }
-export class TileDefs {
-  //This is the definitions for all tiles in the game.
-  //If we get Monogame Toolkit to work... we can eventually do away with this.
-  private _tileMap: Map<TiledSpriteId, Sprite25D> = null;
+export enum Tiling {
+  None,
+  //Set3x3Block /*a solid 3x3 block with no corners (9 tiles) */,
+  //Set3x3Seamless /* a terrain master tileset 40+ tiles */,
+  Random,
+  FoliageTiling,
+  FenceRules,
+  HardBorderRules,
+  DockRules,
+}
+enum CollisionBits { 
+  Top = 0x01, 
+  Right = 0x02, 
+  Bot = 0x04, 
+  Left = 0x08 
+}
 
-  public constructor(atlas: Atlas) {
-    this._tileMap = new Map<TiledSpriteId, Sprite25D>();
-    let that = this;
+export class SpriteFrameDefinition {
+  public tiled_id: TiledTileId = toInt(-1);
 
-    this.addTile(function () {
-      let player = new Character(atlas, "Player", TiledSpriteId.Player, TileLayerID.Objects);
-      that.addCharacterAnimation(player, atlas,
-        [[3, 1], [4, 1], [3, 1], [5, 1]],//left
-        [[3, 1], [4, 1], [3, 1], [5, 1]],//right
-        [[6, 1], [7, 1], [6, 1], [8, 1]],//up
-        [[0, 1], [1, 1], [0, 1], [2, 1]]//down
-      );
+  //FromTILED
+  public after_load: string = null;
+  public animation: Array<Array<number>> = null;
+  public typescript_class: string = null;
+  public collision: CollisionHandling = null;
+  public collision_bits: Int = null; //CollisionBits enum
+  public default_character_animation: boolean = null;
+  public frame_index: Int = null;
+  public gesture: HandGesture = null;
+  public is_key: boolean = false;
+  public is_player: boolean = false;
+  public layer: TileLayerId = TileLayerId.Unset;  //o
+  public duration: number = 1;
+  public name: string = "";
+  public tiling: Tiling = Tiling.None;
+  public random_prob_element: number = 1.0;
+  public random_set: Array<Map<string, number>> = null;
 
-      player.face(Direction4Way.Down);
+  public static readonly prop_after_load: string = "after_load";//  - function to run (compiled javascript) after loading
+  public static readonly prop_animation: string = "animation";// - the tile animation.
+  public static readonly prop_class: string = "class";//  - character and treasrue chest subclasses of Phy25, otherwise, the class iks Sprite25D
+  public static readonly prop_collision: string = "collision";//  - none, layer (collide with layer objects)
+  public static readonly prop_collision_bits: string = "collision_bits";//- the borders of this tile that can be collided, in TOP, RIGHT, BOTTOM, LEFT order, ex: to collide top and left: 1001.  Default value is : 1111 for all collided sprites.
+  public static readonly prop_default_character_animation: string = "default_character_animation";//- Whether to specify that this character is using default animation.
+  public static readonly prop_frame_index: string = "frame_index"; // If set, this is the index of the frame, if unset, the index is row major
+  public static readonly prop_gesture: string = "gesture";//   - hand gesture for grabber
+  public static readonly prop_is_key: string = "is_key";//  - only one per sprite.  this sprite has the key default attributes for all other sprites
+  public static readonly prop_is_player: string = "is_player";//  - if this sprite is the player sprite
+  public static readonly prop_layer: string = "layer";// - if layer is specified then the tile is placed on that layer, otherwise the tile is placed on the layer that it was read in as.
+  public static readonly prop_duration: string = "duration";//    - frame duration for the default tile animation
+  public static readonly prop_name: string = "name";//- name
+  public static readonly prop_tiling: string = "tiling";//  - none (tile is decal), random, fence, dock, white_border
+  public static readonly prop_random_prob_element: string = "random_prob_element";//               - the probability of this tile in the tiling is random
+  public static readonly prop_random_set: string = "random_set";//      - the sets of random tiles that this is included with.
 
-      player.IsCellTile = false; // This must be set for cell tiles to get populated.
-      player.calcQuadVerts();
-
-      return player;
-    });
-
-    //Testing grass..
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Grass_Base", TiledSpriteId.Grass_Base);
-      tile.Animation.addTileFrame(new ivec2(1, 0), atlas);
-      tile.Animation.addTileFrame(new ivec2(2, 0), atlas);
-      tile.Animation.addTileFrame(new ivec2(3, 0), atlas);
-      tile.Animation.addTileFrame(new ivec2(4, 0), atlas);
-      tile.Animation.addTileFrame(new ivec2(5, 0), atlas);
-
-      tile.Tiling = Tiling.Random;
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "sand_base", TiledSpriteId.sand_base);
-      tile.Animation.addTileFrame(new ivec2(6, 0), atlas);
-      tile.Animation.addTileFrame(new ivec2(7, 0), atlas);
-      tile.Animation.addTileFrame(new ivec2(8, 0), atlas);
-
-      tile.Tiling = Tiling.Random;
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      return tile;
-    });
-
-    //9,0
-    this.addTile(function () {
-      let props = [
-        new SpriteTileInfo(new ivec2(0, 0), TileLayerID.Foreground, CollisionHandling.None), // Tree Top
-        new SpriteTileInfo(new ivec2(1, 0), TileLayerID.Foreground, CollisionHandling.None),
-        new SpriteTileInfo(new ivec2(2, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), //Bush
-        new SpriteTileInfo(new ivec2(0, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
-        new SpriteTileInfo(new ivec2(1, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
-        new SpriteTileInfo(new ivec2(2, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), // Bush
-      ]
-
-      let tile = new Sprite25D(atlas, "Tree", TiledSpriteId.Tree);
-      let off_x = 9;
-      let off_y = 0;
-      for (let j = 0; j < 3; ++j) {
-        for (let i = 0; i < 3; ++i) {
-          tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas, new ivec2(1, 1), props);
-        }
-      }
-      tile.Tiling = Tiling.FoliageBorderRules;
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-      tile.Gesture = HandGesture.Poke;
-
-      return tile;
-    });
-    this.addTile(function () {
-      let props = [
-        new SpriteTileInfo(new ivec2(0, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), // Tree Top
-        new SpriteTileInfo(new ivec2(1, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
-        new SpriteTileInfo(new ivec2(2, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), //Bush
-        new SpriteTileInfo(new ivec2(3, 0), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), //Bush
-        new SpriteTileInfo(new ivec2(0, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), //Bush
-        new SpriteTileInfo(new ivec2(1, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
-        new SpriteTileInfo(new ivec2(2, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects),
-        new SpriteTileInfo(new ivec2(3, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects), // Bush
-      ]
-
-      let tile = new Sprite25D(atlas, "Fence", TiledSpriteId.Fence);
-      let off_x = 0;
-      let off_y = 3;
-      for (let j = 0; j < 3; ++j) {
-        for (let i = 0; i < 5; ++i) {
-          tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas, new ivec2(1, 1), props);
-        }
-      }
-      tile.Tiling = Tiling.FenceBorderRules;
-      tile.IsCellTile = true;
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-      tile.Gesture = HandGesture.Poke;
-
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "House", TiledSpriteId.House);
-      let off_x = 12;
-      let off_y = 0;
-      for (let j = 0; j < 3; ++j) {
-        for (let i = 0; i < 3; ++i) {
-          tile.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas);
-        }
-      }
-      tile.Tiling = Tiling.Set3x3Block;
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Ocean_Water", TiledSpriteId.Ocean_Water);
-      let off_x = 5;
-      let off_y = 5;
-
-      //add an animated tileframe
-      tile.Animation.addTileFrame(new ivec2(off_x + 0, off_y + 0), atlas, new ivec2(1, 1), null, 2.4);
-      tile.Animation.addTileFrame(new ivec2(off_x + 1, off_y + 0), atlas, new ivec2(1, 1), null, 2.1);
-      tile.Animation.addTileFrame(new ivec2(off_x + 2, off_y + 0), atlas, new ivec2(1, 1), null, 2.0);
-
-      tile.Tiling = Tiling.Single;
-
-      //Tiled animation for static tile.  Set TilingAnimated to true and play the animation.
-      tile.TilingAnimated = true;
-      tile.Animation.play(Animation25D.c_strDefaultTileAnimation);
-
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Pond_Water", TiledSpriteId.Pond_Water);
-      let off_x = 8;
-      let off_y = 5;
-
-      //add an animated tileframe
-      tile.Animation.addTileFrame(new ivec2(off_x + 0, off_y + 0), atlas, new ivec2(1, 1), null, 3.4);
-      tile.Animation.addTileFrame(new ivec2(off_x + 1, off_y + 0), atlas, new ivec2(1, 1), null, 3.1);
-
-      tile.Tiling = Tiling.Single;
-
-      //Tiled animation for static tile.  Set TilingAnimated to true and play the animation.
-      tile.TilingAnimated = true;
-      tile.Animation.play(Animation25D.c_strDefaultTileAnimation);
-
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Rock", TiledSpriteId.Rock);
-      tile.Animation.addTileFrame(new ivec2(9, 3), atlas);
-      tile.Tiling = Tiling.Single;
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-      tile.Gesture = HandGesture.Grab;
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Hole", TiledSpriteId.Hole);
-      tile.Animation.addTileFrame(new ivec2(10, 3), atlas);
-      tile.Tiling = Tiling.Single;
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Monster_Grass", TiledSpriteId.Monster_Grass);
-      tile.Animation.addTileFrame(new ivec2(11, 3), atlas);
-      tile.Animation.addTileFrame(new ivec2(12, 3), atlas);
-      tile.Tiling = Tiling.Single;
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-      tile.Gesture = HandGesture.Poke;
-
-
-      // tile.PreCollisionFunction = function (this_block: TileBlock) {
-      //   this.Layer = TileLayer.Objects;
-      //   this_block.FrameIndex = toInt(0); // reset
-      // }
-      // tile.CollisionFunction = function (this_block: TileBlock, thisObj: Phyobj25D, other: Phyobj25D) {
-      //   //Move the grass into the foreground and change its sprite
-      //   if (this_block) {
-      //     this_block.Layer = TileLayer.Foreground;
-      //     this_block.FrameIndex = toInt(1); // reset
-      //   }
-      // }
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Hard_Border", TiledSpriteId.Hard_Border);
-
-      that.addFrameGrid(11, 7, 4, 6, tile, atlas);
-
-      tile.Tiling = Tiling.HardBorderRules; 
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-      return tile;
-      return tile;
-    });
-    this.addTile(function () {
-      let tile = new Sprite25D(atlas, "Hard_Border", TiledSpriteId.Hard_Border);
-
-      that.addFrameGrid(11, 7, 4, 6, tile, atlas);
-
-      tile.Tiling = Tiling.HardBorderRules;
-      tile.IsCellTile = true; // This must be set for cell tiles to get populated.
-      tile.CollisionHandling = CollisionHandling.CollideWithLayerObjects;
-      return tile;
-      return tile;
-    });
+  private static propMatch(name: string, p: TmxProperty): boolean {
+    if (p.name.trim().toLowerCase() === name.trim().toLowerCase()) {
+      return true;
+    }
+    return false;
+  }
+  private static validate(x: any) {
+    if (x === null || x === undefined) {
+      //value was null or undefined -e rrro
+      Globals.logError("Error parsing tile definition")
+      Globals.debugBreak();
+    }
 
   }
-  private addFrameGrid(xoff: number, yoff: number, width: number, height: number, sprite: Sprite25D, atlas: Atlas) {
+  public static parse(tiled_tileset_id: Int, props: Array<TmxProperty>): SpriteFrameDefinition {
+    let ret: SpriteFrameDefinition = new SpriteFrameDefinition();
+    ret.tiled_id = tiled_tileset_id;
 
-    let off_x = xoff;
-    let off_y = yoff;
-    for (let j = 0; j < height; ++j) {
-      for (let i = 0; i < width; ++i) {
-        sprite.Animation.addTileFrame(new ivec2(off_x + i, off_y + j), atlas);
+    for (let prop of props) {
+
+      if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_after_load, prop)) {
+        this.validate(ret.after_load = prop.value);
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_animation, prop)) {
+        this.validate(ret.animation = JSON.parse(JSON.stringify(prop.value)));
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_class, prop)) {
+        this.validate(ret.typescript_class = prop.value);
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_collision, prop)) {
+        this.validate(ret.collision = Utils.stringToEnum(prop.value, Object.keys(CollisionHandling)) as CollisionHandling);
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_collision_bits, prop)) {
+        if (prop.value.length === 4) {
+          let top: boolean = prop.value.substr(0, 1) === "1";
+          let right: boolean = prop.value.substr(1, 1) === "1";
+          let bot: boolean = prop.value.substr(2, 1) === "1";
+          let left: boolean = prop.value.substr(3, 1) === "1";
+
+          ret.collision_bits = toInt((top ? CollisionBits.Top : 0) | (right ? CollisionBits.Right : 0) | (bot ? CollisionBits.Bot : 0) | (left ? CollisionBits.Left : 0));
+        }
+        else {
+          Globals.logError("parsing " + this.name + ": Collision bits string must be 4 numbers long.")
+          Globals.debugBreak();
+        }
+      }
+
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_default_character_animation, prop)) {
+        this.validate(ret.default_character_animation = Utils.parseBool(prop.value));
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_frame_index, prop)) {
+        this.validate(ret.frame_index = Utils.parseInt(prop.value))
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_gesture, prop)) {
+        this.validate(ret.gesture = Utils.stringToEnum(prop.value, Object.keys(HandGesture)) as HandGesture);
+      }
+
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_is_key, prop)) {
+        this.validate(ret.is_key = Utils.parseBool(prop.value));
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_is_player, prop)) {
+        this.validate(ret.is_player = Utils.parseBool(prop.value));
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
+        this.validate(ret.layer = Utils.stringToEnum(prop.value, Object.keys(TileLayerId)) as TileLayerId);
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
+        this.validate(ret.duration = Utils.parseNumber(prop.value));
+      }
+      //
+      //public static readonly prop_name: string = "name";//- name
+      //public static readonly prop_tiling: string = "tiling";//  - none (tile is decal), random, fence, dock, white_border
+      //public static readonly prop_random_prob_element: string = "random_prob_element";//               - the probability of this tile in the tiling is random
+      //public static readonly prop_random_set: string = "random_set";// 
+      //
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_name, prop)) {
+        this.validate(ret.name = prop.value);
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_tiling, prop)) {
+        this.validate(ret.tiling = Utils.stringToEnum(prop.value, Object.keys(Tiling)) as Tiling);
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_tiling, prop)) {
+        this.validate(ret.random_prob_element = Utils.parseNumber(prop.value));
+      }
+      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_tiling, prop)) {
+        this.validate(ret.random_set = JSON.parse(JSON.stringify(prop.value)));
+      }
+
+    }
+    return ret;
+  }
+}
+export class SpriteDefs {
+  //This is the definitions for all tiles in the game.
+  //If we get Monogame Toolkit to work... we can eventually do away with this.
+  private _sprites: Map<HelixTileId, Sprite25D> = new Map<HelixTileId, Sprite25D>();
+  private _defs: Array<SpriteFrameDefinition> = new Array<SpriteFrameDefinition>();
+  private _spriteLUT: Map<TiledTileId, HelixTileId>; // Lookup table to convert TMX tileset ID into a Sprite ID the engine can use.
+
+  private _borderTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
+  private _playerTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
+  private _doorTileId: HelixTileId = MasterMap.UNDEFINED_TILE; // Note: there may be multiple types of doors. but we can just use a single trigger for this
+
+  public get BorderTileId(): HelixTileId { return this._borderTileId; }
+  public get PlayerTileId(): HelixTileId { return this._playerTileId; }
+  public get DoorTileId(): HelixTileId { return this._doorTileId; }
+
+  public constructor(atlas: Atlas, tileset: TmxTileset) {
+    this.parseTileDefs(atlas, tileset);
+    this.assembleSprites(atlas);
+  }
+  public update(dt: number) {
+    //Update the animations of the static tiles.
+    for (let [k, v] of this._sprites) {
+      if (v.TilingAnimated) {
+        v.update(dt);
+      }
+    }
+  }
+  public getPlayerTile(): Character {
+    let ret: Character = null;
+    for (let [k, v] of this._sprites) {
+      if (v instanceof Character) {
+        if ((v as Character).IsPlayer) {
+          ret = v;
+          break;
+        }
+      }
+    }
+    return ret;
+  }
+  public getTile(id: HelixTileId) {
+    let ret = this._sprites.get(id);
+    return ret || null;
+  }
+  public tiledIdtoHelixId(id: Int): Int {
+    //Convert the ACTUAL tiled ID to helix.  The Tiled Id is +1 when exported so it should be subtracted before this function.
+    //Also, when we convert this, we convert arrays of frames.  By convention you can use any frame in TILED to define the map, but
+    //we aggregate them to sprite animations here.
+    //New function - this maps a SET of tiled sprites to a Helix sprite object.
+    let idr = this._spriteLUT.get(id);
+    if (!idr) {
+      return null;
+    }
+    return toInt(idr);
+  }
+  public debug_printLUT() {
+    let s: string = "";
+    for (let [k, v] of this._spriteLUT) {
+      s += "[" + k + "," + v + "]";
+    }
+    Globals.logDebug(s);
+  }
+  public getSpriteByName(name: string): Sprite25D {
+    let found: Sprite25D = null;
+    //now find the sprite by name
+    //Try to find sprite, if not found make a new one.
+    for (let [k, v] of this._sprites) {
+      let s1 = Utils.copyString(v.Name).trim();
+      let s2 = Utils.copyString(name).trim();
+      if (s1 === s2) {
+        found = v;
+        break;
+      }
+    }
+    return found;
+  }
+
+  private _max_frame_id = -9999;
+  private parseTileDefs(atlas: Atlas, tileset: TmxTileset) {
+    //parses the tileset into frame definitions to be assembled into sprites
+    try {
+      let debug_info: string = "";
+      this._defs = new Array<SpriteFrameDefinition>();
+
+      if (tileset.tiles) {
+        for (let tile of tileset.tiles) {
+          let tiled_tileset_id = tile.id;
+          if (this._max_frame_id < tile.id) {
+            this._max_frame_id = tile.id;
+          }
+
+          if (tile.properties) {
+            let frameData = SpriteFrameDefinition.parse(tiled_tileset_id, tile.properties);
+            this._defs.push(frameData);
+          }
+          else {
+            Globals.logWarn("Tile id '" + tiled_tileset_id + " " + "' did not have a 'name' property at least.  This is required.  Tile will not be used!");
+            debug_info += "Error! = " + tiled_tileset_id + " " + "\r\n";
+          }
+
+        }
+      }
+      else {
+        Globals.logError("Tileset tiles were undefined.");
+      }
+      Globals.logDebug("Parsed tileset tiles:\r\n" + debug_info);
+    }
+    catch (ex) {
+      Globals.logError(ex);
+      Globals.debugBreak();
+    }
+  }
+  private assembleSprites(atlas: Atlas) {
+    this._spriteLUT = new Map<TiledTileId, HelixTileId>();
+    this._sprites = new Map<HelixTileId, Sprite25D>();
+
+    let nSpritesCreated = 0;
+    //First create all key sprites so we have our sprite created. if there are no key sprites just make the default the top-left most 
+    for (let def of this._defs) {
+      let key = this.getKeySpriteFrameDef(def.name, true);
+      if (!this.getSpriteByName(def.name)) {
+        //Create new key 
+        let spr: Sprite25D = this.makeNewSprite(atlas, def);
+        this._sprites.set(spr.HelixTileId, spr);
+
+        nSpritesCreated++;
+      }
+    }
+
+    let frameerror: string = "";
+    let nFramesAdded = 0;
+    //Now loop over all additional frames and add them to the sprite.
+    for (let frameDef of this._defs) {
+      this.validateNoDupes(frameDef);
+
+      let keySprite: Sprite25D = this.getSpriteByName(frameDef.name);
+      if (!keySprite) {
+        frameerror += "Could not find sprite definition for '" + frameDef.name + "'.  This should be present already.\r\n";
+      }
+      else {
+        //So it doesn't matter, we'll add sprite frames to *default* for all sprites, even characters. We just add extra animations for char sprites.
+        this.addSpriteFrame(atlas, frameDef, keySprite);
+        nFramesAdded++;
+      }
+    }
+
+    if (frameerror.length) {
+      Globals.logError(frameerror);
+    }
+
+
+    //run all callbacks after sprites are loaded.
+    for (let [k, v] of this._sprites) {
+      if (v.AfterLoadCallback) {
+        v.AfterLoadCallback(v);
       }
     }
 
   }
-  public getTile(id: TiledSpriteId): Sprite25D {
-    return this._tileMap.get(id);
+  private makeCharacterSprite(atlas: Atlas, def: SpriteFrameDefinition): Character {
+    let ret = new Character(atlas);
+    ret.Name = def.name;
+    ret.HelixTileId= this.genHelixSpriteId();
+    ret.Layer = def.layer;
+    if (def.is_player) {
+      (ret as Character).IsPlayer = true;
+      if (this._playerTileId !== MasterMap.UNDEFINED_TILE) {
+        Globals.logError("Multiple is_player were defined.  This is an error. only one tile can be set is_player and it must be the sprite's key tile");
+        Globals.debugBreak();
+      }
+      else {
+        this._playerTileId = ret.HelixTileId;
+      }
+    }
+
+    //Apply character animation.
+    if (!def.default_character_animation || def.default_character_animation === true) {
+      // let ret: Array<Array<Array<number>>> = JSON.parse(JSON.stringify(def.animation));
+      if (ret) {
+        this.addCharacterAnimation(ret as Character, atlas,
+          [[3, 1], [4, 1], [3, 1], [5, 1]],
+          [[3, 1], [4, 1], [3, 1], [5, 1]],
+          [[6, 1], [7, 1], [6, 1], [8, 1]],
+          [[0, 1], [1, 1], [0, 1], [2, 1]]
+        );
+      }
+      else {
+        Globals.logError("Sprite animation was not defined correctly.");
+      }
+    }
+    else {
+      Globals.logError("Unsupported animation without char");
+    }
+    return ret;
   }
-  private addTile(x: MakeTileFn) {
-    let tile = x();
-    this._tileMap.set(tile.TiledSpriteId, tile);
+  private makeTileSprite(atlas: Atlas, def: SpriteFrameDefinition): Sprite25D {
+    let ret = new Sprite25D(atlas);
+    ret.Name =  def.name;
+    ret.HelixTileId =  this.genHelixSpriteId();
+    ret.Layer = def.layer;
+    ret.TileType = HelixTileType.CellTile;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+    return ret;
   }
+  private makeUISprite(atlas: Atlas, def: SpriteFrameDefinition): Sprite25D {
+    let ret = new Sprite25D(atlas);
+    ret.Name =  def.name;
+    ret.HelixTileId =  this.genHelixSpriteId();
+    ret.Layer = def.layer;
+    ret.TileType = HelixTileType.UI;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+    return ret;
+  }
+  private makeNewSprite(atlas: Atlas, def: SpriteFrameDefinition): Sprite25D {
+    //Create a new sprite based on the class, or a default tile if no class was defined
+    let ret: Sprite25D = null;
+
+    this.validateNoDupes(def);
+
+    if (def.typescript_class) {
+      if (Utils.lcmp(def.typescript_class,"character")) {
+        ret = this.makeCharacterSprite(atlas, def);
+      }
+      else if (Utils.lcmp(def.typescript_class,"tile")) {
+        ret = this.makeTileSprite(atlas, def);
+      }
+      else if (Utils.lcmp(def.typescript_class, "doortrigger")) {
+        ret = this.makeTileSprite(atlas, def);
+
+        ret.TileType = HelixTileType.DoorTrigger;
+        if (this._doorTileId !== MasterMap.UNDEFINED_TILE) {
+          Globals.logError("Multiple is_door were defined.  This is an error. only one tile can be set is_door and it must be the sprite's key tile");
+          Globals.debugBreak();
+        }
+        else {
+          this._doorTileId = ret.HelixTileId;
+        }
+      }
+      else if (Utils.lcmp(def.typescript_class, "areaboundary")) {
+        ret = this.makeTileSprite(atlas, def);
+
+        ret.TileType = HelixTileType.BorderBlocker;
+        if (this._borderTileId !== MasterMap.UNDEFINED_TILE) {
+          Globals.logError("Multiple is_border were defined.  This is an error. only one tile can be set is_border and it must be the sprite's key tile");
+          Globals.debugBreak();
+        }
+        else {
+          this._borderTileId = ret.HelixTileId;
+        }
+      }
+      else if (Utils.lcmp(def.typescript_class,"ui")) {
+        ret = this.makeUISprite(atlas, def);
+      }
+      else {
+        //TODO:
+        Globals.logError("Could not make sprite for class " + def.typescript_class);
+      }
+    }
+
+    //If we didn't have a class or couldn't find one, then instantiate as basic tile.
+    if (!ret) {
+      Globals.logDebug("Sprite class not defined, defaulting to tile.");
+      ret = this.makeTileSprite(atlas, def);
+    }
+
+    return ret;
+  }
+  private addSpriteFrame(atlas: Atlas, frameDef: SpriteFrameDefinition, sprite: Sprite25D) {
+    if (frameDef.after_load) {
+      if (sprite.AfterLoadCallback !== null) {
+        Globals.logWarn(sprite.Name + ": After load was already defined. ")
+      }
+      else {
+        sprite.AfterLoadCallback = function (sprite: Sprite25D) {
+          try {
+            new Function("sprite", frameDef.after_load).call(this, sprite);
+            //window.eval.call(window, '(function (element) {' + frameDef.after_load + '})')(sprite);
+          }
+          catch (ex) {
+            Globals.logError("Eval failed on sprite " + sprite.Name + ": \r\n" + frameDef.after_load + "\r\n\r\nException:\r\n" + ex ? ex : '');
+          }
+        }
+      }
+    }
+    if (frameDef.collision) {
+      sprite.CollisionHandling = frameDef.collision;
+    }
+    if (frameDef.collision_bits) {
+      sprite.CollisionBits = frameDef.collision_bits;
+    }
+
+    let frame_index = null;
+    if (frameDef.frame_index) {
+      frame_index = frameDef.frame_index;
+    }
+
+    let tuple = atlas.tiledFrameIdToTuple(frameDef.tiled_id);
+
+    sprite.Animation.addTileFrame(tuple, atlas, new ivec2(1, 1), [], frameDef.duration);
+
+    //Set the LUT to quickly convert from the tiled index to the Helix index.
+    this.addToLUT(frameDef.tiled_id, sprite.HelixTileId);
+  }
+
   private addCharacterAnimation(char: Character, atlas: Atlas, left: any, right: any, up: any, down: any) {
 
     //This places the char's head above things in the world, and also makes it not collidable.
     let props = [
-      new SpriteTileInfo(new ivec2(0, 0), TileLayerID.Foreground, CollisionHandling.None),
-      new SpriteTileInfo(new ivec2(0, 1), TileLayerID.Objects, CollisionHandling.CollideWithLayerObjects)
+      new SpriteTileInfo(new ivec2(0, 0), TileLayerId.Foreground, CollisionHandling.None),
+      new SpriteTileInfo(new ivec2(0, 1), TileLayerId.Objects, CollisionHandling.Layer)
     ]
 
     char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Down),
@@ -395,19 +589,52 @@ export class TileDefs {
       0.7, atlas,
       new ivec2(1, 2), true, props);
   }
-  public update(dt: number) {
-    //Update the animations of the static tiles.
-    for (let [k, v] of this._tileMap) {
-      if (v.TilingAnimated) {
-        v.update(dt);
+  private getKeySpriteFrameDef(name: string, orReturnDefaultKeySprite: boolean = false): SpriteFrameDefinition {
+    let ret: SpriteFrameDefinition = null;
+    for (let f of this._defs) {
+      if (Utils.copyString(f.name).toLowerCase().trim() === Utils.copyString(name).toLowerCase().trim()) {
+        ret = f;
+        break;
       }
     }
 
+    //Didn't find a is_key sprite so just return the lowest sprite ID.  This will correspond to the top left corner of all frame blocks.
+    if (!ret && orReturnDefaultKeySprite) {
+      for (let f of this._defs) {
+        if (!ret || f.tiled_id < ret.tiled_id) {
+          ret = f;
+        }
+      }
+    }
 
+    return ret;
   }
+
+  private validateNoDupes(def: SpriteFrameDefinition) {
+    if (this._spriteLUT.get(def.tiled_id)) {
+      Globals.logWarn("Tile id '" + def.tiled_id + " " + "' was already contained in the tile LUT!");
+      Globals.debugBreak();
+    }
+  }
+
+  private _next_helix_id: Int = toInt(1);
+  private genHelixSpriteId(): Int {
+    let id = toInt(this._next_helix_id);
+    this._next_helix_id++;
+    return id;
+  }
+  private addToLUT(tiledId: TiledTileId, helixId: HelixTileId) {
+    if (this._spriteLUT.get(tiledId)) {
+      Globals.logError("Tile was already found in LUT.");
+      Globals.debugBreak();
+    }
+    this._spriteLUT.set(tiledId, helixId);
+  }
+
 }
 export class TileMapTileData {
   public TileID: Int = MasterMap.EMPTY_TILE;
+
   public constructor(id: Int) {
     this.TileID = id;
   }
@@ -416,37 +643,28 @@ export class TileMapLayerData {
   public data: Array<TileMapTileData> = new Array<TileMapTileData>();
 }
 export class TileMapData {
+  //Holds all cell & frame data for the world map.
   //This is the parsed data from the TMX JSON
   //Holds all tile data closer to our format with objects and tiles at the root cell.
   private _width: Int;
   private _height: Int;
   private _layers: Array<TileMapLayerData> = new Array<TileMapLayerData>();
 
-  private _spriteLUT: Map<Int, TiledSpriteId>; // Lookup table to convert TMX tileset ID into a Sprite ID the engine can use.
-
-  public PlayerStartXY: ivec2 = new ivec2(Number.MAX_SAFE_INTEGER as Int, Number.MAX_SAFE_INTEGER as Int);
+  public PlayerStartXY: ivec2 = null;
   public errors: string = "";
+  private _spriteDefs: SpriteDefs = null;
+
+  public get Sprites(): SpriteDefs { return this._spriteDefs; }
 
   public get Layers(): Array<TileMapLayerData> { return this._layers; }
   public get Width(): Int { return this._width; }
   public get Height(): Int { return this._height; }
 
-  public static readonly Prop_Name: string = "name";
-
-  private tiledIdtoHelixId(id: Int): Int {
-    //Convert the ACTUAL tiled ID to helix.  The Tiled Id is +1 when exported so it should be subtracted before this function.
-    let idr = this._spriteLUT.get(id);
-    if (!idr) {
-      return null;
-    }
-    return toInt(idr);
-  }
-
-  public constructor(map: TmxMap, tileset: TmxTileset) {
+  public constructor(atlas: Atlas, map: TmxMap, tileset: TmxTileset) {
     this._width = map.width;
     this._height = map.height;
 
-    this.parseTileset(tileset);
+    this._spriteDefs = new SpriteDefs(atlas, tileset);
 
     this.parseMap(map);
 
@@ -454,78 +672,18 @@ export class TileMapData {
       this.debugPrint();
     }
   }
-  private getProp<T>(prop: string, props: Array<TmxProperty>, nocase: boolean = true): T {
-    for (let p of props) {
-      if (nocase) {
-        if (p.name.trim().toLowerCase() === prop.trim().toLowerCase()) {
-          return p.value as unknown as T;
-        }
-      }
-    }
-    return null;
-  }
-  private parseTileset(tileset: TmxTileset) {
-    try {
-      let debug_info: string = "";
-      //Creates a lookup-table that matches a Tiled sprite ID to a Helix sprite ID.
-      //This Matches the Tiled "name" property to the name on the "TiledSpriteId" enumerator
-      this._spriteLUT = new Map<Int, TiledSpriteId>();
-      if (tileset.tiles) {
-        for (let tile of tileset.tiles) {
-          let tiled_tileset_id = tile.id;
-
-          if (tile.properties) {
-
-            let str = this.getProp<string>(TileMapData.Prop_Name, tile.properties);
-
-            let found: boolean = false;
+  // private getProp<T>(prop: string, props: Array<TmxProperty>, nocase: boolean = true): T {
+  //   for (let p of props) {
+  //     if (nocase) {
+  //       if (p.name.trim().toLowerCase() === prop.trim().toLowerCase()) {
+  //         return p.value as unknown as T;
+  //       }
+  //     }
+  //   }
+  //   return null;
+  // }
 
 
-            //Jesus christ typescript is so fucked up.
-
-            //Match the string value of the 'name' property of the tile in TILED with the ENUM value of the tile here.
-            //TODO: in the future we'll just move all definition stuff to TILED.
-            let keyvals = Utils.enumKeyVals(Object.keys(TiledSpriteId));
-            for (let [k, v] of keyvals) {
-
-              //Enum iteration: https://noahbass.com/posts/typescript-enum-iteration
-
-              if (k.trim().toLowerCase() === str.trim().toLowerCase()) {
-                this._spriteLUT.set(tiled_tileset_id, v);
-                found = true;
-                break;
-              }
-
-            }
-            if (found === false) {
-              Globals.logError("Could not find a Helix sprite ID for the Tiled sprite named '" + str + "'");
-              Globals.debugBreak();
-            }
-            else {
-              debug_info += str + " = " + tiled_tileset_id + " " + "\r\n";
-            }
-
-          }
-          else {
-            Globals.logWarn("Tile id '" + tiled_tileset_id + " " + "' did not have a 'name' property.  Tile will not be used!");
-            debug_info += "Error! = " + tiled_tileset_id + " " + "\r\n";
-          }
-
-        }
-      }
-      else {
-        Globals.logError("Tileset tiles were undefined.");
-      }
-
-      Globals.logDebug("Parsed tileset tiles:\r\n" + debug_info);
-
-    }
-    catch (ex) {
-      Globals.logError(ex);
-      Globals.debugBreak();
-    }
-
-  }
   public setTile(x: Int, y: Int, layer: Int, value: Int) {
     if (value === null) {
       this.errors += "set tile value was null.\r\n";
@@ -617,6 +775,8 @@ export class TileMapData {
   }
   private dbg_count = 0;
   private parseMap(map: TmxMap) {
+
+    Globals.logDebug("Parsing Tiled Map into Helix map...");
     this.allocData(map);
     //This is actually necessary now that we are using tiled tilesets.
     //basically tiled doesn't guarantee the IDs of tilesets to stay the same so we
@@ -627,7 +787,7 @@ export class TileMapData {
     let debug_did_not_find: string = "";
     for (let layer of map.layers) {
       //string to enum
-      let layerId: Int = TileLayerID[(layer.name as string) as keyof typeof TileLayerID] as Int;
+      let layerId: Int = TileLayerId[(layer.name as string) as keyof typeof TileLayerId] as Int;
 
       if (layerId === -1) {
         Globals.debugBreak();
@@ -655,13 +815,14 @@ export class TileMapData {
             //***SO***  Tile Id's are +1 in the EXPORTED TILED JSON file.  NOT in the Tiled map or the tiled tileset.
             //Really annoying, can I get a beer over here?
             tiled_tileid = (tiled_tileid as number - 1) as Int;
+            let name = "";
 
             if (tiled_tileid === -1) {
               //-1 ie empty, or 0
               helix_tileid = MasterMap.EMPTY_TILE;
             }
             else {
-              helix_tileid = this.tiledIdtoHelixId(tiled_tileid);
+              helix_tileid = this.Sprites.tiledIdtoHelixId(tiled_tileid);
             }
 
             if (helix_tileid === null) {
@@ -669,16 +830,26 @@ export class TileMapData {
               debug_did_not_find += tiled_tileid + ",";
             }
 
+            if (helix_tileid !== MasterMap.EMPTY_TILE) {
+              //Debug - name of sprite
+              if (Globals.isDebug()) {
+                let tile = this.Sprites.getTile(helix_tileid);
+                if (tile === null) {
+                  //This should never happen.
+                  Globals.debugBreak();
+                }
+                else {
+                  name = this.Sprites.getTile(helix_tileid).Name;
+                }
+              }
+            }
+
             this.setTile(tilexy.x, tilexy.y, layerId, helix_tileid);
 
             //Check the tile id's for special things
-            if (helix_tileid === TiledSpriteId.Grass_Base) {
-              this.dbg_count++;
-            }
-            if (helix_tileid === TiledSpriteId.Player) {
+            if (helix_tileid === this.Sprites.PlayerTileId) {
               //here is our start point, flood fill this area.
-              this.PlayerStartXY.x = tilexy.x;
-              this.PlayerStartXY.y = tilexy.y;
+              this.PlayerStartXY = new ivec2(tilexy.x, tilexy.y);
             }
 
           }
@@ -687,7 +858,7 @@ export class TileMapData {
 
         }
 
-        let borders = this.tileCount(TiledSpriteId.Border);
+        let borders = this.tileCount(this.Sprites.BorderTileId);
 
         let n = 0;
         n++;
@@ -698,11 +869,15 @@ export class TileMapData {
 
 
     if (debug_did_not_find.length > 0) {
-      this.errors += "Found some NULL tile IDs, this may not be a real error,\r\n becasue blank tiles may have accidently been set in the Tiled Map: \r\n" + debug_did_not_find + "\r\n";
+      Globals.logError("Found some NULL tile IDs, this may not be a real error,\r\n " +
+        "becasue blank tiles may have accidently been set in the Tiled Map, however it should be fixed (just clear the tile in TILED): \r\n" + debug_did_not_find + "\r\n");
+      Globals.logError("Printing our parsed LUT for reference:");
+      this.Sprites.debug_printLUT();
     }
+    Globals.logDebug("...Done parsing tiled map into helix map.")
 
   }
-  private tileCount(id: TiledSpriteId): number {
+  private tileCount(id: Int): number {
     let ret = 0;
     for (let iy = 0; iy < this.Height; ++iy) {
       for (let ix = 0; ix < this.Width; ++ix) {
@@ -730,71 +905,24 @@ export class TileMapData {
           mapTiles.set(t, t);
         }
       }
-
-      let matching = "";
-      let nMatching = 0;
-      let mapFoundSprites: Map<Int, Int> = new Map<Int, Int>();
+      let unique: string = "";
       for (let [k, v] of mapTiles) {
-
-        let spriteName = "";
-        let found = false;
-        for (let item in TiledSpriteId) {
-          let enumid = TiledSpriteId[(item as string) as keyof typeof TiledSpriteId] as Int;
-          if (enumid as Int === k as Int) {
-            spriteName = "(" + item as string + ")";
-            mapFoundSprites.set(enumid, enumid);
-            nMatching++
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          spriteName = "(UNKNOWN!)";
-        }
-
-        matching = k + " " + spriteName + "\n" + matching;
+        let t = this.Sprites.getTile(k);
+        unique += "[" + k + "," + (t ? (t.Name) : "ERROR:COULD NOT FIND A SPRITE") + "],";
       }
-
-      //Match the sprites we have with ones in the map.
-      let missingSprites = "";
-      let nMissingSprites = 0;
-      for (let item in TiledSpriteId) {
-        //let enumid2 : Int = TiledSpriteId[(item as string) as keyof typeof TiledSpriteId] as Int;
-        //let enumid3 : Int = TiledSpriteId[item];//(<any>TiledSpriteId)[item] as Int;
-        //let x: { [idx: string]: TiledSpriteId; } = <any>TiledSpriteId;
-        let enumid = parseInt(item);//x[item];
-
-        let found = false;
-        for (let [k, v] of mapFoundSprites) {
-          if ((k as Int) === (enumid as Int)) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          missingSprites += (item as string) + " (" + enumid + ")\n";
-          nMissingSprites++;
-        }
-
-      }
-
-      console.log("" + nMatching + " TMX Tile IDs found in map: \n" + matching);
-      console.log("" + nMissingSprites + " Helix Sprites not in Map: \n" + missingSprites);
-      console.log("Tiles incoming:\n" + tiles);
-
+      console.log("Helix Unique Tiles:\n" + unique);
+      console.log("Helix Converted Tilemap:\n" + tiles);
     }
   }
-
-
 }
 export class MasterMap {
   //The entire game world in one Tiled data file.  
   //This class is the container, it's job is mostly to create the world and
   //map ponints from Map space to World space.
-  public static readonly EMPTY_TILE: Int = -1 as Int;
+  public static readonly UNDEFINED_TILE: Int = toInt(-2);
+  public static readonly EMPTY_TILE: Int = toInt(-1);
 
   private _atlas: Atlas = null;
-  private _tiledefs: TileDefs = null;
   public _area: MapArea = null; //{ get; private set; }
 
   private DoorTilesLUT: Array<Int> = new Array<Int>();
@@ -804,10 +932,9 @@ export class MasterMap {
   private _mapHeightTiles: Int;
   private _mapLayerCount: Int;
 
-  public get Data(): TileMapData { return this._tileMap; }
+  public get MapData(): TileMapData { return this._tileMap; }
   public get Area(): MapArea { return this._area; }
   public get Atlas(): Atlas { return this._atlas; }
-  public get TileDefs(): TileDefs { return this._tiledefs; }
   public get MapLayerCount(): Int { return this._mapLayerCount; }
   public get MapWidthTiles(): Int { return this._mapWidthTiles; }
   public get MapHeightTiles(): Int { return this._mapHeightTiles; }
@@ -815,9 +942,9 @@ export class MasterMap {
   public constructor(atlas: Atlas) {
     this._atlas = atlas;
 
-    let tiles: TmxTileset = JSON.parse(JSON.stringify(world_tiles));
+    let tiles: TmxTileset = JSON.parse(JSON.stringify(master_tileset));
     if (Globals.isDebug()) {
-      Globals.logDebug("Tiles:\r\n" + JSON.stringify(world_tiles));
+      Globals.logDebug("Tiles:\r\n" + JSON.stringify(master_tileset));
     }
 
     let map: TmxMap = JSON.parse(JSON.stringify(world_data));
@@ -829,14 +956,15 @@ export class MasterMap {
     this._mapHeightTiles = map.height;
     this._mapLayerCount = map.layers.length as Int;
 
-    //Create Tile Defs.
-    this._tiledefs = new TileDefs(atlas);
-
     //Create the map
-    this._tileMap = new TileMapData(map, tiles);
+    this._tileMap = new TileMapData(atlas, map, tiles);
+
+    if (this._tileMap.PlayerStartXY === null) {
+      Globals.logError("Could not find a player start position.  Make sure is_player is a true property on the sprite and it is added to the map.");
+      Globals.debugBreak();
+    }
 
     this.makeMapArea(this._tileMap.PlayerStartXY);
-
 
     if (this._tileMap && this._tileMap.errors.length) {
       Globals.logError("Tilemap errors: " + this._tileMap.errors + ".");
@@ -845,7 +973,7 @@ export class MasterMap {
 
   }
   public update(dt: number) {
-    this.TileDefs.update(dt);
+    this._tileMap.Sprites.update(dt);
   }
   private makeMapArea(startxy: ivec2) {
     if (startxy.x != Number.MAX_SAFE_INTEGER as Int) {
@@ -970,8 +1098,8 @@ export class MapArea {
       // let iTile: Int = this.TileXY_World(pt.x, pt.y, TileLayer.Border as Int);
       // let iTile_Door: Int = this.TileXY_World(pt.x, pt.y, TileLayer.Objects as Int);
 
-      let isBorder: boolean = this.Map.Data.cellHasTileXY(pt.x, pt.y, toInt(TiledSpriteId.Border));
-      let isDoor: boolean = this.Map.Data.cellHasTileXY(pt.x, pt.y, toInt(TiledSpriteId.Door));
+      let isBorder: boolean = this.Map.MapData.cellHasTileXY(pt.x, pt.y, this.Map.MapData.Sprites.BorderTileId);
+      let isDoor: boolean = this.Map.MapData.cellHasTileXY(pt.x, pt.y, this.Map.MapData.Sprites.DoorTileId);
 
       if (this.Tiles.has(pt)) {
         //do nothing
@@ -1015,7 +1143,7 @@ export class MapArea {
   }
   public floodFillAddNeighborBorder(v: ivec2, border: IVec2Set) {
     //Search for border on any layer (convenience thing)
-    if (this.Map.Data.cellHasTileXY(v.x, v.y, TiledSpriteId.Border as Int)) {
+    if (this.Map.MapData.cellHasTileXY(v.x, v.y, this.Map.MapData.Sprites.BorderTileId)) {
       if (!border.has(v)) {
         border.set(v);
       }
@@ -1134,10 +1262,10 @@ export class TileGrid {
   private setCellData(c: Cell, cellPos: ivec2) {
     //Set the Cell Data.  This is where the love happens.
     for (let iLayer = 0; iLayer < this.Area.Map.MapLayerCount; iLayer++) {
-      let iTileId: Int = this.Area.Map.Data.tileXY_World(cellPos.x, cellPos.y, iLayer as Int);
+      let iTileId: Int = this.Area.Map.MapData.tileXY_World(cellPos.x, cellPos.y, iLayer as Int);
 
-      if (iTileId !== MasterMap.EMPTY_TILE && iTileId !== TiledSpriteId.Border) {
-        let tileSprite: Sprite25D = this.Area.Map.TileDefs.getTile(iTileId);
+      if (iTileId !== MasterMap.EMPTY_TILE && iTileId !== this.Area.Map.MapData.Sprites.BorderTileId) {
+        let tileSprite: Sprite25D = this.Area.Map.MapData.Sprites.getTile(iTileId);
 
         if (!tileSprite) {
           this.errors += "Could not find tile def (TileDef) for helix tile ID " + iTileId + "\r\n";
@@ -1146,7 +1274,7 @@ export class TileGrid {
             //Globals.debugBreak();
           }
         }
-        else if (tileSprite.IsCellTile) {
+        else if (tileSprite.TileType == HelixTileType.CellTile) {
           c.Blocks.push(new TileBlock());
           c.Blocks[c.Blocks.length - 1].SpriteRef = tileSprite;
           c.Blocks[c.Blocks.length - 1].Layer = toInt(iLayer);
@@ -1264,27 +1392,46 @@ export class TileGrid {
     let ret: Cell = this.GetCellForPoint_World(pt);
     return ret;
   }
-  public getSpriteTileFrame(x: Int, y: Int, layer: Int, tileSprite: Sprite25D, tileId: Int) {
+  public getSpriteTileFrame(x: Int, y: Int, layer: Int, tileSprite: Sprite25D, tileId: Int): Int {
     let ret: Int = toInt(0);
     if (tileSprite.Tiling === Tiling.Random) {
       ret = Random.int(0, tileSprite.Animation.TileData.KeyFrames.length - 1);
     }
-    else if (tileSprite.Tiling === Tiling.FoliageBorderRules) {
+    else if (tileSprite.Tiling === Tiling.FoliageTiling) {
       ret = this.GetTileIndexFoliageBorder(x, y, layer, tileId);
     }
-    else if (tileSprite.Tiling === Tiling.FenceBorderRules) {
+    else if (tileSprite.Tiling === Tiling.FenceRules) {
       ret = this.GetTileIndexFence(x, y, layer, tileId);
     }
-    else if (tileSprite.Tiling === Tiling.Set3x3Block) {
-      ret = this.GetTileIndex3x3Block(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
-    }
-    else if (tileSprite.Tiling === Tiling.Set3x3Seamless) {
-      ret = this.GetTileIndex3x3Seamless(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
-    }
+    // else if (tileSprite.Tiling === Tiling.Set3x3Block) {
+    //   ret = this.GetTileIndex3x3Block(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
+    // }
+    // else if (tileSprite.Tiling === Tiling.Set3x3Seamless) {
+    //   ret = this.GetTileIndex3x3Seamless(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
+    // }
     else if (tileSprite.Tiling === Tiling.HardBorderRules) {
       ret = this.GetTileIndexHardBorder(x, y, layer, tileId);
     }
-    else if (tileSprite.Tiling === Tiling.Single) {
+    else if (tileSprite.Tiling === Tiling.DockRules) {
+      let ret: Int = toInt(0);
+      let arr = this.getSurroundingTiles3x3(x, y, tileId, layer, HashSet.construct<Int>([tileId]), true);
+      let h: boolean = false;
+      let v: boolean = false;
+      if (arr[3] && arr[5]) {
+        h = true;
+      }
+      if (arr[1] && arr[7]) {
+        v = true;
+      }
+      if (h && !v) {
+        return 0 as Int;
+      }
+      else if (!h && v) {
+        return 1 as Int;
+      }
+      return 0 as Int;
+    }
+    else if (tileSprite.Tiling === Tiling.None) {
       ret = 0 as Int;
     }
     else {
@@ -1339,7 +1486,7 @@ export class TileGrid {
 
     //**For the border sprites we use the layer below. 
     let layerBelow = layer - 1;
-    let tileBelow: Int = this.Area.Map.Data.tileXY_World(col, row, layerBelow as Int);
+    let tileBelow: Int = this.Area.Map.MapData.tileXY_World(col, row, layerBelow as Int);
     let arr = this.getSurroundingTiles3x3(col, row, tileBelow, layerBelow as Int, HashSet.construct<Int>([tileBelow]), true);
 
     let pat: Int = this.crankPattern(this.Patterns.TilePatternsHardBorder, arr, toInt(9), toInt(7), toInt(4));
@@ -1397,7 +1544,7 @@ export class TileGrid {
           arr[ind] = true;
         }
         else {
-          let txy: Int = this.Area.Map.Data.tileXY_World(toInt(cell_x), toInt(cell_y), layer);
+          let txy: Int = this.Area.Map.MapData.tileXY_World(toInt(cell_x), toInt(cell_y), layer);
           if (txy === 0 && bContinue) {
             txy = tileId;  //continue outside the level border, 0 is null/no tile for TILED tiles.
           }
@@ -1568,7 +1715,7 @@ export class Cell {
   public get BoundBox_World(): Box2f {
     return this.Parent.Box;
   }
-  private _cached_tilepos_r3 : vec3 = null;
+  private _cached_tilepos_r3: vec3 = null;
   public get TilePosR3(): vec3 {
     return this._cached_tilepos_r3;
   }
@@ -1584,7 +1731,7 @@ export class Cell {
     let cdx = this._cellPosWorld.x;
     let cdy = this._cellPosWorld.y; // Flipping y to turn into OpenGL coordinates.
     let cdz = 0;
-    this._cached_tilepos_r3  = new vec3(cdx, cdy, cdz);
+    this._cached_tilepos_r3 = new vec3(cdx, cdy, cdz);
   }
 
   // public  GetTilePosGlobal() : ivec2
@@ -1948,7 +2095,7 @@ class TilePatterns {
     [11, new Array<number>(
       2, 1, 2,
       1, 1, 1,
-      2, 1, 2)],      
+      2, 1, 2)],
   ]);
 
   private TilePatternsHardBorder_n = MultiValueDictionary.construct<number, Array<number>>([

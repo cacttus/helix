@@ -3,12 +3,69 @@ import { Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, 
 import { Dictionary } from './Base';
 import { vec4 } from './Math';
 import { Globals } from './Globals';
+import { toInt, Int } from './Int';
+//import { parse } from 'upath';
 
 type WithProperty<K extends string, V = {}> = {
   [P in K]: V
 }
 
 export class Utils {
+  public static lcmp(a: string, b: string, case_sensitive: boolean = false) {
+    let d_k = Utils.copyString(a).trim();
+    let d_s = Utils.copyString(b).trim();
+    if (!case_sensitive) {
+      d_k = d_k.toLowerCase();
+      d_s = d_s.toLowerCase();
+    }
+    let be = (d_k === d_s);
+    return be;
+  }
+  public static isNullorUndefined(x: any) {
+    return (x === null) || (x === undefined);
+  }
+  public static isNotNullorUndefined(x: any) {
+    return !Utils.isNullorUndefined(x);
+  }
+  public static parseNumber(s: string): number {
+    let t = parseFloat(s);
+    return t;
+  }
+  public static parseInt(s: string): Int {
+    let t = toInt(parseInt(s));
+    return t;
+  }
+  public static parseBool(s: string): boolean {
+    let t = Utils.copyString(s).toLowerCase().trim();
+    if (t === "true") return true;
+    if (t === "1") return true;
+    return false;
+  }
+  public static copyString(s: string): string {
+    let ret: string = (' ' + s).slice(1);
+
+    return ret;
+  }
+  public static stringToEnum(s: string, object_keys: Array<string>, caseSensitive: boolean = false): number {
+    //returns the enum value as an integer of the given thing.
+    //object_keys = Object.keys(MyEnum)
+
+    let kv = Utils.enumKeyVals(object_keys);
+
+    for (let [k, v] of kv) {
+      let d_k = Utils.copyString(k).trim();
+      let d_s = Utils.copyString(s).trim();
+      if (!caseSensitive) {
+        d_k = d_k.toLowerCase();
+        d_s = d_s.toLowerCase();
+      }
+      if (d_k === d_s) {
+        return v;
+      }
+
+    }
+    return -999999;
+  }
   public static enumKeyVals(kv: Array<string>): Map<string, number> {
     //Typescript is weird.  Returns an enum's keys and values with object.keys.
     //This turns this into a simple map of key=>val ex. MyEnum { MyEnumKey=0 } turns into ["MyEnumKey", 0]

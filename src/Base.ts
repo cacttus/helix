@@ -104,7 +104,7 @@ export class MultiValueDictionary<K, V>  {
   public static construct<K, V>(values: Array<Array<any>>): MultiValueDictionary<K, V> {
     let ret: MultiValueDictionary<K, V> = new MultiValueDictionary<K, V>();
     for (let entry of values) {
-      if (Globals.isNotNullorUndefined(entry)) {
+      if (Utils.isNotNullorUndefined(entry)) {
         if (entry.length === 2) {
           let key: K = entry[0] as K;
           let vals: V = entry[1] as V;
