@@ -57,7 +57,7 @@
     }
     var pct = 100;
     function draw() {
-      if ($("#outPopUp").is(":visible")) {
+      if ($("#loadingContainer").is(":visible")) {
         pct += 1;
         if (pct === 120) {
           pct = -20;
@@ -85,9 +85,11 @@
 </head>
 
 <body>
-
-  <div id="outPopUp" class="loadingText">
-    Loading...
+  <div id="loadingContainer">
+    <div id="outPopUp" class="loadingText">
+      Loading...
+    </div>
+    <div id="loadingDetails" class="loadingDetailsText">Details</div>
   </div>
   <canvas id="page_canvas" class="canvas"></canvas>
 </body>

@@ -301,7 +301,7 @@ export class AudioManager {
 
       let n = 0;
       n++;
-      Globals.logInfo("Sound distance: " + dist)
+      Globals.logDebug("Sound distance: " + dist)
       return dist;
     }
     else {

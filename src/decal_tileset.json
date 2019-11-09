@@ -1,12 +1,4 @@
 { "columns":30,
- "editorsettings":
-    {
-     "export":
-        {
-         "format":"",
-         "target":"."
-        }
-    },
  "image":"..\/dist\/dat\/img\/tiles.png",
  "imageheight":512,
  "imagewidth":512,
@@ -14,7 +6,7 @@
  "name":"decal_tileset",
  "spacing":1,
  "tilecount":900,
- "tiledversion":"2019.10.30",
+ "tiledversion":"1.2.5",
  "tileheight":16,
  "tiles":[
         {
@@ -331,12 +323,12 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"none"
                 }, 
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"object"
+                 "value":"foreground"
                 }, 
                 {
                  "name":"name",
@@ -360,12 +352,12 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"none"
                 }, 
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"object"
+                 "value":"foreground"
                 }, 
                 {
                  "name":"name",
@@ -389,12 +381,12 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"none"
                 }, 
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"object"
+                 "value":"foreground"
                 }, 
                 {
                  "name":"name",
@@ -526,7 +518,7 @@
                 {
                  "name":"after_load",
                  "type":"string",
-                 "value":"sprite.face(4);  console.log(\"CALLED!!!!!!!\"); \n"
+                 "value":"sprite.face(4); \n"
                 }, 
                 {
                  "name":"class",
@@ -2341,7 +2333,7 @@
                 {
                  "name":"after_load",
                  "type":"string",
-                 "value":"sprite.face(4);  console.log(\"CALLED!!!!!!!\"); \n"
+                 "value":"sprite.face(4); \n"
                 }, 
                 {
                  "name":"class",

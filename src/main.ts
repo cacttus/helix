@@ -705,24 +705,22 @@ export class Animation25D {
   //Separate class to deal with animations and transitinos.  Just because Sprite25D was getting big.
   public static readonly c_strDefaultTileAnimation: string = "_default";
 
+  private _sprite: Sprite25D = null; // DO NOT COPY
   private _animated_location: vec3 = new vec3(0, 0, 0); // Animated attributes.  These are applied if there is animation on the object.
   private _animated_rotation: Quaternion = new Quaternion(0, 0, 0, 0);
   private _animated_scale: vec2 = new vec2(1, 1);
   private _animated_color: vec4 = new vec4(1, 1, 1, 1);
 
+  private _animations: Map<string, SpriteAnimationData> = new Map<string, SpriteAnimationData>();//Shared -> Map of animation name to the data.
   private _frame: SpriteFrame = null;
   private _frame2: SpriteFrame = null; //Second frame to blend to.
   private _frameBlend: number = 0; // blend amount for the given frame.
 
   private _loop: boolean = true;
-  private _animations: Map<string, SpriteAnimationData> = new Map<string, SpriteAnimationData>();//Shared -> Map of animation name to the data.
   private _currentAnimation: SpriteAnimationData = null;
   private _animationTime: number = 0;
   private _animationSpeed: number = 1;//multiplier
   private _playback: AnimationPlayback = AnimationPlayback.Stopped;
-
-
-  private _sprite: Sprite25D = null;
 
   public get CurrentFrameIndex(): Int {
     if (!this.CurrentAnimation) {
@@ -792,19 +790,22 @@ export class Animation25D {
     this._sprite = sprite;
   }
   public copy(other: Animation25D) {
+    //sprite
+    this._animated_location = other._animated_location.clone();
+    this._animated_rotation = other._animated_rotation.clone();
+    this._animated_scale = other._animated_scale.clone();
+    this._animated_color = other._animated_color.clone();
+
+    this._animations = other._animations; // shallow copy.  Animation data is shared.
+    this._frame = other._frame; // shallow copy.  Animation data is shared.
+    this._frame2 = other._frame2; // shallow copy.  Animation data is shared.
+    this._frameBlend = other._frameBlend;
 
     this._loop = other._loop;
-    this._animations = other._animations; // this is a shallow copy.  Animation data is shared.
     this._currentAnimation = other._currentAnimation;
     this._animationTime = other._animationTime;
     this._animationSpeed = other._animationSpeed;
     this._playback = other._playback;
-
-    this._frame = other._frame;
-    this._frame2 = other._frame2;
-    this._frameBlend = other._frameBlend;
-
-    this._sprite = other._sprite;
   }
   public clone(parent: Sprite25D): Animation25D {
     let ret: Animation25D = new Animation25D(parent);
@@ -1190,6 +1191,7 @@ export class Sprite25D {
   public _flipV: boolean = false;
   public _animation: Animation25D = null;
 
+  //private _boundBox_collision_grid : Box2f;
   private _boundBox_grid: Box2f = new Box2f();// The animated bounds of the sprite.
   private _boundBox_world: Box2f = new Box2f();// The animated bounds of the sprite.
   private _quadVerts: Array<vec3> = new Array<vec3>();  //Quad Verts - do not clone
@@ -1314,6 +1316,29 @@ export class Sprite25D {
   public get Color(): vec4 { return this._color; }
   public set Color(x: vec4) { this._color = x; this.markDirty(DirtyFlag.Colors); }
 
+
+  public getCurrentCellR3(add: vec3 = null): Cell {
+    //Hacky way to get the player's current cell.
+    //TODO: this isn't workking
+    let loc = null;
+    // if (this instanceof Character) {
+    //   let cv = new vec3(g_atlas.TileWidthR3 * 0.5, g_atlas.TileWidthR3 * 1.5, 0);
+    //   loc = this._location.clone().add(cv);
+
+    // }
+    // else {
+      loc = this.Center;
+    //}
+
+    if (add) {
+      loc.add(add);
+    }
+    
+    let ret = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(loc);
+    return ret;
+  }
+
+
   public get Center(): vec3 {
     //Returns the sprite tile center in Tile World space without depth applied.
     return new vec3(
@@ -1383,7 +1408,8 @@ export class Sprite25D {
     this._size = other._size.clone();
     this._origin = other._origin.clone();
     for (let ci = 0; ci < other._children.length; ci++) {
-      this._children.push(other._children[ci].clone());
+      this.add(other._children[ci].clone());
+      //this._children.push(other._children[ci].clone());
     }
     //parent
     this._visible = other._visible;
@@ -1679,7 +1705,7 @@ export class Phyobj25D extends Sprite25D {
       //If we got a command to snap the player after applying velocity.
       if (this.ApplySnap) {
         //Snap.
-        let c = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center);
+        let c = this.getCurrentCellR3()
         //   this.snapToCell(c);
         this.ApplySnap = false;
       }
@@ -1735,12 +1761,9 @@ export class Character extends Phyobj25D {
     ret.copy(this);
     return ret;
   }
-
   public update(dt: number) {
-
     if (Globals.input.keyboard && Globals.input.keyboard.getKey(32 as Int).pressOrHold()) {
       Globals.audio.stopMusic(Files.Audio.MusicBeepy);
-
     }
 
     this._hitSoundTimer.update(dt);
@@ -1822,7 +1845,7 @@ export class Character extends Phyobj25D {
       if (!this._bMoving) {
         let n = Character.getMovementNormalForDirection(this._eCommandedDirection);
         n.multiplyScalar(this.WorldView.Atlas.TileWidthR3);
-        let c = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center.clone().add(n));
+        let c = this.getCurrentCellR3(n); //this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center.clone().add(n));
 
         //Check to see if neighbor cell is blocked.
         if (c) {
@@ -2943,10 +2966,13 @@ let g_bMovingPlayer: boolean = false;
 $(document).ready(function () {
   Globals.setFlags(document.location);
 
-  Globals.init(800, 800, ResizeMode.FitAndCenter); //Gameboy pixel dims
-  Globals.prof.frameStart();
+  Utils.loadingDetails("Creating world.");
 
-  loadResources();
+  Globals.init(800, 800, ResizeMode.FitAndCenter).then((value: boolean) => {
+    Globals.prof.frameStart();
+    loadResources();
+  });
+
 });
 
 
@@ -2972,10 +2998,6 @@ function loadResources() {
         }
         return null;
       })
-
-
-
-
     });
   Globals.models.setModelAsyncCallback(Files.Model.Hand, function (model: THREE.Mesh) {
     initializeGame();
@@ -2991,6 +3013,7 @@ function createTickler(model: Object3D, action_point: Object3D) {
   g_hand.scale.set(3, 3, 3);
 }
 function initializeGame() {
+  Utils.loadingDetails("Creating world.");
   createWorld();
 
   g_ambientlight = new THREE.AmbientLight(new Color(1, 1, 1));
@@ -3004,7 +3027,7 @@ function initializeGame() {
   }
 
   Globals.prof.frameEnd();
-  $('#outPopUp').hide();
+  $('#loadingContainer').hide();
 
 
 

@@ -9,8 +9,55 @@ import { toInt, Int } from './Int';
 type WithProperty<K extends string, V = {}> = {
   [P in K]: V
 }
-
+export enum BrowserType {
+  Chrome, Edge, IE, Opera, Firefox, Safari, Blink, Undefined
+}
 export class Utils {
+  public static getBrowser(): BrowserType {
+    // Internet Explorer 6-11
+    // @ts-ignore
+    if (/*@cc_on!@*/false || !!document.documentMode) {
+      return BrowserType.IE;
+    }
+
+    // Edge 20+
+    // @ts-ignore
+    if (/*isEdge = !isIE &&*/ !!window.StyleMedia) {
+      return BrowserType.Edge;
+    }
+
+    // Opera 8.0+
+    // @ts-ignore
+    if ((!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0) {
+      return BrowserType.Opera;
+    }
+    // Firefox 1.0+
+    // @ts-ignore
+    if (typeof InstallTrigger !== 'undefined') {
+      return BrowserType.Firefox;
+    }
+    // Safari 3.0+ "[object HTMLElementConstructor]" 
+    // @ts-ignore
+    if (/constructor/i.test(window.HTMLElement) || (function (p) { return p.toString() === "[object SafariRemoteNotification]"; })(!window['safari'] || (typeof safari !== 'undefined' && safari.pushNotification))) {
+      return BrowserType.Safari;
+    }
+
+    // Chrome 1 - 71
+    // @ts-ignore
+    if (!!window.chrome && (!!window.chrome.webstore || !!window.chrome.runtime)) {
+      return BrowserType.Chrome;
+    }
+    // Blink engine detection
+    // @ts-ignore
+    if ((isChrome || isOpera) && !!window.CSS) {
+      return BrowserType.Blink;
+    }
+
+    return BrowserType.Undefined;
+  }
+  public static loadingDetails(det: string) {
+    $('#loadingDetails').html(det);
+  }
   public static lcmp(a: string, b: string, case_sensitive: boolean = false) {
     let d_k = Utils.copyString(a).trim();
     let d_s = Utils.copyString(b).trim();

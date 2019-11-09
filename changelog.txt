@@ -1,4 +1,19 @@
-11.09.19 - 2
+11.09.19
+Fixed issue with Edge not resizing properly. 
+Made browser checking generic.
+Fixed some issues with Edge + OpenGL2 context
+
+Character collisions are strange
+we use the head for keysprite, but hte body is what needs to collide/
+we use center of char box as the collision, which uses the head.
+KeyCenter or CollisionBox
+- get center of key sprite and use that to get current cell
+- compute box of all collidable sprites, use that for KeyCenter
+*currently we use location of the sprite to get the current cell we are on.
+
+
+
+11.08.19 - 2
 Fixed issues with the frustum not updating correctly.  It wasn't updating when we moved the mosue.
 Also fixed frustum's "up"  the THREE.JS up is actually y=1, not the camera's basis vector.
 Fixed the quick UI scaling problem.

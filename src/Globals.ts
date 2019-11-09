@@ -16,11 +16,13 @@ import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js';
 
 import { Console3D } from './Console3D';
 import { PhysicsObject3D, PhysicsManager3D } from './Physics3D';
-import { Screen2D, AudioManager, ModelManager, Input, Frustum } from './Base';
+import { Screen2D, AudioManager, ModelManager, Input, Frustum, TimerState } from './Base';
 import { Prof } from "./Prof";
+import { Utils, BrowserType } from './Utils';
 
+interface VrOrDesktopModeCallback { (): void }
 export enum GameState { Title, Play, GameOver }
-enum WebGLVersion { WebGL1, WebGL2 }
+enum WebGLVersion { Canvas2D, WebGL1, WebGL2 }
 export enum ResizeMode {
   Fixed, // Fixed canvas size.
   FillAndCenter, //Stretch the canvas across the window keeping the height aspect ratio, then center the canvas
@@ -58,16 +60,18 @@ export class _Globals {
   private _renderHeight: number = 768;
   private _resizeMode: ResizeMode = ResizeMode.Fullscreen;
   private _barColor: Color = new Color(0, 0, 0); // Color of the bars when in ResizeMode.Fit mode.
-  private _frustum:Frustum = null;
+  private _frustum: Frustum = null;
+  private _browser: BrowserType = BrowserType.Undefined;
 
-  public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor: Color = new Color(0, 0, 0)) {
+  public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor: Color = new Color(0, 0, 0)): Promise<boolean> {
     this._canvas = document.querySelector('#page_canvas');
 
     this._renderWidth = canvasWidth;
     this._renderHeight = canvasHeight;
     this._resizeMode = resize;
     this._barColor = barColor;
-    
+
+    this._browser = Utils.getBrowser();
 
     this._screen = new Screen2D(this._canvas);
     this.createCamera();
@@ -78,33 +82,46 @@ export class _Globals {
       this._userGroup.add(console3d);
     }
 
-    this.createRenderSystem();
-    this.createScene();
-    this.createSSAA();//Must be called after scene created
+    return new Promise<boolean>((resolve, reject) => {
+      this.createRenderSystem().then((value: boolean) => {
+        try {
 
-    this._audio = new AudioManager();
-    this._models = new ModelManager();
-    //this._particles = new Particles();
-    this._input = new Input();
-    this._physics3d = new PhysicsManager3D();
-    this._prof = new Prof();
+          //Callback after we've enumerated VR displays
+          this.createScene();
+          this.createSSAA();//Must be called after scene created
 
-    if (this._isprof) {
-      this._statsFps = new Stats();
-      this._statsFps.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
-      this._statsFps.dom.style.cssText = 'position:absolute;top:0px;left:0px;';
-      document.body.appendChild(this._statsFps.dom);
+          this._audio = new AudioManager();
+          this._models = new ModelManager();
+          //this._particles = new Particles();
+          this._input = new Input();
+          this._physics3d = new PhysicsManager3D();
+          this._prof = new Prof();
 
-      this._statsMb = new Stats();
-      this._statsMb.showPanel(2); // 0: fps, 1: ms, 2: mb, 3+: custom
-      this._statsMb.dom.style.cssText = 'position:absolute;top:0px;left:80px;';
-      document.body.appendChild(this._statsMb.dom);
+          if (this._isprof) {
+            this._statsFps = new Stats();
+            this._statsFps.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
+            this._statsFps.dom.style.cssText = 'position:absolute;top:0px;left:0px;';
+            document.body.appendChild(this._statsFps.dom);
 
-    }
+            this._statsMb = new Stats();
+            this._statsMb.showPanel(2); // 0: fps, 1: ms, 2: mb, 3+: custom
+            this._statsMb.dom.style.cssText = 'position:absolute;top:0px;left:80px;';
+            document.body.appendChild(this._statsMb.dom);
+          }
 
-    this.createPlayer();
+          this.createPlayer();
+          resolve();
+
+          // update to render size, after renderer is created.
+          this.updateRenderSize();
+        }
+        catch (ex) {
+          reject(ex);
+        }
+      });
+    });
   }
-  public get frustum() : Frustum { return this._frustum; }
+  public get frustum(): Frustum { return this._frustum; }
 
   public get canvas(): HTMLCanvasElement { return this._canvas; }
   public get scene(): Scene { return this._scene; }
@@ -193,8 +210,8 @@ export class _Globals {
       this._console3d.log(str);
     }
 
-    if(Globals.isDebug()){
-     // Globals.debugBreak();
+    if (Globals.isDebug()) {
+      // Globals.debugBreak();
     }
 
     return str;
@@ -229,38 +246,36 @@ export class _Globals {
   public isProf(): boolean {
     return this._isprof;
   }
-
   public startGameEngine(gameCore: any) {
     let last_time: number = 0;
-    let that = this;
 
-    this.renderer.setAnimationLoop(function (time: number) {
+    this.renderer.setAnimationLoop((time: number) => {
 
-      that.prof.frameStart();
+      this.prof.frameStart();
       {
         time *= 0.001;//convert to seconds I think
         let delta: number = time - last_time;
         last_time = time;
-        
-     //   that.frustum.construct();//Constructed when we actually update camera.
+
+        //   that.frustum.construct();//Constructed when we actually update camera.
 
         Globals.prof.begin('update globals');
         {
-          if (that._console3d) {
+          if (this._console3d) {
             Globals.prof.begin('update console');
-            that._console3d.update(that.camera, that.userGroup);
+            this._console3d.update(this.camera, this.userGroup);
             Globals.prof.end('update console');
           }
 
-          if (that.input) {
+          if (this.input) {
             Globals.prof.begin('update input');
-            that.input.update(delta);
+            this.input.update(delta);
             Globals.prof.end('update input');
           }
 
-          if (that.physics3d) {
+          if (this.physics3d) {
             Globals.prof.begin('update physics3');
-            that.physics3d.update(delta);
+            this.physics3d.update(delta);
             Globals.prof.end('update physics3');
           }
         }
@@ -274,26 +289,30 @@ export class _Globals {
 
         Globals.prof.begin("render");
         {
-          that.render();
+          this.render();
         }
         Globals.prof.end("render");
 
         Globals.audio._listener.position.copy(Globals.player.WorldPosition);
 
         //Reset mouse wheel.
-        that.input.postUpdate();
+        this.input.postUpdate();
 
-        if (that._statsFps) {
-          that._statsFps.update();
+        if (this._statsFps) {
+          this._statsFps.update();
         }
-        if (that._statsMb) {
-          that._statsMb.update();
+        if (this._statsMb) {
+          this._statsMb.update();
         }
       }
 
-      that.prof.frameEnd();
+      if (this._browser === BrowserType.Edge || this._browser === BrowserType.IE) {
+        this.edgeFixWindowResize();
+      }
 
-      that._frame++;
+      this.prof.frameEnd();
+
+      this._frame++;
     });
   }
   public render() {
@@ -309,6 +328,25 @@ export class _Globals {
   }
 
 
+  private _lastWidth: number = 0;
+  private _lastHeight: number = 0;
+  private edgeFixWindowResize() {
+    //Edge window only calls resize when an ELEMENT resizes.
+    //Lame/Dumb
+    //This may be fixed in the enxt version of edge, 
+    //Every 10 frames
+    if (Globals.getFrameNumber() % 10 === 0) {
+      if (window && window.screen) {
+        let w = window.outerWidth;
+        let h = window.outerHeight;
+        if (this._lastHeight !== h || this._lastWidth !== w) {
+          this._lastWidth = w;
+          this._lastHeight = h;
+          this.updateRenderSize();
+        }
+      }
+    }
+  }
   private createPlayer() {
     this._player = new PhysicsObject3D();
     this._player.add(this._userGroup);
@@ -318,14 +356,13 @@ export class _Globals {
     this._player.DestroyCheck = function (ob: PhysicsObject3D): boolean { return false; /*do not destroy player */ }
     this._player.rotateY(0);
   }
-
-
-  private udpateRenderSize() {
+  private updateRenderSize() {
     //if in VR, the "presenting" will cause an error if you try to do this.
     if (Globals.vrDeviceIsPresenting() === false) {
       if (this._renderer) {
         //WebGL1 does not support non pow2 textures.
-        if (this._webGLVersion === WebGLVersion.WebGL2) {
+        //if (this._webGLVersion === WebGLVersion.WebGL2)
+        {
           //https://stackoverflow.com/questions/19827030/renderer-setsize-calculation-by-percent-of-screen-three-js
           let canvas = this._renderer.domElement;
           let pixelRatio = window.devicePixelRatio;
@@ -342,41 +379,64 @@ export class _Globals {
           //Set the actual cnavas size.
           //This should cause the resize method to fire.
 
+          let ww = ()=>{ 
+            //Edge/IE is weird
+            if(this._browser===BrowserType.Edge || this._browser===BrowserType.IE){
+              return window.outerWidth;//This seems to fix
+            }
+            else{
+              return window.innerWidth;
+            }
+          };
+          let wh = ()=>{ 
+            //Edge/IE is weird
+            if(this._browser===BrowserType.Edge || this._browser===BrowserType.IE){
+              return window.innerHeight;
+            }
+            else{
+              return window.innerHeight;
+            }
+          };
+          //Note the 
+
+          let test_w = ww();
+          let test_h = wh();
+
           if (this._resizeMode === ResizeMode.Fullscreen) {
             //Fullscreen, do not maintain aspect ratio
-            $("#page_canvas").width(window.innerWidth);
-            $("#page_canvas").height(window.innerHeight);
+            $("#page_canvas").width(ww());
+            $("#page_canvas").height(wh());
           }
           else if (this._resizeMode === ResizeMode.FillAndCenter) {
             //Fill the window, but maintain aspect ratio
-            $("#page_canvas").width(window.innerWidth);
-            let ch = window.innerWidth * (height / width);
+            $("#page_canvas").width(ww());
+            let ch = ww() * (height / width);
             $("#page_canvas").height(ch);
             $("#page_canvas").css('position', 'absolute');
             $("#page_canvas").css('left', '0');
-            let t = (window.innerHeight - ch > 0) ? ((window.innerHeight - ch) / 2) : -(ch - window.innerHeight) / 2;
+            let t = (wh() - ch > 0) ? ((wh() - ch) / 2) : -(ch - wh()) / 2;
             $("#page_canvas").css('top', t);
 
           }
           else if (this._resizeMode === ResizeMode.FitAndCenter) {
             //Fit the canvas.
-            if (window.innerWidth >= window.innerHeight) {
+            if (ww() >= wh()) {
 
-              $("#page_canvas").height(window.innerHeight);
-              let cv = window.innerHeight * (width / height);
+              $("#page_canvas").height(wh());
+              let cv = wh() * (width / height);
               $("#page_canvas").width(cv);
               $("#page_canvas").css('position', 'absolute');
               $("#page_canvas").css('top', '0');
-              let t = (window.innerWidth - cv > 0) ? ((window.innerWidth - cv) / 2) : -(cv - window.innerWidth) / 2;
+              let t = (ww() - cv > 0) ? ((ww() - cv) / 2) : -(cv - ww()) / 2;
               $("#page_canvas").css('left', t);
             }
             else {
-              $("#page_canvas").width(window.innerWidth);
-              let cv = window.innerWidth * (height / width);
+              $("#page_canvas").width(ww());
+              let cv = ww() * (height / width);
               $("#page_canvas").height(cv);
               $("#page_canvas").css('position', 'absolute');
               $("#page_canvas").css('left', '0');
-              let t = (window.innerHeight - cv > 0) ? ((window.innerHeight - cv) / 2) : -(cv - window.innerHeight) / 2;
+              let t = (wh() - cv > 0) ? ((wh() - cv) / 2) : -(cv - wh()) / 2;
               $("#page_canvas").css('top', t);
             }
 
@@ -405,42 +465,31 @@ export class _Globals {
     }
     return null;
   }
-  private getBrowserMessage() {
-    //https://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
-    // Internet Explorer 6-11
-    // @ts-ignore
-    var isIE = /*@cc_on!@*/false || !!document.documentMode;
-    // Edge 20+
-    // @ts-ignore
-    var isEdge = !isIE && !!window.StyleMedia;
-    if (isIE || isEdge) {
+  private getBrowserMessage(): string {
+    if (this._browser === BrowserType.IE || this._browser === BrowserType.Edge) {
       return "For the best experience, try using a <a href='https://www.google.com/chrome' target='_blank'>Chrome</a> or <a href='https://www.mozilla.org/en-US/firefox/' target='_blank'>Firefox</a> web browser.";
     }
 
-    // Opera 8.0+
-    // @ts-ignore
-    var isOpera = (!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
-    // Firefox 1.0+
-    // @ts-ignore
-    var isFirefox = typeof InstallTrigger !== 'undefined';
-    // Safari 3.0+ "[object HTMLElementConstructor]" 
-    // @ts-ignore
-    var isSafari = /constructor/i.test(window.HTMLElement) || (function (p) { return p.toString() === "[object SafariRemoteNotification]"; })(!window['safari'] || (typeof safari !== 'undefined' && safari.pushNotification));
-
-    // Chrome 1 - 71
-    // @ts-ignore
-    var isChrome = !!window.chrome && (!!window.chrome.webstore || !!window.chrome.runtime);
-    // Blink engine detection
-    // @ts-ignore
-    var isBlink = (isChrome || isOpera) && !!window.CSS;
-    if (!isChrome && !isFirefox) {
+    if (this._browser !== BrowserType.Chrome && this._browser !== BrowserType.Firefox) {
       return "Please note Helix is currently tested on Oculus VR, <a href='https://www.google.com/chrome'>Google Chrome</a>, <a href='https://www.mozilla.org/en-US/firefox/'>Firefox</a> and Edge.  Other browsers and VR systems may not work."
     }
     return "";
   }
+  private checkBrowserTimeout(seconds: number) {
+    //Check Browser with a 5s timeout. This is just to not be overbearing when the game starts.
+    window.setTimeout(() => {
+      try {
+        this.checkBrowser();
+      }
+      catch (ex) {
+        Globals.logError("Non-critical error during browser checking: " + ex ? ex : '');
+      }
+    }, seconds * 1000);
+  }
   private checkBrowser() {
     let showWarningCookie: string = "shownBrowserWarning";
     let shown: boolean = this.getCookie(showWarningCookie) as boolean;
+
     if (shown === null || shown === false) {
       let msg = this.getBrowserMessage();
 
@@ -487,86 +536,97 @@ export class _Globals {
       }
     }
   }
-  private createRenderSystem() {
-    let that = this;
+  private createRenderSystem(): Promise<boolean> {
+    Utils.loadingDetails("Creating renderer");
 
     //Make sure the window can resize.
-    window.addEventListener('resize', function () {
-      that.udpateRenderSize();
+    window.addEventListener('resize', () => {
+      this.updateRenderSize();
     }, false);
 
     this.createWebGL2Context();
 
-    //Force an update to the renderer size.
-    this.udpateRenderSize();
+    //Enumerate VR displays, or just calls the callback.
+    return this.setupVRorDesktopMode();
   }
   private createWebGL2Context() {
     //So, THREE has less capabilities if it's not using webgl2
     //we must use webgl2 to prevent erroneous texture resizing (pow2 only textures)
-    //@ts-ignore:
-    let webgl2_available: boolean = !!(window.WebGL2RenderingContext && this.canvas.getContext('webgl2'));
 
-    if (webgl2_available === false) {
-      Globals.logWarn(WEBGL.getWebGL2ErrorMessage());
-      this._renderer = new THREE.WebGLRenderer({ canvas: this.canvas });//You can pass canvas in here
-      this._webGLVersion = WebGLVersion.WebGL1;
-    }
-    else {
-      let context: WebGL2RenderingContext = this.canvas.getContext('webgl2', { alpha: false });
-
-      //@ts-ignore:
-      this._renderer = new THREE.WebGLRenderer({ canvas: this.canvas, context: context });
-      this._webGLVersion = WebGLVersion.WebGL2;
-    }
-
-    Globals.logInfo("***Created WebGL version '" + this._webGLVersion + "' context.***")
-    this._renderer.setClearColor(0xffffff, 1);
-    this._renderer.setPixelRatio(window.devicePixelRatio);
-
-    this.setupVRorDesktopMode()
-  }
-  private setupVRorDesktopMode() {
-    const setupVROrDesktopCallback = (value: VRDisplay[]) => {
-      //Check for VR
-      if (value && value.length > 0) {
-        Globals.logInfo("WebVR: VR is supported and enabled.  Starting in VR mode.")
-        this._renderer.vr.enabled = true;
-        document.body.appendChild(WEBVR.createButton(this._renderer, { referenceSpaceType: 'local' }));
+    //Unfortunately Edge doesn't support WebGL2 until 2020 when Edge Anaheim (76) is released.
+    try {
+      if (WEBGL.isWebGL2Available()) {
+        let context: WebGL2RenderingContext = this.canvas.getContext('webgl2', { alpha: false });
+        this._webGLVersion = WebGLVersion.WebGL2;
+        //@ts-ignore:
+        this._renderer = new THREE.WebGLRenderer({ canvas: this.canvas, context: context });
+      }
+      else if (WEBGL.isWebGLAvailable()) {
+        let context: WebGLRenderingContext = this.canvas.getContext('webgl', { alpha: false });
+        this._webGLVersion = WebGLVersion.WebGL1;
+        Globals.logWarn(WEBGL.getWebGL2ErrorMessage().innerHTML);
+        this._renderer = new THREE.WebGLRenderer({ canvas: this.canvas, context: context });
       }
       else {
-        Globals.logInfo("WebVR: VR is not supported or enabled.  Starting in Desktop mode.")
-        this._renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(this._renderer.domElement);
+        Globals.logWarn(WEBGL.getWebGLErrorMessage().innerHTML);
+        this._webGLVersion = WebGLVersion.Canvas2D;
+        this._renderer = new THREE.WebGLRenderer({ canvas: this.canvas });
       }
 
-      //Set the final renderer
-      Globals.setRenderer(this._renderer);
-
-      //Check Browser
-      window.setTimeout(() => {
-        try {
-          this.checkBrowser();
-        }
-        catch (ex) {
-          Globals.logError("Non-critical error during browser checking: " + ex ? ex : '');
-        }
-      }, 3000);
-
-      //Done
-      this._vrSetupComplete = true;
+      Globals.logInfo("***Created WebGL version '" + this._webGLVersion + "' context.***")
+      this._renderer.setClearColor(0xffffff, 1);
+      this._renderer.setPixelRatio(window.devicePixelRatio);
     }
-    if ('getVRDisplays' in navigator) {
-      //we have the method, need to check fo rdisplays async
-      navigator.getVRDisplays().then((value: VRDisplay[]) => {
-        setupVROrDesktopCallback(value);
-      });
-    }
-    else {
-      setupVROrDesktopCallback([]);
+    catch (ex) {
+      Globals.logError("Failed to create a valid rendering context : " + ex ? ex : "");
     }
 
   }
+  private setupVRorDesktopMode(): Promise<boolean> {
+    let afterQueryDisplaysCallback: Promise<boolean> = new Promise<boolean>((resolve, reject) => {
+      const afterQueryVRDisplays = (value: VRDisplay[]) => {
+        try {
+          //Check for VR
+          if (value && value.length > 0) {
+            Globals.logInfo("WebVR: VR is supported and enabled.  Starting in VR mode.")
+            this._renderer.vr.enabled = true;
+            document.body.appendChild(WEBVR.createButton(this._renderer, { referenceSpaceType: 'local' }));
+          }
+          else {
+            Globals.logInfo("WebVR: VR is not supported or enabled.  Starting in Desktop mode.")
+            this._renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(this._renderer.domElement);
+          }
 
+          //Set the final renderer
+          Globals.setRenderer(this._renderer);
+
+          //Check Browser with a 5s timeout. This is just to not be overbearing when the game starts.
+          this.checkBrowserTimeout(5);
+
+          //Done
+          this._vrSetupComplete = true;
+          resolve();
+        }
+        catch (ex) {
+          reject(ex);
+        }
+      }
+      if ('getVRDisplays' in navigator) {
+        Utils.loadingDetails("Querying VR Displays");
+
+        //we have the method, need to check fo rdisplays async
+        navigator.getVRDisplays().then((value: VRDisplay[]) => {
+          afterQueryVRDisplays(value);
+        });
+      }
+      else {
+        afterQueryVRDisplays([]);
+      }
+    });
+
+    return afterQueryDisplaysCallback;
+  }
   private createSSAA() {
     if (this.getSSAA() > 0) {
       this._composer = new EffectComposer(this._renderer);
@@ -588,7 +648,7 @@ export class _Globals {
     this._userGroup.add(this._camera);
     this._userGroup.position.set(0, 0.02, -0.12);
     this._userGroup.rotateY(0);
-    
+
     this._frustum = new Frustum();
   }
   private createScene() {
@@ -600,8 +660,8 @@ export class _Globals {
     // let top = 'dat/img/top_cube-128.png';
     // let bot = 'dat/img/bot_cube-128.png';
 
-    let side ='dat/img/black-128.png';
-    let top ='dat/img/black-128.png' ;
+    let side = 'dat/img/black-128.png';
+    let top = 'dat/img/black-128.png';
     let bot = 'dat/img/black-128.png';
 
     this.scene = new THREE.Scene();
@@ -615,12 +675,6 @@ export class _Globals {
       this.scene.background = texture;
     }
   }
-
-
-
-
-
-
 
 
 }
