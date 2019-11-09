@@ -193,7 +193,7 @@ export class TextCanvas extends THREE.Object3D {
 
     let cam_dir: THREE.Vector3 = new THREE.Vector3();
     camera.getWorldDirection(cam_dir);
-    let up: THREE.Vector3 = camera.up.clone();
+    let up: THREE.Vector3 = Globals.frustum.down.clone().multiplyScalar(-1);
     let left: THREE.Vector3 = up.clone().cross(cam_dir);
     //https://stackoverflow.com/questions/13350875/three-js-width-of-view
     var vFOV = THREE.Math.degToRad(camera.fov); // convert vertical fov to radians

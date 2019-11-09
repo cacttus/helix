@@ -3,7 +3,7 @@ import { Color, Box3, Object3D, MeshBasicMaterial, Material, Quaternion, Box3Hel
 import { Globals, GameState, ResizeMode } from './Globals';
 //import { basename } from 'upath';
 import { Utils } from './Utils';
-import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer } from './Base';
+import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer, GlobalEvent, GlobalEventObject } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
@@ -500,8 +500,8 @@ export class Atlas extends ImageResource {
     //Tiles_width / height is a multiple-segment frame (ex. 2 16x16 frames)
     //Spacing is a pixel space between multiple tile segments (ex. tiles_width>1)
     //Margin will shrink or grow the image to reduce texel border artifacts
-    let sw: number = Number(atlas.TileWidthPixels * tiles_width - (tiles_width - 1) * spacing_h) / Number(atlas.ImageWidth);
-    let sh: number = Number(atlas.TileHeightPixels * tiles_height - (tiles_height - 1) * spacing_v) / Number(atlas.ImageHeight);
+    let sw: number = Number(atlas.TileWidthPixels * tiles_width + (tiles_width - 1) * spacing_h) / Number(atlas.ImageWidth);
+    let sh: number = Number(atlas.TileHeightPixels * tiles_height + (tiles_height - 1) * spacing_v) / Number(atlas.ImageHeight);
     let f: SpriteFrame = new SpriteFrame();
     f.x = (Number(atlas.LeftPad) + tx * Number(atlas.TileWidthPixels + atlas.SpaceX)) / Number(atlas.ImageWidth);
     //Tex is in gl coords from bot left corner. so 0,0 is actually 0,h-1
@@ -571,12 +571,13 @@ export class SpriteFrame {
 export class FDef {
   //Quick Sprite Keyframe Definition
   p: ivec2 = null;
+  wh: ivec2 = null;
   h: boolean = false;
   v: boolean = false;
   c: vec4 = null;
   image_interpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
 
-  public static default(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false): Array<FDef> {
+  public static default(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false, wh: ivec2 = new ivec2(1, 1)): Array<FDef> {
     let ret: Array<FDef> = new Array<FDef>();
 
     for (let xi = 0; xi < framexys.length; xi++) {
@@ -586,17 +587,18 @@ export class FDef {
       }
       let ix: Int = framexys[xi][0] as Int;
       let iy: Int = framexys[xi][1] as Int;
-      let d = new FDef(new ivec2(ix, iy), fliph, flipv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step);
+      let d = new FDef(new ivec2(ix, iy), fliph, flipv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, wh);
       ret.push(d);
     }
     return ret;
   }
 
-  public constructor(dp: ivec2 = null, dh: boolean = null, dv: boolean = null, dc: vec4 = null, ii: SpriteKeyFrameInterpolation = null) {
+  public constructor(dp: ivec2 = null, dh: boolean = null, dv: boolean = null, dc: vec4 = null, ii: SpriteKeyFrameInterpolation = null, dwh: ivec2 = null) {
     this.p = dp;
     this.h = dh;
     this.v = dv;
     this.c = dc;
+    this.wh = dwh;
     this.image_interpolation = ii;
   }
   public clone(): FDef {
@@ -609,6 +611,7 @@ export class FDef {
     this.h = other.h;
     this.v = other.v;
     this.c = other.c ? other.c.clone() : null;
+    this.wh = other.wh ? other.wh.clone() : null;
     this.image_interpolation = other.image_interpolation;
   }
 }
@@ -909,9 +912,12 @@ export class Animation25D {
     }
     return this._tileData_Cached;
   }
-  public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1), props: Array<SpriteTileInfo> = null, frameDuration: number = 0) {
+  public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1), props: Array<SpriteTileInfo> = null, frameDuration: number = 0, frameSize: ivec2 = new ivec2(1, 1)) {
     //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
-    this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]]), frameDuration, atlas, imageSize, true, props);
+    //FrameSize vs ImageSize:
+    //ImageSize > 1,1 will create NxM sub-sprites each with frames 1 tile wide.
+    //FrameSize > 1,1 will create 1 sprite, and set the frame's size to be NxM.  This is added for performance for UI elements.
+    this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]], false, false, frameSize), frameDuration, atlas, imageSize, true, props);
   }
   public addTiledAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, imageSize:
     ivec2 = null, append: boolean = false, props: Array<SpriteTileInfo> = null) {
@@ -1019,7 +1025,10 @@ export class Animation25D {
 
       let kf = new SpriteKeyFrame(ret);
 
-      kf.Frame = atlas.getFrame((def.p.x + sub_x) as Int, (def.p.y + sub_y) as Int);
+      let tiles_w = def.wh ? def.wh.x : 1;
+      let tiles_h = def.wh ? def.wh.y : 1;
+
+      kf.Frame = atlas.getFrame(toInt(def.p.x + sub_x), toInt(def.p.y + sub_y), toInt(tiles_w), toInt(tiles_h));
 
       kf.Color = def.c ? def.c : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
       kf.FlipH = def.h ? def.h : false;
@@ -1595,11 +1604,19 @@ export class Sprite25D {
   public canCollide(): boolean {
     return this.CollisionHandling === CollisionHandling.Layer;
   }
-  public getTileBounds() : Box2f{
+  public getTileBounds(): Box2f {
     let ret = new Box2f();
     ret.GenResetExtents();
-    for(let kf of this.Animation.TileData.KeyFrames){
-      ret.ExpandByPoint(new vec2(kf.Frame.tile_x_tiles, kf.Frame.tile_y_tiles));
+    for (let kf of this.Animation.TileData.KeyFrames) {
+      ret.ExpandByPoint(new vec2(kf.Frame.tile_x_tiles + 1, kf.Frame.tile_y_tiles + 1));
+    }
+    return ret;
+  }
+  public getDefaultTileFrame(): SpriteFrame {
+    //Returns the first frame of this sprite.  This is for UI elements
+    let ret: SpriteFrame = null;
+    if (this.Animation.TileData && this.Animation.TileData.KeyFrames && this.Animation.TileData.KeyFrames.length > 0) {
+      ret = this.Animation.TileData.KeyFrames[0].Frame;
     }
     return ret;
   }
@@ -1961,8 +1978,55 @@ class InputControls {
     this._playerChar = playerChar;
     this._viewport = viewport;
   }
+  private _frust_pts: THREE.Points = null
   public update(dt: number) {
-    if (Globals.input.mouse.Right.pressOrHold()) {
+    if (Globals.isDebug()) {
+      if (this._frust_pts !== null) {
+        Globals.scene.remove(this._frust_pts);
+      }
+
+      let push1 = Globals.frustum.normal.clone().multiplyScalar(0.02);
+      let push2 = Globals.frustum.normal.clone().multiplyScalar(-0.02);
+      let geometry = new THREE.Geometry();
+
+      let d_ntl = Globals.frustum.ntl.clone().add(push1);
+      let d_ntr = Globals.frustum.ntr.clone().add(push1);
+      let d_nbl = Globals.frustum.nbl.clone().add(push1);
+      let d_nbr = Globals.frustum.nbr.clone().add(push1);
+      let d_ftl = Globals.frustum.ftl.clone().add(push2);
+      let d_ftr = Globals.frustum.ftr.clone().add(push2);
+      let d_fbl = Globals.frustum.fbl.clone().add(push2);
+      let d_fbr = Globals.frustum.fbr.clone().add(push2);
+
+      geometry.vertices.push(
+        d_ntl,
+        d_ntr,
+        d_nbl,
+        d_nbr,
+        d_ftl,
+        d_ftr,
+        d_fbl,
+        d_fbr,
+      );
+
+      this._frust_pts = new THREE.Points(
+        geometry,
+        new THREE.PointsMaterial({
+          side: THREE.DoubleSide,
+          size: 2,
+          sizeAttenuation: false,
+        })
+      );
+      // MESH with GEOMETRY, and Normal MATERIAL
+      Globals.scene.add(this._frust_pts);
+    }
+
+    //If press right then move cam.
+    if (Globals.input.mouse.Right.pressed()) {
+      g_bMovingPlayer = !g_bMovingPlayer;
+    }
+
+    if (g_bMovingPlayer) {
       this.movePlayer(dt);
       this.centerViewportWhileFlying();
     }
@@ -1990,6 +2054,9 @@ class InputControls {
     //This moves the player (the person) not the spite character
     let player = Globals.player;
     let spd = 12;
+    if (Globals.input.keyboard.Shift.pressOrHold()) {
+      spd = 24;
+    }
     let amtstr = spd * Globals.input.MovementController.Axis.x * dt;
     if (amtstr !== 0) {
       let r: vec3 = Globals.frustum.CamDir.clone().cross(new vec3(0, 1, 0)).normalize();
@@ -2137,10 +2204,7 @@ export class WorldView25D extends Object3D {
 
     //Must be called after spritemap load
     this._quickUI = new QuickUI(this);
-
-    let spr = g_mainWorld.MasterMap.MapData.Sprites.getSpriteByName("ui_title");
-    let bounds :Box2f = spr.getTileBounds();
-    this._quickUI.Elements.push(new UIElement(this._quickUI, bounds.Min.x, bounds.Min.y, bounds.Width(), bounds.Height()));
+    this._quickUI.Elements.push(new UIElement(this._quickUI, "ui_title"));
 
     //Must be called after spritemap load
     this._environment = new Environment(this);
@@ -2226,8 +2290,10 @@ export class WorldView25D extends Object3D {
   }
 
   private copyObjectTiles(ob: Sprite25D) {
-    let depth = this.getLayerDepth(ob.Layer);
-    this._buffer.copyObjectTile(ob, depth);
+    if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
+      let depth = this.getLayerDepth(ob.Layer);
+      this._buffer.copyObjectTile(ob, depth);
+    }
     ob.clearDirty();
 
     for (let ci = 0; ci < ob.Children.length; ci++) {
@@ -2235,9 +2301,11 @@ export class WorldView25D extends Object3D {
     }
   }
   private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, depth: number, block: TileBlock) {
-    //You can override tile layer depth by setting the layer manually on the sprite.
-    depth = (ob.Layer === TileLayerId.Unset ? depth : this.getLayerDepth(ob.Layer));
-    this._buffer.copyCellTile(cell, ob, frame, depth, block);
+    if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
+      //You can override tile layer depth by setting the layer manually on the sprite.
+      depth = (ob.Layer === TileLayerId.Unset ? depth : this.getLayerDepth(ob.Layer));
+      this._buffer.copyCellTile(cell, ob, frame, depth, block);
+    }
     ob.clearDirty();
 
     for (let ci = 0; ci < ob.Children.length; ci++) {
@@ -2700,6 +2768,7 @@ export class Tickler extends PhysicsObject3D {
     }
     return null;
   }
+  private _bMovingPlayer = false;
   public update(dt: number) {
     super.update(dt);
 
@@ -2709,7 +2778,8 @@ export class Tickler extends PhysicsObject3D {
     }
     else {
       let hand_pos_final: vec3 = null;
-      if (Globals.input.mouse.Right.pressOrHold()) {
+
+      if (g_bMovingPlayer) {
         //Player is moving.
         hand_pos_final = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 4);
       }
@@ -2754,6 +2824,47 @@ export class Tickler extends PhysicsObject3D {
 
   }
 }
+export class UILayout extends GlobalEventObject {
+  private _widthPx: number = 128;
+  private _heightPx: number = 128;
+
+  public constructor(width_px: number, height_px: number) {
+    super();
+    this._widthPx = width_px;
+    this._heightPx = height_px;
+    Globals.screen.register(GlobalEvent.EventScreenChanged, this);
+  }
+  public project(pos_layout: vec2, wh_layout: vec2, out_box_r3: Box3, depth: number = 0.0002) {
+    if (!out_box_r3) {
+      out_box_r3 = new Box3();
+    }
+
+    let x1_ratio = pos_layout.x / this._widthPx;
+    let y1_ratio = pos_layout.y / this._heightPx;
+    let x2_ratio = (pos_layout.x + wh_layout.x) / this._widthPx;
+    let y2_ratio = (pos_layout.y + wh_layout.y) / this._heightPx;
+
+    let X1 = Globals.frustum.right.clone().multiplyScalar(x1_ratio * Globals.frustum.nearPlaneWidth);
+    let Y1 = Globals.frustum.down.clone().multiplyScalar(y1_ratio * Globals.frustum.nearPlaneHeight);
+    let X2 = Globals.frustum.right.clone().multiplyScalar(x2_ratio * Globals.frustum.nearPlaneWidth);
+    let Y2 = Globals.frustum.down.clone().multiplyScalar(y2_ratio * Globals.frustum.nearPlaneHeight);
+
+    out_box_r3.min = Globals.frustum.ntl.clone().add(X1.clone().add(Y1));
+    out_box_r3.max = Globals.frustum.ntl.clone().add(X2.clone().add(Y2));
+    out_box_r3.min.add(Globals.frustum.normal.clone().multiplyScalar(depth));
+    out_box_r3.max.add(Globals.frustum.normal.clone().multiplyScalar(depth));
+
+    //Swap y's for Top left to Bot left coords.
+    // let tmp = out_box_r3.min.y;
+    // out_box_r3.min.y = out_box_r3.max.y;
+    // out_box_r3.max.y = tmp;
+  }
+  public receiveEvent(event: GlobalEvent) {
+    if (event.Id === GlobalEvent.EventScreenChanged) {
+
+    }
+  }
+}
 export class UIElement {
   //A simple texture that we got from the tile map
   private _frame: SpriteFrame = null;
@@ -2761,66 +2872,39 @@ export class UIElement {
   public Verts: Array<vec3> = new Array<vec3>();
   public Depth: number = 0.01;
   private _ui: QuickUI = null;
+  public Pos: vec2 = new vec2(0, 0); // In layout pixels.
+  public Size: vec2 = new vec2(256, 256); // in layout pixels
+  private _box: Box3 = new Box3();
 
   //For now we're just going to use textures
-  public constructor(ui: QuickUI, frame_x: number, frame_y: number, frame_width: number, frame_height: number) {
+  public constructor(ui: QuickUI, spriteName: string) {
     this._ui = ui;
-    this._frame = ui.WorldView.Atlas.getFrame(frame_x as Int, frame_y as Int, frame_width as Int, frame_height as Int);
+    let spr = g_mainWorld.MasterMap.MapData.Sprites.getSpriteByName("ui_title");
+    this._frame = spr.getDefaultTileFrame();
+    //let bounds: Box2f = spr.getTileBounds();
+    //bounds.Min.x, bounds.Min.y, bounds.Width(), bounds.Height()));
+    //frame_x: number, frame_y: number, frame_width: number, frame_height: number
+    //this._frame = ui.WorldView.Atlas.getFrame(frame_x as Int, frame_y as Int, frame_width as Int, frame_height as Int);
   }
   public update(parent_depth: number) {
-    //hard coding title screen here.
-
     let rot: Quaternion = new Quaternion(1, 1, 1, 1);
     let scale: vec2 = new vec2(1, 1);
-    let widthR3 = 1;
-    let heightR3 = 1;
-    let depth = parent_depth + this.Depth;
 
+    this._ui.Layout.project(this.Pos, this.Size, this._box);
 
+    let bw = Math.abs(this._box.max.x - this._box.min.x);//This essentially fixes the y=down problem for the ui in particular.
+    let bh = Math.abs(this._box.max.y - this._box.min.y);
 
-    let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
-    let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV());
-    let sin_fov_2 = Math.sin(fov * 0.5);
-    let dist = (this._frame.tile_width_tiles * 0.5) / sin_fov_2;
-    //let delta_dist = Globals.player.position.z - dist;
-
-    //  let normal = new vec3();
-    //  Globals.camera.getWorldDirection(normal);
-    // let down = new vec3();
-    // down = Globals.camera.up.clone().multiplyScalar(-1);
-
-    // let right = new vec3();
-    // right = down.clone().cross(normal);
-
-    //  let campos = new vec3();
-    //  Globals.player.getWorldPosition(campos);
-
-    let delta = Globals.frustum.ftl.clone().sub(Globals.frustum.ntl);
-    let pos: vec3 = Globals.frustum.ntl.clone().add(delta.normalize().multiplyScalar(dist));
-
-    //let pos: vec3 = new vec3(this._ui.WorldView.Viewport.BoxR2.Min.x, this._ui.WorldView.Viewport.BoxR2.Min.y, 0);
-
-    SpriteFrame.createQuadVerts(this.Verts, pos, rot, scale, this._frame.tile_width_tiles, this._frame.tile_height_tiles,
+    SpriteFrame.createQuadVerts(this.Verts, this._box.min, rot, scale, bw, bh,
       Globals.frustum.right.clone(), Globals.frustum.down.clone(), Globals.frustum.normal.clone());
-
-    //compute the distance needed to keep this in the correct distance so it fills the screen.
-
-
-    // for (let vi = 0; vi < 4; ++vi) {
-    //  this.Verts[vi].z = delta_dist;
-    // }
-
-
-    //Add depth ** Do this later for ui elements that are on teh screen...
-    // for (let vi = 0; vi < 4; ++vi) {
-    //   this.Verts[vi].z = depth;
-    // }
-
   }
 }
 export class QuickUI {
   private _elements: Array<UIElement> = new Array<UIElement>();
   public get Elements(): Array<UIElement> { return this._elements; }
+
+  private _layout: UILayout = null;
+  public get Layout(): UILayout { return this._layout; }
 
   public readonly c_base_ui_depth = 0.06;
 
@@ -2828,6 +2912,7 @@ export class QuickUI {
   public get WorldView(): WorldView25D { return this._view; }
   public constructor(view: WorldView25D) {
     this._view = view;
+    this._layout = new UILayout(256, 256);
   }
   public update() {
 
@@ -2853,6 +2938,7 @@ let g_hand: Tickler = null;
 let g_atlas: Atlas = null;
 let g_mainWorld: WorldView25D = null;
 let g_bAssetsLoaded: boolean = false;
+let g_bMovingPlayer: boolean = false;
 
 $(document).ready(function () {
   Globals.setFlags(document.location);
@@ -2947,9 +3033,8 @@ function gameLoop(dt: number) {
   if (Globals.gameState === GameState.Title) {
     if (Globals.input.right.A.pressed() || Globals.input.right.Trigger.pressed() || Globals.input.left.A.pressed() || Globals.input.left.Trigger.pressed()) {
       Globals.gameState = GameState.Play;
-
       //You can only play music when the user has interacted wit the page.
-      //Globals.audio.playMusic(Files.Audio.MusicBeepy);
+      // Globals.audio.playMusic(Files.Audio.MusicBeepy);
     }
   }
 

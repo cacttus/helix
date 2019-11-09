@@ -16,7 +16,7 @@ import { vec4, vec3, vec2, ivec2 } from './Math';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 
 export interface AfterLoadFunction { (x: any): void; };
- 
+
 
 //https://stackoverflow.com/questions/38213926/interface-for-associative-object-array-in-typescript
 export interface Dictionary<T> {
@@ -341,8 +341,8 @@ export class AudioManager {
 
     if (file in this._music && this._music[file] && this._music[file].audio && this._music[file].audio.source) {
       this._music[file].stop();
-        Globals.logDebug("Playing music " + music_file)
-        this._music[file].play();
+      Globals.logDebug("Playing music " + music_file)
+      this._music[file].play();
     }
     else {
       let that = this;
@@ -799,15 +799,110 @@ export class VirtualButton {
   }
 }
 
-export class Screen2D {
+export type EventId = number;
+
+export class GlobalEvent {
+  public static readonly EventScreenChanged: EventId = 0;
+  private _id: EventId;
+  private _event: string = "";
+  private _data: any = null;
+  public get Event(): string { return this._event; }
+  public get Id(): number { return this._id; }
+  public get Data(): any { return this._data; }
+  public constructor(event: string, id: number, data: any) {
+    this._event = event;
+    this._data = data;
+    this._id = id;
+  }
+  public clone(data: any): GlobalEvent {
+    let e = new GlobalEvent(this._event, this._id, data);
+    return e;
+  }
+
+}
+export class GlobalEventObject {
+  private _bReceivingEvent: boolean = false; // prevent endless recursion.
+  private _bSendingEvent: boolean = false; // prevent endless recursion.
+  public _listeners: Map<GlobalEvent, Set<GlobalEventObject>> = new Map<GlobalEvent, Set<GlobalEventObject>>();
+  public constructor() {
+  }
+  public receiveEvent(event: GlobalEvent) {
+    // Override.
+  }
+  public sendEvent(id: EventId, data: any) {
+    this._bSendingEvent = true;
+    try {
+      let e = this.get(id);
+      if (e === null) {
+        Globals.logError("Event id " + id + " was not registered.");
+      }
+      else {
+        let new_e = e.clone(data);
+
+        for (let [k, v] of this._listeners) {
+          for (let L of v) {
+            if (!L._bReceivingEvent) {
+              L._bReceivingEvent = true;
+              L.receiveEvent(new_e);
+              L._bReceivingEvent = false;
+            }
+          }
+        }
+      }
+    }
+    catch (ex) {
+      Globals.logError("Exception thrown while processing event.");
+      throw ex;
+    }
+    finally {
+      this._bSendingEvent = false;
+    }
+  }
+  public register(eventId: EventId, listener: GlobalEventObject) {
+    let ev = this.get(eventId);
+    if (!ev) {
+      let arr = this._listeners.get(ev);
+      if (arr) {
+        arr.add(listener);
+      }
+      else {
+        Globals.logError("Event obj array was null.")
+      }
+    }
+    else {
+      Globals.logError("Could not find event ID " + eventId + " to register.")
+    }
+  }
+  public addNotification(id: EventId, name: string = "") {
+    if (!this.get(id)) {
+      this._listeners.set(new GlobalEvent(name, id, null), new Set<GlobalEventObject>());
+    }
+    else {
+      Globals.logWarn("Event " + name + " already created.")
+    }
+  }
+
+  private get(id: number): GlobalEvent {
+    let ret: GlobalEvent = null;
+    for (let [k, v] of this._listeners) {
+      if (k.Id === id) {
+        ret = k;
+        break;
+      }
+    }
+    return ret;
+  }
+}
+
+export class Screen2D extends GlobalEventObject {
   private _canvas: HTMLCanvasElement = null;
+  private _lastWidth = 0;
+  private _lastHeight = 0;
+  private _aspect = 0;
   get canvas(): HTMLCanvasElement { return this._canvas; }
-  get pixelWidth(): number {
-    return this._canvas.width;
-  }
-  get pixelHeight(): number {
-    return this._canvas.height;
-  }
+  get pixelWidth(): number { return this._lastWidth; }
+  get pixelHeight(): number { return this._lastHeight; }
+  get aspect(): number { return this._aspect; }//aspect ratio
   get elementWidth(): number {
     let rect = this._canvas.getBoundingClientRect();
     return rect.width;
@@ -817,10 +912,19 @@ export class Screen2D {
     return rect.height;
   }
   public constructor(canvas: HTMLCanvasElement) {
+    super();
     this._canvas = canvas;
+    this.addNotification(GlobalEvent.EventScreenChanged);
   }
   //void blit.
-
+  public sizeChanged() {
+    if (this._lastWidth !== this.pixelWidth || this._lastHeight !== this.pixelHeight) {
+      this._lastWidth = this._canvas.width;
+      this._lastHeight = this._canvas.height;
+      this._aspect = this._lastWidth / this._lastHeight;
+      this.sendEvent(GlobalEvent.EventScreenChanged, null);
+    }
+  }
   //Return the relative XY of the mouse relative to the top left corner of the canvas.
   public getCanvasRelativeXY(clientX: number, clientY: number): Vector2 {
     let v2: Vector2 = new Vector2();
@@ -838,7 +942,7 @@ export class Screen2D {
   //Input is NON-RELATIVE mouse point ( passed in from mousemove event )
   public project3D(clientX: number, clientY: number, distance: number): Vector3 {
     let v2: Vector2 = this.getCanvasRelativeXY(clientX, clientY);
-    
+
     let mouse_pos = Globals.frustum.project(v2.x, v2.y, distance);
     return mouse_pos;
   }
@@ -1000,18 +1104,21 @@ export class Mouse extends Vector3 {
     if (Math.abs(dy) > maxPixel) { dy = Math.sign(dy) * maxPixel }
 
     let campos = Globals.frustum.CamPos.clone();
-    
+
     let camdir = Globals.frustum.CamDir.clone();//new vec3();
 
     let rot_speed = 0.01; // Change this to change rotation speed.
 
-    let right = camdir.clone().cross(Globals.camera.up).normalize();
-    let down = Globals.camera.up.clone().normalize().multiplyScalar(-1);
+    let right = Globals.frustum.right.clone(); //camdir.clone().cross(Globals.camera.up).normalize();
+    let down = Globals.frustum.down.clone(); //Globals.camera.up.clone().normalize().multiplyScalar(-1);
 
     this.curView.add(right.multiplyScalar(dx * rot_speed));
     this.curView.add(down.multiplyScalar(dy * rot_speed));
 
     Globals.camera.lookAt(this.curView.clone().add(campos));
+
+    Globals.frustum.construct();
+
   }
   private shittyRotate() {
     // //Look at the point in the screen projected into 3D
@@ -1360,9 +1467,20 @@ export class Frustum {
   private _nbl: Vector3 = new Vector3();
   private _nbr: Vector3 = new Vector3();
 
-  private _right : vec3 = new vec3();
-  private _down : vec3 = new vec3();
-  private _normal : vec3 = new vec3();
+  private _right: vec3 = new vec3();
+  private _down: vec3 = new vec3();
+  private _up: vec3 = new vec3(); //This is a basis vector not 0,1,0
+  private _normal: vec3 = new vec3();
+
+  private _far_plane_width: number = 0;
+  private _far_plane_height: number = 0;
+  private _near_plane_width: number = 0;
+  private _near_plane_height: number = 0;
+
+  public get nearPlaneWidth(): number { return this._near_plane_width; }
+  public get nearPlaneHeight(): number { return this._near_plane_height; }
+  // public get farPlaneWidth() : number { return this._far_plane_width; }
+  //// public get farPlaneHeight() : number { return this._far_plane_height; }
 
   public get ftl(): Vector3 { return this._ftl; }//back topleft
   public get ftr(): Vector3 { return this._ftr; }//back topright
@@ -1375,14 +1493,15 @@ export class Frustum {
 
   public get right(): Vector3 { return this._right; }
   public get down(): Vector3 { return this._down; }
+  public get up(): Vector3 { return this._up; }
   public get normal(): Vector3 { return this._normal; }
 
-  private _camPos : vec3 = new vec3(0,0,0);
-  private _camDir : vec3 = new vec3(0,0,0);
-  private _camUp : vec3 = new vec3(0,0,0);
-  public get CamPos() : vec3 { return this._camPos; }
-  public get CamDir() : vec3 { return this._camDir; }
-  public get CamUp() : vec3 { return this._camUp; }
+  private _camPos: vec3 = new vec3(0, 0, 0);
+  private _camDir: vec3 = new vec3(0, 0, 0);
+  private _camUp: vec3 = new vec3(0, 0, 0);
+  public get CamPos(): vec3 { return this._camPos; }
+  public get CamDir(): vec3 { return this._camDir; }
+  public get CamUp(): vec3 { return this._camUp; }
 
   //private Points_fpt_ntl: Vector3;//back bottomleft
   public constructor(cam_dir: Vector3 = null, cam_pos: Vector3 = null) {
@@ -1414,27 +1533,44 @@ export class Frustum {
   }
   public construct(cam_dir: vec3 = null, cam_pos: vec3 = null) {
     //This should be the only place where we use getWorldXX because they seem to have a memory leak.
-    if (cam_dir === null) {
-      Globals.camera.getWorldDirection(this._camDir);
+    let pdir: vec3 = new vec3()
+        let groupdir : vec3=new vec3()
+        if (cam_dir === null) {
+      //Globals.camera.getWorldDirection(this._camDir);
+     // if (Globals.player) {
+        //player is initialize after frustum
+     //   Globals.player.getWorldDirection(pdir);
+     // }
+  ///    else {
+        Globals.camera.getWorldDirection(this._camDir);
+
+       // Globals.userGroup.getWorldDirection(groupdir);
+    //  }
+
     }
     if (cam_pos === null) {
       Globals.camera.getWorldPosition(this._camPos);
     }
-    this._camUp = Globals.camera.up.clone().normalize();
+
+    //this is not a correct basis vector.  this is the 'up' reference used to construct the projection matrix
+    this._camUp = Globals.camera.up.clone();//.normalize();
+    
+  
 
     cam_dir = this.CamDir;
     cam_pos = this.CamPos;
-    let camup = this.CamUp;
+
+    //Construct the correct up basis vector
+    let rightVec = cam_dir.clone().cross(Globals.camera.up); //TODO: see if this changes things
+    rightVec.normalize();
+  
+    let camup = rightVec.clone().cross(cam_dir).normalize(); // I think cross product preserves length but whatever
 
     let nearCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.near));
     let farCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.far));
     let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
     let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV());
     let tan_fov_2 = Math.tan(fov / 2.0);
-
-
-    let rightVec = cam_dir.clone().cross(camup); //TODO: see if this changes things
-    rightVec.normalize();
 
     let w_far_2 = tan_fov_2 * Globals.camera.far;
     let h_far_2 = w_far_2 * ar;
@@ -1455,9 +1591,17 @@ export class Frustum {
     this._nbr = nearCenter.clone().sub(cup_near).add(crt_near);
 
 
-    this._right= rightVec.clone();
+    this._right = rightVec.clone();
+    this._up = camup;
     this._down = camup.clone().multiplyScalar(-1);
     this._normal = cam_dir.clone();
+
+
+    //this._far_plane_width = this.ntr
+    //this._far_plane_height : number = 0;
+    this._near_plane_width = this.ntr.clone().sub(this.ntl).length();
+    this._near_plane_height = this.nbl.clone().sub(this.ntl).length();
+
   }
 }
 

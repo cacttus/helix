@@ -1,8 +1,20 @@
+11.09.19 - 2
+Fixed issues with the frustum not updating correctly.  It wasn't updating when we moved the mosue.
+Also fixed frustum's "up"  the THREE.JS up is actually y=1, not the camera's basis vector.
+Fixed the quick UI scaling problem.
+Got all the tiles to tile correctly.
+Fixed another problem where the tile frame wasn't mapping to the specified TILED frame correctly.
+
+TODO:
+Water Animation isn't working anymore.
+Random tilesets for Sand and grass (flowers) broken.
+Fix character sprite, NPCs, Dialogue, User Interface, Walls, Sprite Grabbing
+
 11.08.19
 Got the base world to show with new data format.
 This makes it easier to define sprites in Tiled.  Optimally a sprite object definition would be much cleaner.
 Next step is to fix tiling and the characters.
-After this, character interaction, User Interface, and of course Sprite Grabbing will be the final addition.
+After this, character interaction, User Interface, Walls, Grass Animation and of course Sprite Grabbing will be the final addition.
 
 
 11.06.19

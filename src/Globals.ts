@@ -335,11 +335,9 @@ export class _Globals {
 
           if (needResize) {
             this._renderer.setSize(width, height, false);
-          }
-
-          if (needResize) {
             Globals.camera.aspect = this._renderHeight / this._renderWidth; //canvas.clientWidth / canvas.clientHeight;
             Globals.camera.updateProjectionMatrix();
+            this._screen.sizeChanged();
           }
           //Set the actual cnavas size.
           //This should cause the resize method to fire.
@@ -582,9 +580,7 @@ export class _Globals {
   }
   private createCamera() {
     //  const canvas: HTMLCanvasElement = document.querySelector('#page_canvas');
-    this._camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 1000);
-
-    this._frustum = new Frustum();
+    this._camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 1, 1000);
 
     //https://stackoverflow.com/questions/49471653/in-three-js-while-using-webvr-how-do-i-move-the-camera-position
     //In VR we actually add the camera to a group since user actually moves the camera(s) reltaive to origin
@@ -592,6 +588,8 @@ export class _Globals {
     this._userGroup.add(this._camera);
     this._userGroup.position.set(0, 0.02, -0.12);
     this._userGroup.rotateY(0);
+    
+    this._frustum = new Frustum();
   }
   private createScene() {
     let szGrid = 'dat/img/grd.png';
