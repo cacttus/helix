@@ -9,6 +9,7 @@ export enum Audio {
   HandGrab = 'hand_grab.ogg',
   HandRelease = 'hand_release.ogg',
   MusicBeepy = 'music_beepy.ogg',
+  GrassBrush = 'grass_brush.ogg',
 }
 export enum Model {
   Hand = 'hand.glb',

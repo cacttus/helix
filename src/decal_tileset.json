@@ -366,12 +366,12 @@
                 {
                  "name":"class",
                  "type":"string",
-                 "value":"DoorTrigger"
+                 "value":"PortalTrigger"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
-                 "value":"door_trigger"
+                 "value":"portal_trigger"
                 }]
         }, 
         {
@@ -747,6 +747,11 @@
                  "value":"Tile"
                 }, 
                 {
+                 "name":"door_state",
+                 "type":"string",
+                 "value":"closed"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"blue_door"
@@ -1004,12 +1009,22 @@
                 {
                  "name":"class",
                  "type":"string",
-                 "value":"Tile"
+                 "value":"Door"
                 }, 
                 {
                  "name":"collision",
                  "type":"string",
                  "value":"layer"
+                }, 
+                {
+                 "name":"door_state",
+                 "type":"string",
+                 "value":"open"
+                }, 
+                {
+                 "name":"is_key",
+                 "type":"string",
+                 "value":"true"
                 }, 
                 {
                  "name":"layer",
@@ -1019,7 +1034,7 @@
                 {
                  "name":"name",
                  "type":"string",
-                 "value":"vial_shop"
+                 "value":"blue_door"
                 }, 
                 {
                  "name":"tiling",
@@ -1383,17 +1398,32 @@
                 {
                  "name":"class",
                  "type":"string",
-                 "value":"Tile"
+                 "value":"MonsterGrass"
+                }, 
+                {
+                 "name":"is_key",
+                 "type":"string",
+                 "value":"true"
                 }, 
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"foreground"
+                 "value":"Player_Relative_Foreground"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
-                 "value":"monster_grass"
+                 "value":"monster_grass_tall"
+                }, 
+                {
+                 "name":"tiles_height",
+                 "type":"string",
+                 "value":"2"
+                }, 
+                {
+                 "name":"tiles_width",
+                 "type":"string",
+                 "value":"1"
                 }]
         }, 
         {
@@ -1743,6 +1773,21 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"is_key",
+                 "type":"string",
+                 "value":"true"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"Player_Relative_Foreground"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"monster_grass_short"
                 }]
         }, 
         {
@@ -1751,17 +1796,17 @@
                 {
                  "name":"class",
                  "type":"string",
-                 "value":"Tile"
+                 "value":"MonsterGrass"
                 }, 
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"object"
+                 "value":"Player_Relative_Foreground"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
-                 "value":"monster_grass"
+                 "value":"monster_grass_tall"
                 }]
         }, 
         {
@@ -3116,6 +3161,26 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"none"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"green_house"
+                }, 
+                {
+                 "name":"tiling",
+                 "type":"string",
+                 "value":"none"
                 }]
         }, 
         {
@@ -3419,6 +3484,26 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"layer"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"green_house"
+                }, 
+                {
+                 "name":"tiling",
+                 "type":"string",
+                 "value":"none"
                 }]
         }, 
         {
@@ -3515,6 +3600,16 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"door_state",
+                 "type":"string",
+                 "value":"closed"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"green_door"
                 }]
         }, 
         {
@@ -3732,6 +3827,26 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"layer"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"green_house"
+                }, 
+                {
+                 "name":"tiling",
+                 "type":"string",
+                 "value":"none"
                 }]
         }, 
         {
@@ -3769,12 +3884,17 @@
                 {
                  "name":"class",
                  "type":"string",
-                 "value":"Tile"
+                 "value":"Door"
                 }, 
                 {
                  "name":"collision",
                  "type":"string",
                  "value":"layer"
+                }, 
+                {
+                 "name":"is_key",
+                 "type":"string",
+                 "value":"true"
                 }, 
                 {
                  "name":"layer",
@@ -3784,7 +3904,7 @@
                 {
                  "name":"name",
                  "type":"string",
-                 "value":"green_house"
+                 "value":"green_door"
                 }, 
                 {
                  "name":"tiling",
@@ -4685,6 +4805,24 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }]
+        }, 
+        {
+         "id":420,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"green_dna"
+                }]
+        }, 
+        {
+         "id":450,
+         "properties":[
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"green_dna"
                 }]
         }, 
         {

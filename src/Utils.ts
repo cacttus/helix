@@ -136,6 +136,11 @@ export class Utils {
       Globals.logError("enumKeyVals - Enum values were not evenly divisible. ?");
       Globals.debugBreak();
     }
+    
+    //object.keys out of order - https://hackernoon.com/out-of-order-keys-in-es6-objects-d5cede7dc92e
+
+    //First sort the Object.keys.  This is because negative numbers will actually sort after some strings.
+ //   let 
 
     let valoff: number = kv.length / 2;
 

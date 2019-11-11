@@ -3,11 +3,11 @@ import { Color, Box3, Object3D, MeshBasicMaterial, Material, Quaternion, Box3Hel
 import { Globals, GameState, ResizeMode } from './Globals';
 //import { basename } from 'upath';
 import { Utils } from './Utils';
-import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer, GlobalEvent, GlobalEventObject, HashSet, MultiMap } from './Base';
+import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer, GlobalEvent, GlobalEventObject, HashSet, MultiMap, RandomSet } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
-import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
-import { Tiling, TileGrid, MasterMap, Cell, TileBlock, TiledTileId, HelixTileId, TileLayerId, HelixTileType, RandomSet } from './TileGrid';
+import { Int, toInt } from './Int';
+import { Tiling, TileGrid, MasterMap, Cell, TileBlock, TiledTileId, HelixTileId, TileLayerId, HelixTileType } from './TileGrid';
 import { PhysicsObject3D } from './Physics3D';
 
 export class Color4 {
@@ -1650,10 +1650,22 @@ export class Sprite25D {
     return ret;
   }
 }
+export class Door25D extends Sprite25D {
+  public constructor(atlas: Atlas) {
+    super(atlas);
+  }
+
+}
+export class MonsterGrass25D extends Sprite25D {
+  public constructor(atlas: Atlas) {
+    super(atlas);
+  }
+}
 export class Phyobj25D extends Sprite25D {
   private _velocity: vec3 = new vec3(0, 0, 0);
   public get Velocity(): vec3 { return this._velocity; }
   public set Velocity(x: vec3) { this._velocity = x; }
+  public CurrentCellPosition: ivec2 = new ivec2(0, 0);
 
   public ApplySnap: boolean = false;
 
@@ -1713,9 +1725,15 @@ export class Phyobj25D extends Sprite25D {
         this.ApplySnap = false;
       }
 
+
+
       //Reset velocity
       this.Velocity.set(0, 0, 0);
     }
+
+    //Set current position of char for further computation of player_rel sprites
+    let c = this.getCurrentCellR3();
+    this.CurrentCellPosition = c.CellPos_World.clone();
 
     super.update(dt);
   }
@@ -1733,6 +1751,7 @@ export class Character extends Phyobj25D {
   private _speedMultiplier: number = 1;
   private _carryover_velocity: number = 0;//Carryover, if we are moving in the same direction but we've hit a tile boundary. This prevents hiccups in a low frame rate.
   private _hitSoundTimer: WaitTimer = new WaitTimer(.6);
+  private _grassBrushTimer: WaitTimer = new WaitTimer(.3);
   private _runSoundTimer: WaitTimer = new WaitTimer(.6);
 
   public set SpeedMultiplier(x: number) { this._speedMultiplier = x; }
@@ -1771,6 +1790,7 @@ export class Character extends Phyobj25D {
 
     this._hitSoundTimer.update(dt);
     this._runSoundTimer.update(dt);
+    this._grassBrushTimer.update(dt);
     this.updateMovement(dt);
     super.update(dt);
   }
@@ -1861,6 +1881,21 @@ export class Character extends Phyobj25D {
             this.SpeedMultiplier = this._hitSoundTimer.interval;
           }
           else {
+
+            if (c.hasTile("monster_grass_short")) {
+              let that = this;
+              window.setTimeout(() => {
+                Globals.audio.play(Files.Audio.GrassBrush, that.Center);
+                that._grassBrushTimer.reset();
+                if (Random.float(0, 1) > 0.2) {
+                  window.setTimeout(() => {
+                    Globals.audio.play(Files.Audio.GrassBrush, that.Center);
+                    that._grassBrushTimer.reset();
+                  }, 100 + Random.float(0, 1) * 260);
+                }
+              }, 100 + Random.float(0, 1) * 260);
+            }
+
             this._bMoving = true;
             this._eMoveDirection = this._eCommandedDirection;
             this._startPosition = this.Position.clone();
@@ -2326,17 +2361,39 @@ export class WorldView25D extends Object3D {
       this.copyObjectTiles(ob.Children[ci]);
     }
   }
-  private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, depth: number, block: TileBlock) {
+  private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, block: TileBlock) {
     if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
-      //You can override tile layer depth by setting the layer manually on the sprite.
-      depth = (ob.Layer === TileLayerId.Unset ? depth : this.getLayerDepth(ob.Layer));
+      let depth = 0;
+      if (ob.Layer === TileLayerId.Player_Relative_Foreground || block.Layer == TileLayerId.Player_Relative_Foreground) {
+        let yp = this.Player.CurrentCellPosition.y;
+        let yc = cell.CellPos_World.y;
+        if (yp < yc) {
+          depth = this.getLayerDepth(TileLayerId.Foreground);
+        }
+        else if (yp === yc) {
+          depth = this.getLayerDepth(TileLayerId.Background);
+        }
+        else if (yp > yc) {
+          depth = this.getLayerDepth(TileLayerId.Background);
+        }
+
+      }
+      else {
+        //You can override tile layer depth by setting the layer manually on the sprite.
+        depth = (ob.Layer === TileLayerId.Unset ? this.getLayerDepth(block.Layer) : this.getLayerDepth(ob.Layer));
+      }
+
       this._buffer.copyCellTile(cell, ob, frame, depth, block);
     }
     ob.clearDirty();
+    //**This is actually incorrect because the TileBLock has the quads.  We can't have children.
+    //Main function of TileBlock is to A) reduce the data footprint of Sprite25D B) optimize drawing of static objects by using a BVH
+    /*
 
     for (let ci = 0; ci < ob.Children.length; ci++) {
       this.copyCellTiles(cell, ob.Children[ci], frame, depth, block);
     }
+    */
   }
   private updateViewport(dt: number) {
     if (!this.Player) {
@@ -2392,7 +2449,7 @@ export class WorldView25D extends Object3D {
       frame = block.SpriteRef.Animation.CurrentFrameIndex;
     }
 
-    this.copyCellTiles(c, block.SpriteRef, frame, this.getLayerDepth(block.Layer), block);
+    this.copyCellTiles(c, block.SpriteRef, frame, block);
   }
   private getLayerDepth(layer: TileLayerId): number {
     let ret = (layer as number) * WorldView25D.LayerDepth;
@@ -2994,6 +3051,10 @@ function testMapAndHashSet() {
 }
 $(document).ready(function () {
   //testMapAndHashSet
+  // let a = Object.getOwnPropertyNames(TileLayerId);
+  // let b = Object.getOwnPropertySymbols(TileLayerId);
+
+  // return;
 
   Globals.setFlags(document.location);
 

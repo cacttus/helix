@@ -1,72 +1,12 @@
-import { Color, EqualStencilFunc } from 'three';
+import { Color } from 'three';
 import { ivec2, vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import { Globals } from './Globals';
 import { Utils } from './Utils';
-import { Atlas, Sprite25D, FDef, SpriteFrame, Character, Direction4Way, SpriteTileInfo as SpriteTileInfo, CollisionHandling, Phyobj25D, HandGesture, SpriteAnimationData, Animation25D, SpriteKeyFrame } from './Main';
-import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
+import { Atlas, Sprite25D, Door25D, FDef, SpriteFrame, Character, Direction4Way, SpriteTileInfo, CollisionHandling, HandGesture, SpriteAnimationData, SpriteKeyFrame, MonsterGrass25D } from './Main';
+import { Int, roundToInt, toInt } from './Int';
+import { MultiMap, HashSet, IVec2Set, IVec2Map, RandomSet } from './Base';
 import world_data from './tiles_world.json';
-//import tiles_modular from './modular_tileset.json';
 import master_tileset from './decal_tileset.json';
-import { Random, MultiMap as MultiMap, HashSet, IVec2Set, IVec2Map } from './Base';
-
-export class RandomSet<T> {
-  private _elements: MultiMap<number, T> = null;
-  public get Elements(): MultiMap<number, T> { return this._elements; }
-  private _normalized = false;
-
-  public constructor() {
-  }
-  public select(): T {
-    let ret: T = null;
-    let threshold: number = 0;
-    let rd = Random.float(0, 1);
-    for (let [k, v] of this._elements) {
-
-      threshold += k;
-      if (rd < threshold) {
-        ret = v;
-        break;
-      }
-    }
-    // if (ret === null) {
-    //   if (this._elements.entries() && this._elements.entries().next()) {
-    //     return this._elements.entries().next().value;
-    //   }
-    // }
-    return ret;
-  }
-
-  public set(t: T, prob: number, renormalize: boolean = false) {
-    if (!this._elements) {
-      this._elements = new MultiMap<number, T>();
-    }
-    this._elements.set(prob, t);
-    this._normalized = false;
-
-    if (renormalize) {
-      this.normalize();
-    }
-  }
-  public normalize() {
-    let newMap: MultiMap<number, T> = new MultiMap<number, T>();
-    let sum = 0;
-    let nElements = 0;
-    if (!this._elements) {
-      Globals.logWarn("sprite set had no elements to normalize.")
-      return;
-    }
-    for (let [k, v] of this._elements) {
-      sum += k;
-      nElements++;
-    }
-    for (let [k, v] of this._elements) {
-      let dk = k / sum;
-      newMap.set(dk, v);
-    }
-    this._elements = newMap;
-    this._normalized = true;
-  }
-}
 
 
 class TmxProperty {
@@ -177,24 +117,30 @@ export enum HelixTileType {
   //This is different from old tiledspriteid because this is determines the class/function of the sprite not just its tileset.
   Unset,
   Character,
-  DoorTrigger,
+  PortalTrigger,
   BorderBlocker,
   Conduit,
   CellTile,
   UI,
+  Object
 }
 export enum TileLayerId {
   /* THESE MUST BE IN ORDER TO GET CELL BLOCKS ARRAY */
-  DebugBackground = -1,
+
   Border = 0,
   Background = 1,
-  Water = 2, //Midground = 2,
-  AboveWater = 3,
-  Objects = 4,
-  Foreground = 5,
-  Conduit = 6,
-  Data_Objects = 7,
-  LayerCountEnum = 8,
+  Elevation = 2,
+  Water = 3, //Midground = 2,
+  AboveWater = 4,
+  Objects = 5,
+  Objects2 = 6,
+  Foreground = 7,
+  Conduit = 8,
+  Data_Objects = 9,
+  LayerCountEnum = 10,
+
+  Player_Relative_Foreground = 90, // Goes in front of player if player is on tile, or behind player if player is in front.
+  DebugBackground = 91,
   Unset = 999, // Special layer type indicating that the layer of this
 }
 export enum Tiling {
@@ -260,8 +206,17 @@ export class SpriteFrameDefinition {
     let ret: SpriteFrameDefinition = new SpriteFrameDefinition();
     ret.tiled_id = tiled_tileset_id;
 
+    let debug_name = "";
+    //Parse name first so we have some way to breakpoint this
     for (let prop of props) {
+      if (TiledUtils.propMatch(SpriteFrameDefinition.prop_name, prop)) {
+        TiledUtils.validateProp(ret.name = prop.value);
+        debug_name = ret.name;
+      }
+    }
 
+    //Parse all props
+    for (let prop of props) {
       if (TiledUtils.propMatch(SpriteFrameDefinition.prop_after_load, prop)) {
         TiledUtils.validateProp(ret.after_load = prop.value);
       }
@@ -307,18 +262,10 @@ export class SpriteFrameDefinition {
       }
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
         TiledUtils.validateProp(ret.layer = Utils.stringToEnum(prop.value, Object.keys(TileLayerId)) as TileLayerId);
-      }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
-        TiledUtils.validateProp(ret.duration = Utils.parseNumber(prop.value));
-      }
-      //
-      //public static readonly prop_name: string = "name";//- name
-      //public static readonly prop_tiling: string = "tiling";//  - none (tile is decal), random, fence, dock, white_border
-      //public static readonly prop_random_prob_element: string = "random_prob_element";//               - the probability of this tile in the tiling is random
-      //public static readonly prop_random_set: string = "random_set";// 
-      //
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_name, prop)) {
-        TiledUtils.validateProp(ret.name = prop.value);
+        if (ret.layer === TileLayerId.Player_Relative_Foreground) {
+          let nnn = 0;
+          nnn++;
+        }
       }
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiling, prop)) {
         TiledUtils.validateProp(ret.tiling = Utils.stringToEnum(prop.value, Object.keys(Tiling)) as Tiling);
@@ -348,12 +295,12 @@ export class SpriteDefs {
 
   private _borderTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
   private _playerTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
-  private _doorTileId: HelixTileId = MasterMap.UNDEFINED_TILE; // Note: there may be multiple types of doors. but we can just use a single trigger for this
+  private _portalTileId: HelixTileId = MasterMap.UNDEFINED_TILE; // Note: there may be multiple types of doors. but we can just use a single trigger for this
   private _conduitTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
 
   public get BorderTileId(): HelixTileId { return this._borderTileId; }
   public get PlayerTileId(): HelixTileId { return this._playerTileId; }
-  public get DoorTileId(): HelixTileId { return this._doorTileId; }
+  public get DoorTileId(): HelixTileId { return this._portalTileId; }
   public get ConduitTileId(): HelixTileId { return this._conduitTileId; }
   public SpriteSets: Array<RandomSet<Sprite25D>> = new Array<RandomSet<Sprite25D>>();
   public FrameSets: Map<Sprite25D, RandomSet<SpriteKeyFrame>> = new Map<Sprite25D, RandomSet<SpriteKeyFrame>>();
@@ -589,6 +536,22 @@ export class SpriteDefs {
     ret.TileType = HelixTileType.CellTile;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
     return ret;
   }
+  private makeDoorSprite(atlas: Atlas, def: SpriteFrameDefinition): Door25D {
+    let ret = new Door25D(atlas);
+    ret.Name = def.name;
+    ret.HelixTileId = this.genHelixSpriteId();
+    ret.Layer = def.layer;
+    ret.TileType = HelixTileType.CellTile;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+    return ret;
+  }
+  private makeMonsterGrassSprite(atlas: Atlas, def: SpriteFrameDefinition): MonsterGrass25D {
+    let ret = new MonsterGrass25D(atlas);
+    ret.Name = def.name;
+    ret.HelixTileId = this.genHelixSpriteId();
+    ret.Layer = def.layer;
+    ret.TileType = HelixTileType.CellTile;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+    return ret;
+  }
   private makeUISprite(atlas: Atlas, def: SpriteFrameDefinition): Sprite25D {
     let ret = new Sprite25D(atlas);
     ret.Name = def.name;
@@ -604,25 +567,28 @@ export class SpriteDefs {
     this.validateNoDupes(def);
 
     if (def.typescript_class) {
-      if (Utils.lcmp(def.typescript_class, "character")) {
+      if (Utils.lcmp(def.typescript_class, "Character")) {
         ret = this.makeCharacterSprite(atlas, def);
       }
-      else if (Utils.lcmp(def.typescript_class, "tile")) {
+      else if (Utils.lcmp(def.typescript_class, "Tile")) {
         ret = this.makeTileSprite(atlas, def);
       }
-      else if (Utils.lcmp(def.typescript_class, "doortrigger")) {
+      else if (Utils.lcmp(def.typescript_class, "Door")) {
+        ret = this.makeDoorSprite(atlas, def);
+      }
+      else if (Utils.lcmp(def.typescript_class, "PortalTrigger")) {
         ret = this.makeTileSprite(atlas, def);
 
-        ret.TileType = HelixTileType.DoorTrigger;
-        if (this._doorTileId !== MasterMap.UNDEFINED_TILE) {
+        ret.TileType = HelixTileType.PortalTrigger;
+        if (this._portalTileId !== MasterMap.UNDEFINED_TILE) {
           Globals.logError("Multiple door class were defined.  This is an error. only one tile can be set door class and it must be the sprite's key tile");
           Globals.debugBreak();
         }
         else {
-          this._doorTileId = ret.HelixTileId;
+          this._portalTileId = ret.HelixTileId;
         }
       }
-      else if (Utils.lcmp(def.typescript_class, "areaboundary")) {
+      else if (Utils.lcmp(def.typescript_class, "AreaBoundary")) {
         ret = this.makeTileSprite(atlas, def);
 
         ret.TileType = HelixTileType.BorderBlocker;
@@ -634,7 +600,7 @@ export class SpriteDefs {
           this._borderTileId = ret.HelixTileId;
         }
       }
-      else if (Utils.lcmp(def.typescript_class, "conduit")) {
+      else if (Utils.lcmp(def.typescript_class, "Conduit")) {
         ret = this.makeTileSprite(atlas, def);
 
         ret.TileType = HelixTileType.Conduit;
@@ -646,14 +612,26 @@ export class SpriteDefs {
           this._conduitTileId = ret.HelixTileId;
         }
       }
-      else if (Utils.lcmp(def.typescript_class, "ui")) {
+      else if (Utils.lcmp(def.typescript_class, "UI")) {
         ret = this.makeUISprite(atlas, def);
+      }
+      else if (Utils.lcmp(def.typescript_class, "MonsterGrass")) {
+        ret = this.makeMonsterGrassSprite(atlas, def);
       }
       else {
         //TODO:
         Globals.logError("Could not make sprite for class " + def.typescript_class);
       }
     }
+
+
+    //If we didn't have a class or couldn't find one, then instantiate as basic tile.
+    if (ret === null) {
+      Globals.logWarn("Sprite class not created, defaulting to Tile for def: " + def.name)
+      ret = this.makeTileSprite(atlas, def);
+      //Globals.debugBreak();
+    }
+
     if (def.collision) {
       ret.CollisionHandling = def.collision;
     }
@@ -667,11 +645,6 @@ export class SpriteDefs {
       ret.Tiling = Tiling.None;
     }
 
-    //If we didn't have a class or couldn't find one, then instantiate as basic tile.
-    if (!ret) {
-      Globals.logDebug("Sprite class not defined, defaulting to tile.");
-      ret = this.makeTileSprite(atlas, def);
-    }
 
     return ret;
   }
@@ -1140,7 +1113,7 @@ export class MasterMap {
   public get MapHeightTiles(): Int { return this._mapHeightTiles; }
 
   public static tileTypeIsSpecial(type: HelixTileType): boolean {
-    let b = (type === HelixTileType.DoorTrigger);
+    let b = (type === HelixTileType.PortalTrigger);
     b = b || (type === HelixTileType.BorderBlocker);
     b = b || (type === HelixTileType.Conduit);
     return b;
@@ -1322,12 +1295,12 @@ export class MapArea {
           this.floodFillAddNeighborBorder(pt.clone().add(new ivec2(0, 1)), this.Border);
         }
       }
-      else if (isDoor) {//this.DoorTilesLUT.indexOf(iTile) >= 0) {  Old method
-        ///So the TODO here is to be able to figure out which side of the border the door is on
-        if (!this.Border.has(pt)) {
-          this.Doors.set(pt);
-        }
-      }
+      // else if (isDoor) {//this.DoorTilesLUT.indexOf(iTile) >= 0) {  Old method
+      //   ///So the TODO here is to be able to figure out which side of the border the door is on
+      //   if (!this.Border.has(pt)) {
+      //     this.Doors.set(pt);
+      //   }
+      // }
       else {
         //Add the found tile to the set of tiles.
         this.Tiles.set(pt);
@@ -1479,20 +1452,31 @@ export class TileGrid {
             Globals.debugBreak();
           }
         }
-        else if (tileSprite.TileType == HelixTileType.CellTile) {
-          let computed_tile_data: { sprite: Sprite25D, frame: Int, layer: Int } = {
+        else {
+          let computed_tile_data: { sprite: Sprite25D, frame: Int, layer: Int, animation: SpriteAnimationData } = {
             sprite: tileSprite,
             frame: toInt(-1),
-            layer: toInt(iLayer)
+            layer: toInt(iLayer),
+            animation: tileSprite.Animation.TileData
           };
 
-          this.getSpriteTileFrame(c.CellPos_World.x, c.CellPos_World.y, toInt(iLayer as number), tileSprite, tile, computed_tile_data);
+          if (tileSprite.TileType == HelixTileType.CellTile) {
+            this.getSpriteTileFrame(c.CellPos_World.x, c.CellPos_World.y, toInt(iLayer as number), tileSprite, tile, computed_tile_data);
+          }
+          else if (tileSprite.TileType == HelixTileType.Object) {
+            //Objects are multi-sized.  IDK really.  Should just be a tilesprite.
+          }
 
-          c.Blocks.push(new TileBlock());
-          c.Blocks[c.Blocks.length - 1].SpriteRef = computed_tile_data.sprite;
-          c.Blocks[c.Blocks.length - 1].FrameIndex = computed_tile_data.frame;
-          c.Blocks[c.Blocks.length - 1].Layer = computed_tile_data.layer;
-          c.Blocks[c.Blocks.length - 1].AnimationData = tileSprite.Animation.TileData;
+          //Add a tile block.
+          if (computed_tile_data.frame >= 0) {
+            c.Blocks.push(new TileBlock());
+            c.Blocks[c.Blocks.length - 1].SpriteRef = computed_tile_data.sprite;
+            c.Blocks[c.Blocks.length - 1].FrameIndex = computed_tile_data.frame;
+            c.Blocks[c.Blocks.length - 1].Layer = computed_tile_data.layer;
+            c.Blocks[c.Blocks.length - 1].AnimationData = computed_tile_data.animation;
+          }
+
+
         }
       }
     }
@@ -1869,6 +1853,7 @@ export class TileBlock {
   private _frameIndex: Int = 0 as Int;//The index of the frame that this sprite
   private _layer: Int = -1 as Int;
   private _animationData: SpriteAnimationData = null;
+  public Box: Box2f;   // So we need custom boxes for things like ladders, &c
 
   public Verts: Array<vec3> = new Array<vec3>();
 
@@ -1884,13 +1869,7 @@ export class TileBlock {
   public get Layer(): Int { return this._layer; }
   public set Layer(x: Int) { this._layer = x; }
 
-  // public SpriteEffects SpriteEffects = SpriteEffects.None;
-  public Box: Box2f;   // So we need custom boxes for things like ladders, &c
-
   public get Pos(): vec2 { return this.Box.Min; }
-
-  public SlopeTileId: Int = -1 as Int;//One of 4 slopes TL TR BL BR
-  public IsSlope(): boolean { return this.SlopeTileId !== -1 as Int; }
 }
 export class BvhNode {
   //A BVH node in the Master Map
@@ -1904,7 +1883,6 @@ export class BvhNode {
     this.Area = area;
     this.Box = box;
   }
-
 }
 export class Cell {
   //This is a leaf node of the MapArea class, a single cell with fixed w/h
@@ -1915,6 +1893,17 @@ export class Cell {
   public DebugColor: Color = null;
   public DebugVerts: Array<vec3> = new Array<vec3>();
   public static DebugFrame: SpriteFrame = null; // thisis just for debug
+
+  public hasTile(s:string) : boolean { 
+    for(let b of this.Blocks){
+      if(b.SpriteRef){
+        if(b.SpriteRef.Name === s){
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   public isBlocked(layer: Int): boolean {
     for (let block of this.Blocks) {

@@ -159,6 +159,59 @@ export class MultiMap<K, V> /*implements Map<K,HashSet<V>> */ {
   }
 
 }
+export class RandomSet<T> {
+  private _elements: MultiMap<number, T> = null;
+  public get Elements(): MultiMap<number, T> { return this._elements; }
+  private _normalized = false;
+
+  public constructor() {
+  }
+  public select(): T {
+    let ret: T = null;
+    let threshold: number = 0;
+    let rd = Random.float(0, 1);
+    for (let [k, v] of this._elements) {
+
+      threshold += k;
+      if (rd < threshold) {
+        ret = v;
+        break;
+      }
+    }
+    return ret;
+  }
+  public set(t: T, prob: number, renormalize: boolean = false) {
+    if (!this._elements) {
+      this._elements = new MultiMap<number, T>();
+    }
+    this._elements.set(prob, t);
+    this._normalized = false;
+
+    if (renormalize) {
+      this.normalize();
+    }
+  }
+  public normalize() {
+    let newMap: MultiMap<number, T> = new MultiMap<number, T>();
+    let sum = 0;
+    let nElements = 0;
+    if (!this._elements) {
+      Globals.logWarn("sprite set had no elements to normalize.")
+      return;
+    }
+    for (let [k, v] of this._elements) {
+      sum += k;
+      nElements++;
+    }
+    for (let [k, v] of this._elements) {
+      let dk = k / sum;
+      newMap.set(dk, v);
+    }
+    this._elements = newMap;
+    this._normalized = true;
+  }
+}
+
 
 export class Random {
   private static _rand: MersenneTwister = new MersenneTwister;
@@ -1824,21 +1877,3 @@ export class MaterialDuplicate {
 
   }
 }
-
-// //https://stackoverflow.com/questions/29758765/json-to-typescript-class-instance
-// class SerializationHelper {
-//   static toInstance<T>(obj: T, json: string) : T {
-//       var jsonObj  = JSON.parse(json);
-
-//       if (typeof obj["fromJSON"] === "function") {
-//           obj["fromJSON"](jsonObj);
-//       }
-//       else {
-//           for (var propName in jsonObj) {
-//               obj[propName] = jsonObj[propName]
-//           }
-//       }
-
-//       return obj;
-//   }
-// }

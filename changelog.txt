@@ -1,14 +1,40 @@
 TODO 
-grass random sets
+Grass 2 tiles high 
+  so, objects.
+  multiple tiles high/wide.
+  must be interactible.
+  possibly cell-bound.  Not necessary really.
+
+  TileGrid
+    <objects> createdObjects
+
+    if TileType === object
+      ob = sprite.clone()
+
+  WorldView25D -> load
+    for ob of tilegrid->createdObjects  
+      objects.add(ob)
+
+List of objects on cell.
+  objects are static.
+
+
+  **Can't use TileBlock for objects, the main function is TileBlock has the frame quads.
+
+
+Orthogonal Camera
+hand grab animation & hand grab object to physicsobject3d
+doors and moving to another area.
 fix character cell position to be body instead of head.
 fix missing door sprites in conduit
-doors and moving to another area.
-hand grab animation
-hand grab object to physicsobject3d
-grass animation
+
+
 NPCs
 npc Dialogue
 Walls
+
+11/11
+Fixed StringToEnum error
 
 
 11.09.19
