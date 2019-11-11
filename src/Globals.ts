@@ -2,10 +2,9 @@ import * as $ from "jquery";
 import * as THREE from 'three';
 import { WEBGL } from 'three/examples/jsm/WebGL.js';
 import { WEBVR } from 'three/examples/jsm/vr/WebVR.js';
-import {
-  Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D, AlwaysStencilFunc, MeshStandardMaterial,
-  MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, ParametricBufferGeometry
-} from 'three';
+import { Vector3, Color, Scene } from 'three';
+import { vec4, vec3, vec2, ivec2 } from './Math';
+
 import * as Stats from 'stats.js';
 
 //For SSAA thing.
@@ -20,6 +19,119 @@ import { Screen2D, AudioManager, ModelManager, Input, Frustum, TimerState } from
 import { Prof } from "./Prof";
 import { Utils, BrowserType } from './Utils';
 
+export class UnionCamera {
+  //Handles both Orthographic and perspective cameras and makes it easy to convert from one to the other.
+  private _perspective: boolean = true
+  private _frustum: Frustum = null;
+  private _camera: THREE.Camera = null;
+
+  private _camPos: vec3 = new vec3(0, 0, 0);
+  private _camDir: vec3 = new vec3(0, 0, 0);
+  private _camUp: vec3 = new vec3(0, 0, 0);
+  private _camRight: vec3 = new vec3(0, 0, 0);
+  public get CamPos(): vec3 { return this._camPos; }
+  public get CamDirBasis(): vec3 { return this._camDir; }
+  public get CamUpBasis(): vec3 { return this._camUp; }
+  public get CamRightBasis(): vec3 { return this._camRight; }
+
+  public get IsPerspective(): boolean { return this._perspective; }
+  public get PerspectiveCamera(): THREE.PerspectiveCamera { return this._camera as THREE.PerspectiveCamera; }
+  public get OrthographicCamera(): THREE.OrthographicCamera { return this._camera as THREE.OrthographicCamera; }
+
+  public get Near(): number { return this.IsPerspective ? this.PerspectiveCamera.near : this.OrthographicCamera.near; }
+  public get Far(): number { return this.IsPerspective ? this.PerspectiveCamera.far : this.OrthographicCamera.far; }
+  public get Camera(): THREE.Camera { return (this.IsPerspective ? this.PerspectiveCamera : this.OrthographicCamera) as THREE.Camera; }
+  public get Frustum(): Frustum { return this._frustum; }
+
+  private createNewOrtho() {
+    this._camera = new THREE.OrthographicCamera(
+      -8.5, 8.5, 8.5, -8.5 , 1, 1000)
+  }
+  public constructor(persp: boolean) {
+    this._perspective = persp;
+    //  const canvas: HTMLCanvasElement = document.querySelector('#page_canvas');
+    if (this._perspective) {
+      this._camera = new THREE.PerspectiveCamera(75, Globals.canvas.clientWidth / Globals.canvas.clientHeight, 1, 1000);
+    }
+    else {
+      let width: number = 200;
+      let height: number = 200;
+      // this._camera = new THREE.OrthographicCamera(width / - 2, width / 2, height / 2, height / - 2, 1, 1000)
+      this.createNewOrtho();
+    }
+    this._frustum = new Frustum();
+  }
+
+  public windowSizeChanged(w: number, h: number, renderWidth: number, renderHeight: number) {
+    if (this.IsPerspective) {
+      this.PerspectiveCamera.aspect = renderHeight / renderWidth; //canvas.clientWidth / canvas.clientHeight;
+      this.PerspectiveCamera.updateProjectionMatrix();
+    }
+    else {
+      // Globals.OrthographicCamera.aspect = this._renderHeight / this._renderWidth; //canvas.clientWidth / canvas.clientHeight;
+      this.OrthographicCamera.updateProjectionMatrix();
+    }
+  }
+
+  public updateAfterMoving() {
+    //**This isn't called in the game loop, instead we call this RIGHT after we update the camera's position
+    //This should be the only place where we use getWorldXX because they seem to have a memory leak.
+    this.Camera.getWorldDirection(this._camDir);
+    this.Camera.getWorldPosition(this._camPos);
+
+    this._camRight = this._camDir.clone().cross(this.Camera.up); //TODO: see if this changes things
+    this._camRight.normalize();
+    this._camUp = this._camRight.clone().cross(this._camDir).normalize(); // I think cross product preserves length but whatever
+
+    this.Frustum.construct();
+    this.debug_drawFrustum();
+  }
+  private _frust_pts: THREE.Points = null
+  private debug_drawFrustum() {
+    if (Globals.isDebug()) {
+      if (this._frust_pts !== null) {
+        Globals.scene.remove(this._frust_pts);
+      }
+
+      let push1 = this.Frustum.normal.clone().multiplyScalar(0.02);
+      let push2 = this.Frustum.normal.clone().multiplyScalar(-0.02);
+      let geometry = new THREE.Geometry();
+
+      let d_ntl = this.Frustum.ntl.clone().add(push1);
+      let d_ntr = this.Frustum.ntr.clone().add(push1);
+      let d_nbl = this.Frustum.nbl.clone().add(push1);
+      let d_nbr = this.Frustum.nbr.clone().add(push1);
+      let d_ftl = this.Frustum.ftl.clone().add(push2);
+      let d_ftr = this.Frustum.ftr.clone().add(push2);
+      let d_fbl = this.Frustum.fbl.clone().add(push2);
+      let d_fbr = this.Frustum.fbr.clone().add(push2);
+
+      geometry.vertices.push(
+        d_ntl,
+        d_ntr,
+        d_nbl,
+        d_nbr,
+        d_ftl,
+        d_ftr,
+        d_fbl,
+        d_fbr,
+      );
+
+      this._frust_pts = new THREE.Points(
+        geometry,
+        new THREE.PointsMaterial({
+          side: THREE.DoubleSide,
+          size: 2,
+          sizeAttenuation: false,
+        })
+      );
+      // MESH with GEOMETRY, and Normal MATERIAL
+      Globals.scene.add(this._frust_pts);
+    }
+
+  }
+
+}
 interface VrOrDesktopModeCallback { (): void }
 export enum GameState { Title, Play, GameOver }
 enum WebGLVersion { Canvas2D, WebGL1, WebGL2 }
@@ -38,7 +150,6 @@ export class _Globals {
   private _console3d: Console3D = null;
   private _frame: number = 0;
   private _ssaa: number = 0;
-  private _camera: THREE.PerspectiveCamera = null;
   private _player: PhysicsObject3D = null;
   private _userGroup: THREE.Group;
   private _audio: AudioManager = null;
@@ -60,10 +171,10 @@ export class _Globals {
   private _renderHeight: number = 768;
   private _resizeMode: ResizeMode = ResizeMode.Fullscreen;
   private _barColor: Color = new Color(0, 0, 0); // Color of the bars when in ResizeMode.Fit mode.
-  private _frustum: Frustum = null;
   private _browser: BrowserType = BrowserType.Undefined;
+  private _unionCamera: UnionCamera = null;
 
-  public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor: Color = new Color(0, 0, 0)): Promise<boolean> {
+  public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor: Color = new Color(0, 0, 0), perspective: boolean = true): Promise<boolean> {
     this._canvas = document.querySelector('#page_canvas');
 
     this._renderWidth = canvasWidth;
@@ -74,7 +185,7 @@ export class _Globals {
     this._browser = Utils.getBrowser();
 
     this._screen = new Screen2D(this._canvas);
-    this.createCamera();
+    this.createCamera(perspective);
 
     if (this._showConsole) {
       let console3d: Console3D = new Console3D();
@@ -121,7 +232,6 @@ export class _Globals {
       });
     });
   }
-  public get frustum(): Frustum { return this._frustum; }
 
   public get canvas(): HTMLCanvasElement { return this._canvas; }
   public get scene(): Scene { return this._scene; }
@@ -135,7 +245,7 @@ export class _Globals {
   public get screen(): Screen2D { return this._screen; }
   public get input(): Input { return this._input; }
   public get renderer(): THREE.WebGLRenderer { return this._renderer; }
-  public get camera(): PerspectiveCamera { return this._camera; }
+  public get camera(): UnionCamera/*PerspectiveCamera*/ { return this._unionCamera; }
   public get userGroup(): THREE.Group { return this._userGroup; }
   public get prof(): Prof { return this._prof; }
 
@@ -266,7 +376,7 @@ export class _Globals {
         {
           if (this._console3d) {
             Globals.prof.begin('update console');
-            this._console3d.update(this.camera, this.userGroup);
+            //     this._console3d.update(this.camera, this.userGroup);
             Globals.prof.end('update console');
           }
 
@@ -320,7 +430,7 @@ export class _Globals {
   }
   public render() {
     if (Globals.getSSAA() == 0) {
-      this._renderer.render(Globals.scene, Globals.camera);
+      this._renderer.render(Globals.scene, Globals.camera.Camera);
     }
     else {
       this._composer.render();
@@ -375,8 +485,7 @@ export class _Globals {
 
           if (needResize) {
             this._renderer.setSize(width, height, false);
-            Globals.camera.aspect = this._renderHeight / this._renderWidth; //canvas.clientWidth / canvas.clientHeight;
-            Globals.camera.updateProjectionMatrix();
+            this._unionCamera.windowSizeChanged(width, height, this._renderWidth, this._renderHeight);
             this._screen.sizeChanged();
           }
           //Set the actual cnavas size.
@@ -577,7 +686,7 @@ export class _Globals {
       }
 
       Globals.logInfo("***Created WebGL version '" + this._webGLVersion + "' context.***")
-      this._renderer.setClearColor(0xffffff, 1);
+      this._renderer.setClearColor(Globals.isDebug() ? new Color(1,0,1) : this._barColor, 1);
       this._renderer.setPixelRatio(window.devicePixelRatio);
     }
     catch (ex) {
@@ -633,7 +742,7 @@ export class _Globals {
   private createSSAA() {
     if (this.getSSAA() > 0) {
       this._composer = new EffectComposer(this._renderer);
-      this._ssaaRenderpass = new SSAARenderPass(this.scene, this.camera, new THREE.Color(0, 0, 0), 0);
+      this._ssaaRenderpass = new SSAARenderPass(this.scene, this.camera.Camera, new THREE.Color(0, 0, 0), 0);
       this._ssaaRenderpass.unbiased = false;
       this._ssaaRenderpass.sampleLevel = this.getSSAA();
       this._composer.addPass(this._ssaaRenderpass);
@@ -641,18 +750,15 @@ export class _Globals {
       this._composer.addPass(this._copyPass);
     }
   }
-  private createCamera() {
-    //  const canvas: HTMLCanvasElement = document.querySelector('#page_canvas');
-    this._camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 1, 1000);
+  private createCamera(persp: boolean) {
+    this._unionCamera = new UnionCamera(persp);
 
     //https://stackoverflow.com/questions/49471653/in-three-js-while-using-webvr-how-do-i-move-the-camera-position
     //In VR we actually add the camera to a group since user actually moves the camera(s) reltaive to origin
     this._userGroup = new THREE.Group()
-    this._userGroup.add(this._camera);
+    this._userGroup.add(this._unionCamera.Camera);
     this._userGroup.position.set(0, 0.02, -0.12);
     this._userGroup.rotateY(0);
-
-    this._frustum = new Frustum();
   }
   private createScene() {
     let szGrid = 'dat/img/grd.png';

@@ -1983,10 +1983,16 @@ export class Viewport25D {
   private widthHeightUpdate(dt: number) {
     let dist = new vec3();
     Globals.player.getWorldPosition(dist);
-
+    let tan_fov_2 = 0;
     let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
-    let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV());
-    let tan_fov_2 = Math.tan(fov * 0.5);
+    if (Globals.camera.IsPerspective) {
+      let fov = THREE.Math.degToRad(Globals.camera.PerspectiveCamera.getEffectiveFOV());
+      tan_fov_2 = Math.tan(fov * 0.5);
+    }
+    else {
+      tan_fov_2 = Math.tan(Math.PI * 0.5 * 0.5);
+    }
+
 
     //2 A * tan(fov/2) * tile_w = tiles width
     this._tilesWidth = tan_fov_2 * Math.abs(dist.z) * g_atlas.TileWidthR3;
@@ -2030,7 +2036,7 @@ class InputControls {
   //Handles the movement of the player with controls, KB,Mouse or VR controllers (in the future, hands)
 
   private _playerChar: Character = null;
-  private _playerCharZoom: number = 13;
+  private _playerCharZoom: number = null;
   private _viewport: Viewport25D = null;
 
   public get PlayerChar(): Character { return this._playerChar; }
@@ -2038,50 +2044,14 @@ class InputControls {
   public constructor(playerChar: Character, viewport: Viewport25D) {
     this._playerChar = playerChar;
     this._viewport = viewport;
+    // if(Globals.camera.IsPerspective){
+    this._playerCharZoom = 13;
+    // }
+    // else{
+    //   this._playerCharZoom =1 ;
+    //  }
   }
-  private _frust_pts: THREE.Points = null
   public update(dt: number) {
-    if (Globals.isDebug()) {
-      if (this._frust_pts !== null) {
-        Globals.scene.remove(this._frust_pts);
-      }
-
-      let push1 = Globals.frustum.normal.clone().multiplyScalar(0.02);
-      let push2 = Globals.frustum.normal.clone().multiplyScalar(-0.02);
-      let geometry = new THREE.Geometry();
-
-      let d_ntl = Globals.frustum.ntl.clone().add(push1);
-      let d_ntr = Globals.frustum.ntr.clone().add(push1);
-      let d_nbl = Globals.frustum.nbl.clone().add(push1);
-      let d_nbr = Globals.frustum.nbr.clone().add(push1);
-      let d_ftl = Globals.frustum.ftl.clone().add(push2);
-      let d_ftr = Globals.frustum.ftr.clone().add(push2);
-      let d_fbl = Globals.frustum.fbl.clone().add(push2);
-      let d_fbr = Globals.frustum.fbr.clone().add(push2);
-
-      geometry.vertices.push(
-        d_ntl,
-        d_ntr,
-        d_nbl,
-        d_nbr,
-        d_ftl,
-        d_ftr,
-        d_fbl,
-        d_fbr,
-      );
-
-      this._frust_pts = new THREE.Points(
-        geometry,
-        new THREE.PointsMaterial({
-          side: THREE.DoubleSide,
-          size: 2,
-          sizeAttenuation: false,
-        })
-      );
-      // MESH with GEOMETRY, and Normal MATERIAL
-      Globals.scene.add(this._frust_pts);
-    }
-
     //If press right then move cam.
     if (Globals.input.mouse.Right.pressed()) {
       g_bMovingPlayer = !g_bMovingPlayer;
@@ -2120,17 +2090,17 @@ class InputControls {
     }
     let amtstr = spd * Globals.input.MovementController.Axis.x * dt;
     if (amtstr !== 0) {
-      let r: vec3 = Globals.frustum.CamDir.clone().cross(new vec3(0, 1, 0)).normalize();
+      let r: vec3 = Globals.camera.CamDirBasis.clone().cross(new vec3(0, 1, 0)).normalize();
       player.position.add(r.multiplyScalar(amtstr));
     }
 
     let amtfw: number = spd * Globals.input.MovementController.Axis.y * dt;
     if (amtfw !== 0) {
-      let n: vec3 = Globals.frustum.CamDir.clone();
+      let n: vec3 = Globals.camera.CamDirBasis.clone();
       player.position.add(n.multiplyScalar(amtfw));
     }
     if (amtfw !== 0 || amtstr !== 0) {
-      Globals.frustum.construct();
+      Globals.camera.updateAfterMoving();
     }
   }
   public lookAtPlayerChar() {
@@ -2139,21 +2109,37 @@ class InputControls {
 
     center.add(g_mainWorld.position);//Not sure if we're actually going to move the world but it's possible i guess
 
-    let position = center.clone().add(this._playerChar.QuadNormal.clone().multiplyScalar(this._playerCharZoom));
+    let position: vec3 = center.clone();
+    // if(!Globals.camera.IsPerspective){
+    //   position.add(this._playerChar.QuadNormal.clone().multiplyScalar(13));
+    //  // Globals.camera.zoomOrtho(this._playerCharZoom);
+    // }
+    // else{
+    position.add(this._playerChar.QuadNormal.clone().multiplyScalar(this._playerCharZoom));
+
+    //}
+
+    // if(!Globals.camera.IsPerspective){
+    //   position.z = 0.2;
+    // }
 
     Globals.player.position.copy(position);
-
     //If in VR the user may not have to look at this exact thing.
-    Globals.camera.lookAt(center);
-    Globals.frustum.construct();
+    Globals.camera.Camera.lookAt(center);
+    Globals.camera.updateAfterMoving();
 
     this._viewport.Center = center;
   }
   private zoomPlayerChar() {
     let zoomPerWheel = 0.1;
-    let maxZoom: number = 200;
-    let minZoom: number = 3;
+    let maxZoom: number = 4;
+    let minZoom: number = 1;
 
+    if (Globals.camera.IsPerspective === false) {
+      zoomPerWheel = 0.1;
+      maxZoom = 7;
+      minZoom = 1;
+    }
     if (Globals.isDebug()) {
       maxZoom = 9999;
     }
@@ -2877,6 +2863,9 @@ export class Tickler extends PhysicsObject3D {
         let push_out = p1.clone().sub(p2).normalize().multiplyScalar(push_amt);
 
         hand_pos_final = projected_world.clone().add(push_out);
+        if (!Globals.camera.IsPerspective) {
+          hand_pos_final.z = 0.5;
+        }
       }
       //hardcode the z to a solid position so we can easily project it.
       this.position.copy(hand_pos_final);
@@ -2927,15 +2916,15 @@ export class UILayout extends GlobalEventObject {
     let x2_ratio = (pos_layout.x + wh_layout.x) / this._widthPx;
     let y2_ratio = (pos_layout.y + wh_layout.y) / this._heightPx;
 
-    let X1 = Globals.frustum.right.clone().multiplyScalar(x1_ratio * Globals.frustum.nearPlaneWidth);
-    let Y1 = Globals.frustum.down.clone().multiplyScalar(y1_ratio * Globals.frustum.nearPlaneHeight);
-    let X2 = Globals.frustum.right.clone().multiplyScalar(x2_ratio * Globals.frustum.nearPlaneWidth);
-    let Y2 = Globals.frustum.down.clone().multiplyScalar(y2_ratio * Globals.frustum.nearPlaneHeight);
+    let X1 = Globals.camera.Frustum.right.clone().multiplyScalar(x1_ratio * Globals.camera.Frustum.nearPlaneWidth);
+    let Y1 = Globals.camera.Frustum.down.clone().multiplyScalar(y1_ratio * Globals.camera.Frustum.nearPlaneHeight);
+    let X2 = Globals.camera.Frustum.right.clone().multiplyScalar(x2_ratio * Globals.camera.Frustum.nearPlaneWidth);
+    let Y2 = Globals.camera.Frustum.down.clone().multiplyScalar(y2_ratio * Globals.camera.Frustum.nearPlaneHeight);
 
-    out_box_r3.min = Globals.frustum.ntl.clone().add(X1.clone().add(Y1));
-    out_box_r3.max = Globals.frustum.ntl.clone().add(X2.clone().add(Y2));
-    out_box_r3.min.add(Globals.frustum.normal.clone().multiplyScalar(depth));
-    out_box_r3.max.add(Globals.frustum.normal.clone().multiplyScalar(depth));
+    out_box_r3.min = Globals.camera.Frustum.ntl.clone().add(X1.clone().add(Y1));
+    out_box_r3.max = Globals.camera.Frustum.ntl.clone().add(X2.clone().add(Y2));
+    out_box_r3.min.add(Globals.camera.Frustum.normal.clone().multiplyScalar(depth));
+    out_box_r3.max.add(Globals.camera.Frustum.normal.clone().multiplyScalar(depth));
 
     //Swap y's for Top left to Bot left coords.
     // let tmp = out_box_r3.min.y;
@@ -2975,11 +2964,16 @@ export class UIElement {
 
     this._ui.Layout.project(this.Pos, this.Size, this._box);
 
+    if (!Globals.camera.IsPerspective) {
+      this._box.min.z = 0.0;
+      this._box.max.z = 0.0;
+    }
+
     let bw = Math.abs(this._box.max.x - this._box.min.x);//This essentially fixes the y=down problem for the ui in particular.
     let bh = Math.abs(this._box.max.y - this._box.min.y);
 
     SpriteFrame.createQuadVerts(this.Verts, this._box.min, rot, scale, bw, bh,
-      Globals.frustum.right.clone(), Globals.frustum.down.clone(), Globals.frustum.normal.clone());
+      Globals.camera.Frustum.right.clone(), Globals.camera.Frustum.down.clone(), Globals.camera.Frustum.normal.clone());
   }
 }
 export class QuickUI {
@@ -3053,14 +3047,15 @@ $(document).ready(function () {
   //testMapAndHashSet
   // let a = Object.getOwnPropertyNames(TileLayerId);
   // let b = Object.getOwnPropertySymbols(TileLayerId);
-
   // return;
 
   Globals.setFlags(document.location);
 
   Utils.loadingDetails("Creating world.");
 
-  Globals.init(800, 800, ResizeMode.FitAndCenter).then((value: boolean) => {
+
+
+  Globals.init(800, 800, ResizeMode.FitAndCenter, new Color(0, 0, 0), Utils.getBoolParam("perspective")).then((value: boolean) => {
     Globals.prof.frameStart();
     loadResources();
   });

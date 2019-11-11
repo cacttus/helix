@@ -13,10 +13,29 @@ export enum BrowserType {
   Chrome, Edge, IE, Opera, Firefox, Safari, Blink, Undefined
 }
 export class Utils {
+  public static getParam(s:string) : string{
+    const url_params = (new URL("" + document.location)).searchParams;
+    let v = url_params.get(s);
+    return v;
+  }
+  public static getBoolParam(s:string) : boolean { 
+    let b : boolean = Utils.parseBool(Utils.getParam(s));
+    return b;
+  }
+  public static getUrlParams(): Map<string, string> {
+    let ret: Map<string, string> = new Map<string, string>();
+    //const url_params = (new URL("" + document.location)).searchParams;
+    var hashes = window.location.href.slice(window.location.href.indexOf('?') + 1).split('&');
+    for (var i = 0; i < hashes.length; i++) {
+      let hash = hashes[i].split('=');
+      ret.set(hash[0], hash[1]);
+    }
+    return ret;
+  }
   public static isValidJson(str: string) {
     try {
       JSON.parse(str);
-    } 
+    }
     catch (e) {
       return false;
     }
@@ -136,11 +155,11 @@ export class Utils {
       Globals.logError("enumKeyVals - Enum values were not evenly divisible. ?");
       Globals.debugBreak();
     }
-    
+
     //object.keys out of order - https://hackernoon.com/out-of-order-keys-in-es6-objects-d5cede7dc92e
 
     //First sort the Object.keys.  This is because negative numbers will actually sort after some strings.
- //   let 
+    //   let 
 
     let valoff: number = kv.length / 2;
 

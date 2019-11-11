@@ -183,9 +183,6 @@ export class TextCanvas extends THREE.Object3D {
   private alignToScreen(camera: THREE.PerspectiveCamera, user: THREE.Group): void {
     //This method needs a serious overhaul.
     //Move the object to the screen
-    
-
-    let f: Frustum = Globals.frustum; //new Frustum(cn, cp);
     let dist: number = camera.near;  // our camera has a near plane of 1 unit
 
     //This is kind of dumb
@@ -193,7 +190,7 @@ export class TextCanvas extends THREE.Object3D {
 
     let cam_dir: THREE.Vector3 = new THREE.Vector3();
     camera.getWorldDirection(cam_dir);
-    let up: THREE.Vector3 = Globals.frustum.down.clone().multiplyScalar(-1);
+    let up: THREE.Vector3 = Globals.camera.Frustum.down.clone().multiplyScalar(-1);
     let left: THREE.Vector3 = up.clone().cross(cam_dir);
     //https://stackoverflow.com/questions/13350875/three-js-width-of-view
     var vFOV = THREE.Math.degToRad(camera.fov); // convert vertical fov to radians

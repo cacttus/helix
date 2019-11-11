@@ -76,7 +76,7 @@ export class HashSet<T> {
 
   *[Symbol.iterator](): IterableIterator<T> {
     //let it = new IterableIterator<[K, V]>;
-    for(let [k,v] of this._map){
+    for (let [k, v] of this._map) {
       yield k;
     }
   }
@@ -113,9 +113,9 @@ export class MultiMap<K, V> /*implements Map<K,HashSet<V>> */ {
   }
   *[Symbol.iterator](): IterableIterator<[K, V]> {
     //let it = new IterableIterator<[K, V]>;
-    for(let [k,v] of this._map){
-      for(let val of v){
-        yield [k,val];
+    for (let [k, v] of this._map) {
+      for (let val of v) {
+        yield [k, val];
       }
     }
   }
@@ -1014,7 +1014,7 @@ export class Screen2D extends GlobalEventObject {
   public project3D(clientX: number, clientY: number, distance: number): Vector3 {
     let v2: Vector2 = this.getCanvasRelativeXY(clientX, clientY);
 
-    let mouse_pos = Globals.frustum.project(v2.x, v2.y, distance);
+    let mouse_pos = Globals.camera.Frustum.project(v2.x, v2.y, distance);
     return mouse_pos;
   }
 }
@@ -1174,22 +1174,21 @@ export class Mouse extends Vector3 {
     if (Math.abs(dx) > maxPixel) { dx = Math.sign(dx) * maxPixel }
     if (Math.abs(dy) > maxPixel) { dy = Math.sign(dy) * maxPixel }
 
-    let campos = Globals.frustum.CamPos.clone();
+    let campos = Globals.camera.CamPos.clone();
 
-    let camdir = Globals.frustum.CamDir.clone();//new vec3();
+    let camdir = Globals.camera.CamDirBasis.clone();//new vec3();
 
     let rot_speed = 0.01; // Change this to change rotation speed.
 
-    let right = Globals.frustum.right.clone(); //camdir.clone().cross(Globals.camera.up).normalize();
-    let down = Globals.frustum.down.clone(); //Globals.camera.up.clone().normalize().multiplyScalar(-1);
+    let right = Globals.camera.CamRightBasis.clone(); //camdir.clone().cross(Globals.camera.up).normalize();
+    let down = Globals.camera.CamUpBasis.clone().multiplyScalar(-1); //Globals.camera.up.clone().normalize().multiplyScalar(-1);
 
     this.curView.add(right.multiplyScalar(dx * rot_speed));
     this.curView.add(down.multiplyScalar(dy * rot_speed));
 
-    Globals.camera.lookAt(this.curView.clone().add(campos));
+    Globals.camera.Camera.lookAt(this.curView.clone().add(campos));
 
-    Globals.frustum.construct();
-
+    Globals.camera.updateAfterMoving();
   }
   private shittyRotate() {
     // //Look at the point in the screen projected into 3D
@@ -1389,49 +1388,49 @@ export class Input {
       }
     }
     else {
-      if (this._keyboard && this._mouse) {
-        let cam_n: Vector3 = new Vector3();
-        Globals.camera.getWorldDirection(cam_n);
-
-        let cam_w: Vector3 = new Vector3();
-        Globals.camera.getWorldPosition(cam_w);
-
-        let lookat: Vector3 = cam_w.add(cam_n);
-
-        this._mouse.update();
-        this._keyboard.update();
-
-        if (!document.hasFocus()) {
-          this._mouse.reset();
-          this._keyboard.reset();
-        }
-
-        //Update WSAD the movement and other keyboard things for the configured controller.
-        let move: VirtualController = this.MovementController;
-        let act: VirtualController = this.ActionController;
-
-        if (move) {
-          this.updateAxis_Keyboard(dt, move);
-          if (act && this.MovementHand === Hand.Both) {
-            //Copy the movement to the other controller.
-            move.Axis.copy(act.Axis);
-          }
-        }
-
-        //Update the positions of the VR controllers.
-        this.right.Trigger.update(this.mouse.Left.pressOrHold());
-        this.right.A.update(this.mouse.Right.pressOrHold());
-        this.right.Position.copy(lookat);
-
-        this.left.Trigger.update(this.mouse.Left.pressOrHold());
-        this.left.A.update(this.mouse.Right.pressOrHold());
-        this.left.Position.copy(lookat);
-      }
+      this.updateGamepadsPC(dt);
     }
   }
   public postUpdate() {
     if (this._mouse) {
       this._mouse.postUpdate();
+    }
+  }
+  private updateGamepadsPC(dt: number) {
+    if (this._keyboard && this._mouse) {
+
+      this._mouse.update();
+      this._keyboard.update();
+
+      if (!document.hasFocus()) {
+        this._mouse.reset();
+        this._keyboard.reset();
+      }
+
+      //Update WSAD the movement and other keyboard things for the configured controller.
+      let move: VirtualController = this.MovementController;
+      let act: VirtualController = this.ActionController;
+
+      if (move) {
+        this.updateAxis_Keyboard(dt, move);
+        if (act && this.MovementHand === Hand.Both) {
+          //Copy the movement to the other controller.
+          move.Axis.copy(act.Axis);
+        }
+      }
+
+      //Update the positions of the VR controllers.
+      let cam_n: Vector3 = Globals.camera.CamDirBasis.clone();
+      let cam_w = Globals.camera.CamPos.clone();
+      let lookat: Vector3 = cam_w.add(cam_n);
+
+      this.right.Trigger.update(this.mouse.Left.pressOrHold());
+      this.right.A.update(this.mouse.Right.pressOrHold());
+      this.right.Position.copy(lookat);
+
+      this.left.Trigger.update(this.mouse.Left.pressOrHold());
+      this.left.A.update(this.mouse.Right.pressOrHold());
+      this.left.Position.copy(lookat);
     }
   }
   private updateGamepads_VR(dt: number) {
@@ -1567,20 +1566,13 @@ export class Frustum {
   public get up(): Vector3 { return this._up; }
   public get normal(): Vector3 { return this._normal; }
 
-  private _camPos: vec3 = new vec3(0, 0, 0);
-  private _camDir: vec3 = new vec3(0, 0, 0);
-  private _camUp: vec3 = new vec3(0, 0, 0);
-  public get CamPos(): vec3 { return this._camPos; }
-  public get CamDir(): vec3 { return this._camDir; }
-  public get CamUp(): vec3 { return this._camUp; }
-
   //private Points_fpt_ntl: Vector3;//back bottomleft
-  public constructor(cam_dir: Vector3 = null, cam_pos: Vector3 = null) {
-    this.construct(cam_dir, cam_pos);
-  }
+  // public constructor(cam_dir: Vector3 = null, cam_pos: Vector3 = null) {
+  //   this.construct(cam_dir, cam_pos);
+  // }
   //Project a point onto the screen in 3D
   public projectScreen(screen_x: number, screen_y: number) {
-    return this.project(screen_x, screen_y, Globals.camera.near);
+    return this.project(screen_x, screen_y, Globals.camera.Near);
   }
   //Project a point into the screen/canvas, x and y are relative to the top left of the canvas (not the window)
   //A distance of 
@@ -1594,7 +1586,7 @@ export class Frustum {
 
     let back_plane: vec3 = this._ftl.clone().add(dx).add(dy);
 
-    let cam_pos: vec3 = this.CamPos.clone();
+    let cam_pos: vec3 = Globals.camera.CamPos.clone();
 
     let projected: vec3 = back_plane.clone().sub(cam_pos).normalize().multiplyScalar(dist);
 
@@ -1602,77 +1594,93 @@ export class Frustum {
 
     return projected;
   }
-  public construct(cam_dir: vec3 = null, cam_pos: vec3 = null) {
-    //This should be the only place where we use getWorldXX because they seem to have a memory leak.
-    let pdir: vec3 = new vec3()
-        let groupdir : vec3=new vec3()
-        if (cam_dir === null) {
-      //Globals.camera.getWorldDirection(this._camDir);
-     // if (Globals.player) {
-        //player is initialize after frustum
-     //   Globals.player.getWorldDirection(pdir);
-     // }
-  ///    else {
-        Globals.camera.getWorldDirection(this._camDir);
-
-       // Globals.userGroup.getWorldDirection(groupdir);
-    //  }
-
+  public construct(cam_pos: vec3 = null, cam_dir_basis : vec3 = null, cam_up_basis: vec3 = null, cam_right_basis: vec3 = null) {
+    //this is not a correct basis vector.  this is the 'up' reference used to construct the projection matrix
+    if (cam_up_basis === null) {
+      cam_up_basis = Globals.camera.CamUpBasis.clone();//.normalize();
+    }
+    if (cam_dir_basis === null) {
+      cam_dir_basis = Globals.camera.CamDirBasis.clone();
+    }
+    if (cam_right_basis === null) {
+      cam_right_basis = Globals.camera.CamRightBasis.clone();
     }
     if (cam_pos === null) {
-      Globals.camera.getWorldPosition(this._camPos);
+      cam_pos = Globals.camera.CamPos.clone();
     }
 
-    //this is not a correct basis vector.  this is the 'up' reference used to construct the projection matrix
-    this._camUp = Globals.camera.up.clone();//.normalize();
-    
-  
+    let fc: vec3 = cam_pos.clone().add(cam_dir_basis.clone().multiplyScalar(Globals.camera.Far));
+    let nc: vec3 = cam_pos.clone().add(cam_dir_basis.clone().multiplyScalar(Globals.camera.Near));
 
-    cam_dir = this.CamDir;
-    cam_pos = this.CamPos;
+    if(Globals.camera.IsPerspective){
+      this.setupPerspective(fc, nc, cam_pos, cam_up_basis, cam_dir_basis, cam_right_basis);
+    }
+    else{
+      this.setupOrthographic(fc, nc, cam_pos, cam_up_basis, cam_dir_basis, cam_right_basis);
+    }
 
     //Construct the correct up basis vector
-    let rightVec = cam_dir.clone().cross(Globals.camera.up); //TODO: see if this changes things
-    rightVec.normalize();
-  
-    let camup = rightVec.clone().cross(cam_dir).normalize(); // I think cross product preserves length but whatever
 
-    let nearCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.near));
-    let farCenter: vec3 = cam_pos.clone().add(cam_dir.clone().multiplyScalar(Globals.camera.far));
+  }
+  private setupPerspective(fc:vec3,nc:vec3, camPos:vec3, camUp:vec3, camView:vec3, camRight:vec3){
+    
+
     let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
-    let fov = THREE.Math.degToRad(Globals.camera.getEffectiveFOV());
+    let fov = THREE.Math.degToRad(Globals.camera.PerspectiveCamera.getEffectiveFOV());//The FOV with zoom applied, we don't use zoom for perspective camera however.
     let tan_fov_2 = Math.tan(fov / 2.0);
 
-    let w_far_2 = tan_fov_2 * Globals.camera.far;
+    let w_far_2 = tan_fov_2 * Globals.camera.Far;
     let h_far_2 = w_far_2 * ar;
-    let cup_far = camup.clone().multiplyScalar(h_far_2);
-    let crt_far = rightVec.clone().multiplyScalar(w_far_2);
+    let w_near_2 = tan_fov_2 * Globals.camera.Near;
+    let h_near_2 = w_near_2 * ar;
+
+    this.constructPointsAndPlanes(nc,fc, camPos,camUp,camView,camRight, w_near_2, w_far_2, h_near_2, h_far_2);
+
+  }
+  private setupOrthographic(fc:vec3,nc:vec3, camPos:vec3, camUp:vec3, camView:vec3, camRight:vec3){
+    
+    // let nc = camPos.clone().add(camView.clone().multiplyScalar(znear));
+    // let fc = camPos.clone().add(camView.clone().multiplyScalar(zfar));
+    
+    let ww = Math.abs((Globals.camera.OrthographicCamera.right - Globals.camera.OrthographicCamera.left) * 0.5);
+    let hh = Math.abs((Globals.camera.OrthographicCamera.bottom - Globals.camera.OrthographicCamera.top) * 0.5);
+
+    let vpWidth_2 : number = ww;//_pViewportRef->getWidth() * 0.5f;
+    let vpHeight_2 : number = hh;//_pViewportRef->getHeight() * 0.5f;
+
+    // Will this work?? IDK! ha
+    this.constructPointsAndPlanes(fc,nc, 
+        camPos, camUp, camView, camRight,
+        vpWidth_2, vpHeight_2,
+        vpWidth_2, vpHeight_2);
+  }
+  private constructPointsAndPlanes(nearCenter:vec3, farCenter:vec3,  pos:vec3, cam_up_basis:vec3, cam_dir_basis:vec3, cam_right_basis:vec3, w_near_2:number, w_far_2:number, h_near_2:number, h_far_2:number){
+    let cup_far = cam_up_basis.clone().multiplyScalar(h_far_2);
+    let crt_far = cam_right_basis.clone().multiplyScalar(w_far_2);
     this._ftl = farCenter.clone().add(cup_far).sub(crt_far);
     this._ftr = farCenter.clone().add(cup_far).add(crt_far);
     this._fbl = farCenter.clone().sub(cup_far).sub(crt_far);
     this._fbr = farCenter.clone().sub(cup_far).add(crt_far);
 
-    let w_near_2 = tan_fov_2 * Globals.camera.near;
-    let h_near_2 = w_near_2 * ar;
-    let cup_near = camup.clone().multiplyScalar(h_near_2);
-    let crt_near = rightVec.clone().multiplyScalar(w_near_2);
+
+    let cup_near = cam_up_basis.clone().multiplyScalar(h_near_2);
+    let crt_near = cam_right_basis.clone().multiplyScalar(w_near_2);
     this._ntl = nearCenter.clone().add(cup_near).sub(crt_near);
     this._ntr = nearCenter.clone().add(cup_near).add(crt_near);
     this._nbl = nearCenter.clone().sub(cup_near).sub(crt_near);
     this._nbr = nearCenter.clone().sub(cup_near).add(crt_near);
 
 
-    this._right = rightVec.clone();
-    this._up = camup;
-    this._down = camup.clone().multiplyScalar(-1);
-    this._normal = cam_dir.clone();
+    this._right = cam_right_basis.clone();
+    this._up = cam_up_basis;
+    this._down = cam_up_basis.clone().multiplyScalar(-1);
+    this._normal = cam_dir_basis.clone();
 
 
     //this._far_plane_width = this.ntr
     //this._far_plane_height : number = 0;
     this._near_plane_width = this.ntr.clone().sub(this.ntl).length();
     this._near_plane_height = this.nbl.clone().sub(this.ntl).length();
-
   }
 }
 
