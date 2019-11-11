@@ -58,9 +58,9 @@ export class Utils {
     }
     // Blink engine detection
     // @ts-ignore
-    if ((isChrome || isOpera) && !!window.CSS) {
-      return BrowserType.Blink;
-    }
+    // if ((isChrome || isOpera) && !!window.CSS) {
+    //   return BrowserType.Blink;
+    // }
 
     return BrowserType.Undefined;
   }
