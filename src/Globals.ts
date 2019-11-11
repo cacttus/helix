@@ -225,11 +225,14 @@ export class _Globals {
     }
   }
   public logDebug(e: any): void {
-    let str: string = ">>D:" + e;
-    console.debug(str);
+    if (this.isDebug()) {
 
-    if (this._console3d) {
-      this._console3d.log(str);
+      let str: string = ">>D:" + e;
+      console.debug(str);
+
+      if (this._console3d) {
+        this._console3d.log(str);
+      }
     }
   }
   public isPowerOf2(value: number) {
@@ -379,21 +382,21 @@ export class _Globals {
           //Set the actual cnavas size.
           //This should cause the resize method to fire.
 
-          let ww = ()=>{ 
+          let ww = () => {
             //Edge/IE is weird
-            if(this._browser===BrowserType.Edge || this._browser===BrowserType.IE){
+            if (this._browser === BrowserType.Edge || this._browser === BrowserType.IE) {
               return window.outerWidth;//This seems to fix
             }
-            else{
+            else {
               return window.innerWidth;
             }
           };
-          let wh = ()=>{ 
+          let wh = () => {
             //Edge/IE is weird
-            if(this._browser===BrowserType.Edge || this._browser===BrowserType.IE){
+            if (this._browser === BrowserType.Edge || this._browser === BrowserType.IE) {
               return window.innerHeight;
             }
-            else{
+            else {
               return window.innerHeight;
             }
           };

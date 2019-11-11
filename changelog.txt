@@ -1,3 +1,16 @@
+TODO 
+grass random sets
+fix character cell position to be body instead of head.
+fix missing door sprites in conduit
+doors and moving to another area.
+hand grab animation
+hand grab object to physicsobject3d
+grass animation
+NPCs
+npc Dialogue
+Walls
+
+
 11.09.19
 Fixed issue with Edge not resizing properly. 
 Made browser checking generic.
@@ -10,6 +23,7 @@ KeyCenter or CollisionBox
 - get center of key sprite and use that to get current cell
 - compute box of all collidable sprites, use that for KeyCenter
 *currently we use location of the sprite to get the current cell we are on.
+This needs to be fixed but is lower priority.
 
 
 

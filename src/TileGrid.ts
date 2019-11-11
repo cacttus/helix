@@ -2,13 +2,71 @@ import { Color, EqualStencilFunc } from 'three';
 import { ivec2, vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import { Globals } from './Globals';
 import { Utils } from './Utils';
-import { Atlas, Sprite25D, FDef, SpriteFrame, Character, Direction4Way, SpriteTileInfo as SpriteTileInfo, CollisionHandling, Phyobj25D, HandGesture, SpriteAnimationData, Animation25D } from './Main';
+import { Atlas, Sprite25D, FDef, SpriteFrame, Character, Direction4Way, SpriteTileInfo as SpriteTileInfo, CollisionHandling, Phyobj25D, HandGesture, SpriteAnimationData, Animation25D, SpriteKeyFrame } from './Main';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
 import world_data from './tiles_world.json';
 //import tiles_modular from './modular_tileset.json';
 import master_tileset from './decal_tileset.json';
-import { Random, MultiValueDictionary, HashSet, IVec2Set, IVec2Map } from './Base';
+import { Random, MultiMap as MultiMap, HashSet, IVec2Set, IVec2Map } from './Base';
 
+export class RandomSet<T> {
+  private _elements: MultiMap<number, T> = null;
+  public get Elements(): MultiMap<number, T> { return this._elements; }
+  private _normalized = false;
+
+  public constructor() {
+  }
+  public select(): T {
+    let ret: T = null;
+    let threshold: number = 0;
+    let rd = Random.float(0, 1);
+    for (let [k, v] of this._elements) {
+
+      threshold += k;
+      if (rd < threshold) {
+        ret = v;
+        break;
+      }
+    }
+    // if (ret === null) {
+    //   if (this._elements.entries() && this._elements.entries().next()) {
+    //     return this._elements.entries().next().value;
+    //   }
+    // }
+    return ret;
+  }
+
+  public set(t: T, prob: number, renormalize: boolean = false) {
+    if (!this._elements) {
+      this._elements = new MultiMap<number, T>();
+    }
+    this._elements.set(prob, t);
+    this._normalized = false;
+
+    if (renormalize) {
+      this.normalize();
+    }
+  }
+  public normalize() {
+    let newMap: MultiMap<number, T> = new MultiMap<number, T>();
+    let sum = 0;
+    let nElements = 0;
+    if (!this._elements) {
+      Globals.logWarn("sprite set had no elements to normalize.")
+      return;
+    }
+    for (let [k, v] of this._elements) {
+      sum += k;
+      nElements++;
+    }
+    for (let [k, v] of this._elements) {
+      let dk = k / sum;
+      newMap.set(dk, v);
+    }
+    this._elements = newMap;
+    this._normalized = true;
+  }
+}
 
 
 class TmxProperty {
@@ -27,11 +85,15 @@ class TmxTileset {
   public imagewidth: Int;
   public margin: Int;
   public name: string;
+  public properties: Array<TmxProperty>;
   public spacing: Int;
   public tilecount: Int;
   public tiledversion: string;
   public tileheight: Int;
   public tiles: Array<TmxTilesetTile>;
+  public tilewidth: Int;
+  public type: string;
+  public version: number;
 }
 class TmxMapTileset {
   //Tileset in Tiled.
@@ -91,6 +153,23 @@ class TmxMap {
   public tilesets: Array<TmxMapTileset>;///":
 }
 
+class TiledUtils {
+  public static propMatch(name: string, p: TmxProperty): boolean {
+    if (p.name.trim().toLowerCase() === name.trim().toLowerCase()) {
+      return true;
+    }
+    return false;
+  }
+  public static validateProp(x: any) {
+    if (x === null || x === undefined) {
+      //value was null or undefined -e rrro
+      Globals.logError("Error parsing tile definition")
+      Globals.debugBreak();
+    }
+
+  }
+}
+
 export type TiledTileId = Int;
 export type HelixTileId = Int;
 
@@ -122,7 +201,8 @@ export enum Tiling {
   None,
   //Set3x3Block /*a solid 3x3 block with no corners (9 tiles) */,
   //Set3x3Seamless /* a terrain master tileset 40+ tiles */,
-  Random,
+  RandomSprite, // Sprite is in a random set of sprites, of which we select a random frame
+  RandomFrame, //Sprite is not a member of a random set, Just select a random frame from this sprite itself.
   FoliageTiling,
   FenceRules,
   HardBorderRules,
@@ -153,8 +233,7 @@ export class SpriteFrameDefinition {
   public duration: number = null;
   public name: string = "";
   public tiling: Tiling = null;
-  public random_prob_element: number = 1.0;
-  public random_set: Array<Map<string, number>> = null;
+  public random_prob_element: number = null;
   public tiles_width: number = null;
   public tiles_height: number = null;
 
@@ -173,43 +252,29 @@ export class SpriteFrameDefinition {
   public static readonly prop_name: string = "name";//- name
   public static readonly prop_tiling: string = "tiling";//  - none (tile is decal), random, fence, dock, white_border
   public static readonly prop_random_prob_element: string = "random_prob_element";//               - the probability of this tile in the tiling is random
-  public static readonly prop_random_set: string = "random_set";//      - the sets of random tiles that this is included with.
   public static readonly prop_tiles_width: string = "tiles_width";//      - the sets of random tiles that this is included with.
   public static readonly prop_tiles_height: string = "tiles_height";//      - the sets of random tiles that this is included with.
 
-  private static propMatch(name: string, p: TmxProperty): boolean {
-    if (p.name.trim().toLowerCase() === name.trim().toLowerCase()) {
-      return true;
-    }
-    return false;
-  }
-  private static validate(x: any) {
-    if (x === null || x === undefined) {
-      //value was null or undefined -e rrro
-      Globals.logError("Error parsing tile definition")
-      Globals.debugBreak();
-    }
 
-  }
   public static parse(tiled_tileset_id: Int, props: Array<TmxProperty>): SpriteFrameDefinition {
     let ret: SpriteFrameDefinition = new SpriteFrameDefinition();
     ret.tiled_id = tiled_tileset_id;
 
     for (let prop of props) {
 
-      if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_after_load, prop)) {
-        this.validate(ret.after_load = prop.value);
+      if (TiledUtils.propMatch(SpriteFrameDefinition.prop_after_load, prop)) {
+        TiledUtils.validateProp(ret.after_load = prop.value);
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_animation, prop)) {
-        this.validate(ret.animation = JSON.parse(JSON.stringify(prop.value)));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation, prop)) {
+        TiledUtils.validateProp(ret.animation = JSON.parse(JSON.stringify(prop.value)));
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_class, prop)) {
-        this.validate(ret.typescript_class = prop.value);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_class, prop)) {
+        TiledUtils.validateProp(ret.typescript_class = prop.value);
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_collision, prop)) {
-        this.validate(ret.collision = Utils.stringToEnum(prop.value, Object.keys(CollisionHandling)) as CollisionHandling);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_collision, prop)) {
+        TiledUtils.validateProp(ret.collision = Utils.stringToEnum(prop.value, Object.keys(CollisionHandling)) as CollisionHandling);
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_collision_bits, prop)) {
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_collision_bits, prop)) {
         if (prop.value.length === 4) {
           let top: boolean = prop.value.substr(0, 1) === "1";
           let right: boolean = prop.value.substr(1, 1) === "1";
@@ -224,27 +289,27 @@ export class SpriteFrameDefinition {
         }
       }
 
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_default_character_animation, prop)) {
-        this.validate(ret.default_character_animation = Utils.parseBool(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_default_character_animation, prop)) {
+        TiledUtils.validateProp(ret.default_character_animation = Utils.parseBool(prop.value));
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_frame_index, prop)) {
-        this.validate(ret.frame_index = Utils.parseInt(prop.value))
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_frame_index, prop)) {
+        TiledUtils.validateProp(ret.frame_index = Utils.parseInt(prop.value))
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_gesture, prop)) {
-        this.validate(ret.gesture = Utils.stringToEnum(prop.value, Object.keys(HandGesture)) as HandGesture);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_gesture, prop)) {
+        TiledUtils.validateProp(ret.gesture = Utils.stringToEnum(prop.value, Object.keys(HandGesture)) as HandGesture);
       }
 
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_is_key, prop)) {
-        this.validate(ret.is_key = Utils.parseBool(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_is_key, prop)) {
+        TiledUtils.validateProp(ret.is_key = Utils.parseBool(prop.value));
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_is_player, prop)) {
-        this.validate(ret.is_player = Utils.parseBool(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_is_player, prop)) {
+        TiledUtils.validateProp(ret.is_player = Utils.parseBool(prop.value));
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
-        this.validate(ret.layer = Utils.stringToEnum(prop.value, Object.keys(TileLayerId)) as TileLayerId);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
+        TiledUtils.validateProp(ret.layer = Utils.stringToEnum(prop.value, Object.keys(TileLayerId)) as TileLayerId);
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
-        this.validate(ret.duration = Utils.parseNumber(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
+        TiledUtils.validateProp(ret.duration = Utils.parseNumber(prop.value));
       }
       //
       //public static readonly prop_name: string = "name";//- name
@@ -252,23 +317,20 @@ export class SpriteFrameDefinition {
       //public static readonly prop_random_prob_element: string = "random_prob_element";//               - the probability of this tile in the tiling is random
       //public static readonly prop_random_set: string = "random_set";// 
       //
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_name, prop)) {
-        this.validate(ret.name = prop.value);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_name, prop)) {
+        TiledUtils.validateProp(ret.name = prop.value);
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_tiling, prop)) {
-        this.validate(ret.tiling = Utils.stringToEnum(prop.value, Object.keys(Tiling)) as Tiling);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiling, prop)) {
+        TiledUtils.validateProp(ret.tiling = Utils.stringToEnum(prop.value, Object.keys(Tiling)) as Tiling);
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_random_prob_element, prop)) {
-        this.validate(ret.random_prob_element = Utils.parseNumber(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_random_prob_element, prop)) {
+        TiledUtils.validateProp(ret.random_prob_element = Utils.parseNumber(prop.value));
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_random_set, prop)) {
-        this.validate(ret.random_set = JSON.parse(JSON.stringify(prop.value)));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiles_height, prop)) {
+        TiledUtils.validateProp(ret.tiles_height = Utils.parseNumber(prop.value));
       }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_tiles_height, prop)) {
-        this.validate(ret.tiles_height = Utils.parseNumber(prop.value));
-      }
-      else if (SpriteFrameDefinition.propMatch(SpriteFrameDefinition.prop_tiles_width, prop)) {
-        this.validate(ret.tiles_width = Utils.parseNumber(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiles_width, prop)) {
+        TiledUtils.validateProp(ret.tiles_width = Utils.parseNumber(prop.value));
       }
 
 
@@ -287,14 +349,21 @@ export class SpriteDefs {
   private _borderTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
   private _playerTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
   private _doorTileId: HelixTileId = MasterMap.UNDEFINED_TILE; // Note: there may be multiple types of doors. but we can just use a single trigger for this
-  private _conduitTileId : HelixTileId = MasterMap.UNDEFINED_TILE;
+  private _conduitTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
 
   public get BorderTileId(): HelixTileId { return this._borderTileId; }
   public get PlayerTileId(): HelixTileId { return this._playerTileId; }
   public get DoorTileId(): HelixTileId { return this._doorTileId; }
   public get ConduitTileId(): HelixTileId { return this._conduitTileId; }
+  public SpriteSets: Array<RandomSet<Sprite25D>> = new Array<RandomSet<Sprite25D>>();
+  public FrameSets: Map<Sprite25D, RandomSet<SpriteKeyFrame>> = new Map<Sprite25D, RandomSet<SpriteKeyFrame>>();
+
+  public static readonly prop_random_sprite_sets: string = "random_sprite_sets";//      - the sets of random tiles that this is included with.
+
+  private _random_set_string: string = null;
 
   public constructor(atlas: Atlas, tileset: TmxTileset) {
+    this.parseMapProperties(tileset);
     this.parseTileDefs(atlas, tileset);
     this.assembleSprites(atlas);
   }
@@ -364,7 +433,33 @@ export class SpriteDefs {
     }
     return found;
   }
+  public getFrameRandomSet(sp: Sprite25D): RandomSet<SpriteKeyFrame> {
+    let ret = this.FrameSets.get(sp);
+    if (!ret) {
+      ret = null;
+    }
+    return ret;
+  }
+  public getSpriteRandomSet(sp: Sprite25D): RandomSet<Sprite25D> {
+    for (let ss of this.SpriteSets) {
+      for (let [p, s] of ss.Elements) {
+        if (s === sp) {
+          return ss;
+        }
+      }
+    }
+    return null;
+  }
 
+
+  private parseMapProperties(tileset: TmxTileset) {
+    for (let prop of tileset.properties) {
+      //Parse the random sets.
+      if (TiledUtils.propMatch(SpriteDefs.prop_random_sprite_sets, prop)) {
+        TiledUtils.validateProp(this._random_set_string = prop.value);
+      }
+    }
+  }
   private _max_frame_id = -9999;
   private parseTileDefs(atlas: Atlas, tileset: TmxTileset) {
     //parses the tileset into frame definitions to be assembled into sprites
@@ -440,6 +535,7 @@ export class SpriteDefs {
       Globals.logError(frameerror);
     }
 
+    this.parseRandomSets();
 
     //run all callbacks after sprites are loaded.
     for (let [k, v] of this._sprites) {
@@ -549,7 +645,7 @@ export class SpriteDefs {
         else {
           this._conduitTileId = ret.HelixTileId;
         }
-      }      
+      }
       else if (Utils.lcmp(def.typescript_class, "ui")) {
         ret = this.makeUISprite(atlas, def);
       }
@@ -558,7 +654,12 @@ export class SpriteDefs {
         Globals.logError("Could not make sprite for class " + def.typescript_class);
       }
     }
-
+    if (def.collision) {
+      ret.CollisionHandling = def.collision;
+    }
+    if (def.collision_bits) {
+      ret.CollisionBits = def.collision_bits;
+    }
     if (def.tiling) {
       ret.Tiling = def.tiling;
     }
@@ -573,6 +674,53 @@ export class SpriteDefs {
     }
 
     return ret;
+  }
+  private parseRandomSets() {
+    let errors = "";
+    if (this._random_set_string) {
+      if (Utils.isValidJson(this._random_set_string)) {
+        let vals: Array<Map<string, number>> = JSON.parse(this._random_set_string);
+        if (vals) {
+          for (let v_set of vals) {
+            let rs = new RandomSet<Sprite25D>();
+            this.SpriteSets.push(rs);
+
+            for (let [k, v] of v_set) {
+              let sp: Sprite25D = this.getSpriteByName(k);
+              if (!sp) {
+                errors += " sprite '" + k + "'could not be found when creating random set\r\n.";
+              }
+              else {
+                rs.set(sp, v);
+              }
+            }
+
+          }
+        }
+        else {
+          errors += "Could not parse valid Map<k,v> json : '" + this._random_set_string + "'";
+        }
+      }
+      else {
+        errors += "Random set json was not valid : '" + this._random_set_string + "'";
+      }
+    }
+
+    //Normalize sets.
+    for (let [k, v] of this._sprites) {
+      let rs = this.getSpriteRandomSet(v);//redundant..meh
+      let frs = this.getFrameRandomSet(v);
+      if (frs) {
+        frs.normalize();
+      }
+      if (rs) {
+        frs.normalize();
+      }
+    }
+
+    if (errors) {
+      Globals.logError(errors);
+    }
   }
   private addSpriteFrame(atlas: Atlas, frameDef: SpriteFrameDefinition, sprite: Sprite25D) {
     if (frameDef.after_load) {
@@ -591,17 +739,11 @@ export class SpriteDefs {
         }
       }
     }
-    if (frameDef.collision) {
-      sprite.CollisionHandling = frameDef.collision;
-    }
-    if (frameDef.collision_bits) {
-      sprite.CollisionBits = frameDef.collision_bits;
-    }
 
-    let frame_index = null;
-    if (frameDef.frame_index) {
-      frame_index = frameDef.frame_index;
-    }
+    // let frame_index = null;
+    // if (frameDef.frame_index) {
+    //   frame_index = frameDef.frame_index;
+    // }
 
     let frame_w = 1;
     if (frameDef.tiles_width) {
@@ -614,7 +756,17 @@ export class SpriteDefs {
 
     let tuple = atlas.tiledFrameIdToTuple(frameDef.tiled_id);
 
-    sprite.Animation.addTileFrame(tuple, atlas, new ivec2(1, 1), [], frameDef.duration, new ivec2(frame_w, frame_h));
+    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(tuple, atlas, new ivec2(1, 1), [], frameDef.duration, new ivec2(frame_w, frame_h));
+
+    //Set the random frame if it is set.
+    if (frameDef.random_prob_element) {
+      let rs: RandomSet<SpriteKeyFrame> = this.getFrameRandomSet(sprite);
+      if (rs === null) {
+        rs = new RandomSet<SpriteKeyFrame>();
+        this.FrameSets.set(sprite, rs);
+      }
+      rs.set(fr, frameDef.random_prob_element, false);
+    }
 
     //Set the LUT to quickly convert from the tiled index to the Helix index.
     this.addToLUT(frameDef.tiled_id, sprite.HelixTileId, toInt(sprite.Animation.TileData.KeyFrames.length - 1));
@@ -721,6 +873,7 @@ export class TileMapData {
   public constructor(atlas: Atlas, map: TmxMap, tileset: TmxTileset) {
     this._width = map.width;
     this._height = map.height;
+
 
     this._spriteDefs = new SpriteDefs(atlas, tileset);
 
@@ -995,7 +1148,7 @@ export class MasterMap {
   public constructor(atlas: Atlas) {
     this._atlas = atlas;
 
-    let tiles: TmxTileset = JSON.parse(JSON.stringify(master_tileset));
+    let tile_set: TmxTileset = JSON.parse(JSON.stringify(master_tileset));
     if (Globals.isDebug()) {
       Globals.logDebug("Tiles:\r\n" + JSON.stringify(master_tileset));
     }
@@ -1010,7 +1163,7 @@ export class MasterMap {
     this._mapLayerCount = map.layers.length as Int;
 
     //Create the map
-    this._tileMap = new TileMapData(atlas, map, tiles);
+    this._tileMap = new TileMapData(atlas, map, tile_set);
 
     if (this._tileMap.PlayerStartXY === null) {
       Globals.logError("Could not find a player start position.  Make sure is_player is a true property on the sprite and it is added to the map.");
@@ -1104,7 +1257,6 @@ export class MapArea {
 
     Globals.logDebug("Floodfill called " + this.debug_numfloodfill + " times.");
     if (this.Grid.errors.length) {
-
       Globals.logError(this.Grid.errors);
     }
 
@@ -1328,11 +1480,19 @@ export class TileGrid {
           }
         }
         else if (tileSprite.TileType == HelixTileType.CellTile) {
+          let computed_tile_data: { sprite: Sprite25D, frame: Int, layer: Int } = {
+            sprite: tileSprite,
+            frame: toInt(-1),
+            layer: toInt(iLayer)
+          };
+
+          this.getSpriteTileFrame(c.CellPos_World.x, c.CellPos_World.y, toInt(iLayer as number), tileSprite, tile, computed_tile_data);
+
           c.Blocks.push(new TileBlock());
-          c.Blocks[c.Blocks.length - 1].SpriteRef = tileSprite;
-          c.Blocks[c.Blocks.length - 1].Layer = toInt(iLayer);
+          c.Blocks[c.Blocks.length - 1].SpriteRef = computed_tile_data.sprite;
+          c.Blocks[c.Blocks.length - 1].FrameIndex = computed_tile_data.frame;
+          c.Blocks[c.Blocks.length - 1].Layer = computed_tile_data.layer;
           c.Blocks[c.Blocks.length - 1].AnimationData = tileSprite.Animation.TileData;
-          c.Blocks[c.Blocks.length - 1].FrameIndex = this.getSpriteTileFrame(c.CellPos_World.x, c.CellPos_World.y, toInt(iLayer as number), tileSprite, tile);
         }
       }
     }
@@ -1445,16 +1605,22 @@ export class TileGrid {
     let ret: Cell = this.GetCellForPoint_World(pt);
     return ret;
   }
-  public getSpriteTileFrame(x: Int, y: Int, layer: Int, tileSprite: Sprite25D, tile: TileMapTileData): Int {
-    let ret: Int = toInt(0);
-    if (tileSprite.Tiling === Tiling.Random) {
-      ret = Random.int(0, tileSprite.Animation.TileData.KeyFrames.length - 1);
+  public getSpriteTileFrame(x: Int, y: Int, layer: Int, tileSprite: Sprite25D, tile: TileMapTileData, out_data: { sprite: Sprite25D, frame: Int, layer: Int }) {
+    //let ret: Int = toInt(0);
+    out_data.sprite = tileSprite;
+    out_data.layer = toInt(layer);
+
+    if (tileSprite.Tiling === Tiling.RandomSprite) {
+      this.selectRandomSpriteAndFrame(tileSprite, out_data);
+    }
+    else if (tileSprite.Tiling === Tiling.RandomFrame) {
+      out_data.frame = this.selectRandomFrame(tileSprite);
     }
     else if (tileSprite.Tiling === Tiling.FoliageTiling) {
-      ret = this.GetTileIndexFoliageBorder(x, y, layer, tile.TileID);
+      out_data.frame = this.GetTileIndexFoliageBorder(x, y, layer, tile.TileID);
     }
     else if (tileSprite.Tiling === Tiling.FenceRules) {
-      ret = this.GetTileIndexFence(x, y, layer, tile.TileID);
+      out_data.frame = this.GetTileIndexFence(x, y, layer, tile.TileID);
     }
     // else if (tileSprite.Tiling === Tiling.Set3x3Block) {
     //   ret = this.GetTileIndex3x3Block(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
@@ -1463,10 +1629,9 @@ export class TileGrid {
     //   ret = this.GetTileIndex3x3Seamless(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
     // }
     else if (tileSprite.Tiling === Tiling.HardBorderRules) {
-      ret = this.GetTileIndexHardBorder(x, y, layer, tile.TileID);
+      out_data.frame = this.GetTileIndexHardBorder(x, y, layer, tile.TileID);
     }
     else if (tileSprite.Tiling === Tiling.DockRules) {
-      let ret: Int = toInt(0);
       let arr = this.getSurroundingTiles3x3(x, y, tile.TileID, layer, HashSet.construct<Int>([tile.TileID]), true);
       let h: boolean = false;
       let v: boolean = false;
@@ -1477,29 +1642,65 @@ export class TileGrid {
         v = true;
       }
       if (h && !v) {
-        return toInt(0);
+        out_data.frame = toInt(0);
       }
       else if (!h && v) {
-        return toInt(1);
+        out_data.frame = toInt(1);
       }
-      return toInt(0);
+      out_data.frame = toInt(0);
     }
     else if (tileSprite.Tiling === Tiling.None) {
-      ret = tile.FrameIndex;
+      out_data.frame = tile.FrameIndex;
     }
     else {
-      Globals.logError("Invalid tiling type for setCellData()");
+      Globals.logError("Invalid tiling type for setCellData() for sprite '" + tileSprite.Name + "': " + tileSprite.Tiling);
     }
 
-    if (ret >= tileSprite.Animation.TileData.KeyFrames.length) {
-      Globals.logError("Invalid keyframe " + ret + " for tile sprite " + tileSprite.Name);
+    if (out_data.frame >= tileSprite.Animation.TileData.KeyFrames.length) {
+      Globals.logError("Invalid keyframe " + out_data.frame + " for tile sprite " + tileSprite.Name);
       Globals.debugBreak();
-      ret = toInt(0);
+      out_data.frame = toInt(0);
     }
 
+    return out_data.frame;
+  }
+  private err(s: string) {
+    this.errors += s + "\r\n"
+  }
+  private selectRandomSpriteAndFrame(tileSprite: Sprite25D, out_data: { sprite: Sprite25D, frame: Int, layer: Int }) {
+    let ss = this.Area.Map.MapData.Sprites.getSpriteRandomSet(tileSprite);
+
+    if (ss) {
+      out_data.sprite = ss.select();
+      if (out_data.sprite) {
+        out_data.frame = this.selectRandomFrame(out_data.sprite);
+      }
+      else {
+        this.err("Could not select random sprite for " + tileSprite.Name + ".");
+      }
+    }
+    else {
+      this.err("Random set for sprite " + tileSprite.Name + " was not found.");
+    }
+
+  }
+  private selectRandomFrame(sp: Sprite25D) {
+    let ret: Int = toInt(-1);
+    let frs = this.Area.Map.MapData.Sprites.getFrameRandomSet(sp);
+    if (frs) {
+      let kf: SpriteKeyFrame = frs.select();
+      if (kf) {
+        ret = kf.Index;
+      }
+      else {
+        this.err("Did not select valid keyframe for randomly selected tile sprite " + sp.Name + ".");
+      }
+    }
+    else {
+      this.err("Random frame set for randomly selected sprite" + sp.Name + " was not found.");
+    }
     return ret;
   }
-
   public GetTileIndexFoliageBorder(col: Int, row: Int, layer: Int, tileId: Int): Int {
     let ret: Int = toInt(0);
     let x: boolean = (col % 2) === 0;
@@ -1609,7 +1810,7 @@ export class TileGrid {
     }
     return arr;
   }
-  public crankPattern(list: MultiValueDictionary<Int, Array<Int>>, arr: boolean[], patternTileCount: Int, defaultvalue: Int, centerPat: Int): Int {
+  public crankPattern(list: MultiMap<Int, Array<Int>>, arr: boolean[], patternTileCount: Int, defaultvalue: Int, centerPat: Int): Int {
     //This algorithm matches an input pattern of tiles, to the a configured pattern, to generate
     //a sprite.  This is essentially an automatic tiling algorithm.
     //Loop arr, match with every pattern in "list" and return the corresponding key
@@ -1810,10 +2011,10 @@ class TilePatterns {
   //1 - a tile in this tileset is present
   //2 - ANY tile in this layer is present
   //Using numbers and converting to int later. Down the road... BigInt
-  public TilePatterns3x3Seamless: MultiValueDictionary<Int, Array<Int>> = null;
-  public TilePatterns3x3Block: MultiValueDictionary<Int, Array<Int>> = null;
-  public TilePatternsFence: MultiValueDictionary<Int, Array<Int>> = null;
-  public TilePatternsHardBorder: MultiValueDictionary<Int, Array<Int>> = null;
+  public TilePatterns3x3Seamless: MultiMap<Int, Array<Int>> = null;
+  public TilePatterns3x3Block: MultiMap<Int, Array<Int>> = null;
+  public TilePatternsFence: MultiMap<Int, Array<Int>> = null;
+  public TilePatternsHardBorder: MultiMap<Int, Array<Int>> = null;
   public constructor() {
     //Convert numbered patterns to integer.
     //Why?  because we want to use Int type but having a toInt() on every number is hell.
@@ -1822,9 +2023,9 @@ class TilePatterns {
     this.TilePatternsFence = this.nPatToI(this.TilePatternsFence_n);
     this.TilePatternsHardBorder = this.nPatToI(this.TilePatternsHardBorder_n);
   }
-  private nPatToI(input: MultiValueDictionary<number, Array<number>>): MultiValueDictionary<Int, Array<Int>> {
+  private nPatToI(input: MultiMap<number, Array<number>>): MultiMap<Int, Array<Int>> {
     //Simple method to 
-    let ret: MultiValueDictionary<Int, Array<Int>> = new MultiValueDictionary<Int, Array<Int>>();
+    let ret: MultiMap<Int, Array<Int>> = new MultiMap<Int, Array<Int>>();
 
     for (let k of input.keys()) {
       let nv: HashSet<Array<number>> = input.get(k);
@@ -1833,14 +2034,14 @@ class TilePatterns {
         for (let ni = 0; ni < nvx.length; ++ni) {
           arrToI.push(toInt(nvx[ni]));
         }
-        ret.add(toInt(k), arrToI);
+        ret.set(toInt(k), arrToI);
       }
     }
 
     return ret;
   }
 
-  private TilePatterns3x3Seamless_n = MultiValueDictionary.construct<number, Array<number>>([
+  private TilePatterns3x3Seamless_n = MultiMap.construct<number, Array<number>>([
     [0, new Array<number>(
       2, 0, 2,
       0, 1, 1,
@@ -2061,7 +2262,7 @@ class TilePatterns {
 
   ]);
 
-  private TilePatterns3x3Block_n = MultiValueDictionary.construct<number, Array<number>>([
+  private TilePatterns3x3Block_n = MultiMap.construct<number, Array<number>>([
     [0, new Array<number>(
       0, 0, 0,
       0, 1, 1,
@@ -2100,7 +2301,7 @@ class TilePatterns {
       0, 0, 0)],
   ]);
 
-  private TilePatternsFence_n = MultiValueDictionary.construct<number, Array<number>>([
+  private TilePatternsFence_n = MultiMap.construct<number, Array<number>>([
     [0, new Array<number>(
       2, 1, 2,
       0, 1, 0,
@@ -2151,7 +2352,7 @@ class TilePatterns {
       2, 1, 2)],
   ]);
 
-  private TilePatternsHardBorder_n = MultiValueDictionary.construct<number, Array<number>>([
+  private TilePatternsHardBorder_n = MultiMap.construct<number, Array<number>>([
     [0, new Array<number>(
       2, 0, 2,
       0, 1, 1,

@@ -23,6 +23,7 @@ export interface Dictionary<T> {
   [key: string]: T;
 }
 
+//How is this working as not a multimap?
 export class IVec2Map<K> {
   private map: Map<Int, Map<Int, K>> = new Map<Int, Map<Int, K>>();
 
@@ -73,6 +74,13 @@ export class IVec2Set extends IVec2Map<Int> {
 export class HashSet<T> {
   private _map: Map<T, T> = new Map<T, T>();
 
+  *[Symbol.iterator](): IterableIterator<T> {
+    //let it = new IterableIterator<[K, V]>;
+    for(let [k,v] of this._map){
+      yield k;
+    }
+  }
+
   public static construct<T>(arr: Array<T>): HashSet<T> {
     let ret: HashSet<T> = new HashSet<T>();
     for (let tx of arr) {
@@ -97,18 +105,28 @@ export class HashSet<T> {
   }
 
 }
-export class MultiValueDictionary<K, V>  {
+export class MultiMap<K, V> /*implements Map<K,HashSet<V>> */ {
+
   private _map: Map<K, HashSet<V>> = new Map<K, HashSet<V>>();
+
   public constructor() {
   }
-  public static construct<K, V>(values: Array<Array<any>>): MultiValueDictionary<K, V> {
-    let ret: MultiValueDictionary<K, V> = new MultiValueDictionary<K, V>();
+  *[Symbol.iterator](): IterableIterator<[K, V]> {
+    //let it = new IterableIterator<[K, V]>;
+    for(let [k,v] of this._map){
+      for(let val of v){
+        yield [k,val];
+      }
+    }
+  }
+  public static construct<K, V>(values: Array<Array<any>>): MultiMap<K, V> {
+    let ret: MultiMap<K, V> = new MultiMap<K, V>();
     for (let entry of values) {
       if (Utils.isNotNullorUndefined(entry)) {
         if (entry.length === 2) {
           let key: K = entry[0] as K;
           let vals: V = entry[1] as V;
-          ret.add(key, vals);
+          ret.set(key, vals);
         }
         else {
           Globals.logError("Invalid multimap entry, too many items (must be 2).");
@@ -129,7 +147,7 @@ export class MultiValueDictionary<K, V>  {
   public keys(): IterableIterator<K> {
     return this._map.keys();
   }
-  public add(k: K, v: V) {
+  public set(k: K, v: V) {
     let h: HashSet<V> = this._map.get(k);
 
     if (!h) {
@@ -146,7 +164,7 @@ export class Random {
   private static _rand: MersenneTwister = new MersenneTwister;
   private static _initialized: boolean = false;
 
-  private static randomInt(): number {
+  private static randomFloat01(): number {
     if (this._initialized == false) {
       this._initialized = true;
       this._rand.init_seed(new Date().getTime());
@@ -154,7 +172,7 @@ export class Random {
     return this._rand.random();
   }
   public static float(min: number, max: number) {
-    let f01: number = this.randomInt();
+    let f01: number = this.randomFloat01();
     let n2 = min + (max - min) * f01;
     return n2;
   }

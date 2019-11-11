@@ -13,6 +13,15 @@ export enum BrowserType {
   Chrome, Edge, IE, Opera, Firefox, Safari, Blink, Undefined
 }
 export class Utils {
+  public static isValidJson(str: string) {
+    try {
+      JSON.parse(str);
+    } 
+    catch (e) {
+      return false;
+    }
+    return true;
+  }
   public static getBrowser(): BrowserType {
     // Internet Explorer 6-11
     // @ts-ignore

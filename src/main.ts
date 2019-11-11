@@ -3,11 +3,11 @@ import { Color, Box3, Object3D, MeshBasicMaterial, Material, Quaternion, Box3Hel
 import { Globals, GameState, ResizeMode } from './Globals';
 //import { basename } from 'upath';
 import { Utils } from './Utils';
-import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer, GlobalEvent, GlobalEventObject } from './Base';
+import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer, GlobalEvent, GlobalEventObject, HashSet, MultiMap } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, roundToInt, toInt, checkIsInt, assertAsInt } from './Int';
-import { Tiling, TileGrid, MasterMap, Cell, TileBlock, TiledTileId, HelixTileId, TileLayerId, HelixTileType } from './TileGrid';
+import { Tiling, TileGrid, MasterMap, Cell, TileBlock, TiledTileId, HelixTileId, TileLayerId, HelixTileType, RandomSet } from './TileGrid';
 import { PhysicsObject3D } from './Physics3D';
 
 export class Color4 {
@@ -615,22 +615,28 @@ export class FDef {
     this.image_interpolation = other.image_interpolation;
   }
 }
+
 export enum SpriteKeyFrameInterpolation { Linear, Step }
 export class SpriteKeyFrame {
   //Keyframe for animation
-  public _parent: SpriteAnimationData = null;//MUST SET
-  public _frame: SpriteFrame = null; //The frame the sprite gets set to
-  public _position: vec3 = new vec3(0, 0);
-  public _rotation: Quaternion = new Quaternion(1, 0, 0, 0); //Axis/angle rotation
-  public _scale: vec2 = new vec2(1, 1);
-  public _visible: boolean = true;
-  public _color: vec4 = new vec4(1, 1, 1, 1);
-  public _duration: number = 0;
-  public _transformInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Linear;
-  public _imageInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
-  public _colorInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Linear;
-  public _flipH: boolean = false;
-  public _flipV: boolean = false;
+  private _parent: SpriteAnimationData = null;//MUST SET
+  private _frame: SpriteFrame = null; //The frame the sprite gets set to
+  private _position: vec3 = new vec3(0, 0);
+  private _rotation: Quaternion = new Quaternion(1, 0, 0, 0); //Axis/angle rotation
+  private _scale: vec2 = new vec2(1, 1);
+  private _visible: boolean = true;
+  private _color: vec4 = new vec4(1, 1, 1, 1);
+  private _duration: number = 0;
+  private _transformInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Linear;
+  private _imageInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
+  private _colorInterpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Linear;
+  private _flipH: boolean = false;
+  private _flipV: boolean = false;
+  private _index: Int = toInt(-1);
+
+  public get Index(): Int { return this._index; }
+  public set Index(x: Int) { this._index = x; }
+
 
   public get FlipH(): boolean { return this._flipH; }
   public set FlipH(x: boolean) { this._flipH = x; }
@@ -668,7 +674,6 @@ export class SpriteAnimationData {
   //Animation sequence for a single sprite component.
   private _name: string = "";
   private _lstKeyFrames: Array<SpriteKeyFrame> = new Array<SpriteKeyFrame>();
-
   private _duration: number = 0;
 
   public get Duration(): number { return this._duration; }
@@ -676,15 +681,18 @@ export class SpriteAnimationData {
   public get KeyFrames(): Array<SpriteKeyFrame> { return this._lstKeyFrames; }
   public set KeyFrames(x: Array<SpriteKeyFrame>) { this._lstKeyFrames = x; }
 
+  public constructor(name: string) {
+    this._name = name;
+  }
+  public addKeyFrame(kf: SpriteKeyFrame) {
+    this.KeyFrames.push(kf);
+    kf.Index = toInt(this.KeyFrames.length - 1);
+  }
   public calcDuration() {
     this._duration = 0;
     for (let kf of this._lstKeyFrames) {
       this._duration += kf.Duration;
     }
-  }
-
-  public constructor(name: string) {
-    this._name = name;
   }
 }
 export class SpriteTileInfo {
@@ -913,12 +921,19 @@ export class Animation25D {
     }
     return this._tileData_Cached;
   }
-  public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1), props: Array<SpriteTileInfo> = null, frameDuration: number = 0, frameSize: ivec2 = new ivec2(1, 1)) {
+  public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1),
+    props: Array<SpriteTileInfo> = null, frameDuration: number = 0, frameSize: ivec2 = new ivec2(1, 1)): SpriteKeyFrame {
     //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
     //FrameSize vs ImageSize:
     //ImageSize > 1,1 will create NxM sub-sprites each with frames 1 tile wide.
     //FrameSize > 1,1 will create 1 sprite, and set the frame's size to be NxM.  This is added for performance for UI elements.
     this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]], false, false, frameSize), frameDuration, atlas, imageSize, true, props);
+
+    let ret = null;
+    if (this.TileData && this.TileData.KeyFrames && this.TileData.KeyFrames.length) {
+      ret = this.TileData.KeyFrames[this.TileData.KeyFrames.length - 1];
+    }
+    return ret;
   }
   public addTiledAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, imageSize:
     ivec2 = null, append: boolean = false, props: Array<SpriteTileInfo> = null) {
@@ -987,18 +1002,10 @@ export class Animation25D {
     //if Append is true, we append the given FDef keys to the input animation
     let ret: SpriteAnimationData = null;
 
-    // if (isTileFrame) {
-    //   //We are static tileframe frame(s)
-    //   if (this._tileData === null) {
-    //     this._tileData = new SpriteAnimationData(animation_name);
-    //   }
-    //   ret = this._tileData;
-    // }
-    // else {
     ret = this.Animations.get(animation_name);
     if (ret) {
       if (append === false) {
-        Globals.logError("Tried to add another animation " + animation_name + " -- already added.");
+        Globals.logError("Tried to add another animation named " + animation_name + " -- already added.");
         Globals.debugBreak();
         return null;
       }
@@ -1009,7 +1016,6 @@ export class Animation25D {
     else {
       ret = new SpriteAnimationData(animation_name);
     }
-    // }
 
     //If we are a sub-tile animation, then add the parent sprite's sub-tile coordinates to the input animation.
     let sub_x = 0;
@@ -1020,7 +1026,6 @@ export class Animation25D {
     }
 
     //Create Tiles.
-
     for (let iframe = 0; iframe < frames.length; ++iframe) {
       let def: FDef = frames[iframe];
 
@@ -1044,7 +1049,7 @@ export class Animation25D {
         kf.Duration = duration / frames.length;
       }
 
-      ret.KeyFrames.push(kf);
+      ret.addKeyFrame(kf);
     }
 
     if (isTileFrame) {
@@ -1226,10 +1231,7 @@ export class Sprite25D {
 
   public get TileType(): HelixTileType { return this._tileType; }
   public set TileType(x: HelixTileType) { this._tileType = x; }
-  // public get IsBorderBlocker(): boolean { return this._tileType === HelixTileType.BorderBlocker; }
-  // public get IsDoorTrigger(): boolean { return this._tileType === HelixTileType.DoorTrigger; }
 
-  //Hand Gesture stuff
   public get GestureCallback(): GestureCallback { return this._gestureCallback; }
   public set GestureCallback(x: GestureCallback) { this._gestureCallback = x; }
 
@@ -1327,13 +1329,13 @@ export class Sprite25D {
 
     // }
     // else {
-      loc = this.Center;
+    loc = this.Center;
     //}
 
     if (add) {
       loc.add(add);
     }
-    
+
     let ret = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(loc);
     return ret;
   }
@@ -1445,6 +1447,7 @@ export class Sprite25D {
     //r3parent
     //afterloadcallback
     this._tileType = other._tileType;
+
   }
   public clone(): Sprite25D {
     let ret = new Sprite25D(this._atlas);
@@ -2963,7 +2966,35 @@ let g_mainWorld: WorldView25D = null;
 let g_bAssetsLoaded: boolean = false;
 let g_bMovingPlayer: boolean = false;
 
+function testMapAndHashSet() {
+  //test map & hashset.
+  console.log('testing map and hashset');
+  let arr = new Array();
+  for (let i = 0; i < 10; ++i) {
+    arr.push("string_" + i);
+  }
+
+  let h: HashSet<string> = HashSet.construct<string>(arr);
+
+  for (let x of h) {
+    console.log("hash set iterator: " + x);
+  }
+  let m: MultiMap<number, string> = MultiMap.construct<number, string>(
+    [
+      [0, "hi"], [0, "bye"],
+      [1, "my"], [1, "eye"],
+      [1, "sigh"], [4, "high"],
+      [5, "lie"], [5, "die"],
+    ]
+  );
+
+  for (let [k, v] of m) {
+    console.log("map iterator: " + k + "," + v);
+  }
+}
 $(document).ready(function () {
+  //testMapAndHashSet
+
   Globals.setFlags(document.location);
 
   Utils.loadingDetails("Creating world.");
