@@ -4,7 +4,6 @@ import { Dictionary } from './Base';
 import { vec4 } from './Math';
 import { Globals } from './Globals';
 import { toInt, Int } from './Int';
-//import { parse } from 'upath';
 
 type WithProperty<K extends string, V = {}> = {
   [P in K]: V
@@ -13,13 +12,13 @@ export enum BrowserType {
   Chrome, Edge, IE, Opera, Firefox, Safari, Blink, Undefined
 }
 export class Utils {
-  public static getParam(s:string) : string{
+  public static getParam(s: string): string {
     const url_params = (new URL("" + document.location)).searchParams;
     let v = url_params.get(s);
     return v;
   }
-  public static getBoolParam(s:string) : boolean { 
-    let b : boolean = Utils.parseBool(Utils.getParam(s));
+  public static getBoolParam(s: string): boolean {
+    let b: boolean = Utils.parseBool(Utils.getParam(s));
     return b;
   }
   public static getUrlParams(): Map<string, string> {
@@ -121,45 +120,64 @@ export class Utils {
 
     return ret;
   }
-  public static stringToEnum(s: string, object_keys: Array<string>, caseSensitive: boolean = false): number {
+  public static enumToString(value: number, object_keys: Array<string>, caseSensitive: boolean = false): string {
+    let r: string = Utils.enumConverter(null, value, object_keys, caseSensitive, false) as string;
+    if (r === null) {
+      Globals.logError("Enum conversion failed.")
+      Globals.debugBreak();
+    }
+    return r;
+  }
+  public static stringToEnum(enum_string: string, object_keys: Array<string>, caseSensitive: boolean = false): number {
+    let r: number = Utils.enumConverter(enum_string, null, object_keys, caseSensitive, true) as number;
+    if (r === null) {
+      Globals.logError("Enum conversion failed.")
+      Globals.debugBreak();
+    }
+    return r;
+  }
+  private static enumConverter(in_s: string, in_v: number, object_keys: Array<string>, caseSensitive: boolean, returnValue: boolean): any {
     //returns the enum value as an integer of the given thing.
-    //object_keys = Object.keys(MyEnum)
-
     let kv = Utils.enumKeyVals(object_keys);
 
     for (let [k, v] of kv) {
-      let d_k = Utils.copyString(k).trim();
-      let d_s = Utils.copyString(s).trim();
-      if (!caseSensitive) {
-        d_k = d_k.toLowerCase();
-        d_s = d_s.toLowerCase();
-      }
-      if (d_k === d_s) {
-        return v;
-      }
+      if (returnValue) { 
+        //return enum value
+        let d_k = Utils.copyString(k).trim();
+        let d_s = Utils.copyString(in_s).trim();
+        if (!caseSensitive) {
+          d_k = d_k.toLowerCase();
+          d_s = d_s.toLowerCase();
 
+        }
+        if (d_k === d_s) {
+          return v;
+        }
+      }
+      else { 
+        // return enum key
+        if (in_v === v) {
+          return k;
+        }
+      }
     }
-    return -999999;
+    return null;
   }
-  public static enumKeyVals(kv: Array<string>): Map<string, number> {
-    //Typescript is weird.  Returns an enum's keys and values with object.keys.
-    //This turns this into a simple map of key=>val ex. MyEnum { MyEnumKey=0 } turns into ["MyEnumKey", 0]
-    //Returns a map that you can iterate over enum:
+  private static enumKeyVals(kv: Array<string>): Map<string, number> {
+    //Turns an enum into a map of string=>number ex. ["MyEnumKey", 0]
     //Usage:
-    //    for(let [k,v] of enumKeyVals(Object.keys(MyEnum)))
-    // Wish there was a way to make this generic though.
-
+    //    for(let [k,v] of enumKeyVals(Object.keys(MyEnum))) { ... }
+    //Note:  Unfortunately this won't work for negative value enums.
+    //       By syntax, numbers can't start identifiers, therefore all positive enum numbers will be correctly ordered, but not negative.
+    //       Further, browsers are not required to order Object.keys. 
+    //          See: https://stackoverflow.com/questions/280713/elements-order-in-a-for-in-loop
+    //       See: object.keys out of order - https://hackernoon.com/out-of-order-keys-in-es6-objects-d5cede7dc92e
     let ret: Map<string, number> = new Map<string, number>();
 
     if (kv.length % 2 !== 0) {
       Globals.logError("enumKeyVals - Enum values were not evenly divisible. ?");
       Globals.debugBreak();
     }
-
-    //object.keys out of order - https://hackernoon.com/out-of-order-keys-in-es6-objects-d5cede7dc92e
-
-    //First sort the Object.keys.  This is because negative numbers will actually sort after some strings.
-    //   let 
 
     let valoff: number = kv.length / 2;
 

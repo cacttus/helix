@@ -21,17 +21,36 @@ List of objects on cell.
 
   **Can't use TileBlock for objects, the main function is TileBlock has the frame quads.
 
-
 Orthogonal Camera
 hand grab animation & hand grab object to physicsobject3d
 doors and moving to another area.
 fix character cell position to be body instead of head.
 fix missing door sprites in conduit
 
+need to change framelut to map animation as well as animation frame.
+SpriteLut will now map to a sprite, and the sprite will have a TILED LUT on top of that.
+
+
 
 NPCs
 npc Dialogue
 Walls
+
+11/11
+Fixed the tiled collisions.
+Fixed tiled animation.
+flipping: add fliph , flipv to the TileBlocks
+added duck sprite.
+Genericized importing tile aniamtion.
+multiple tile sets.
+Moving Layers and Collision to Frames and getting rid of SpriteProp.
+Defining animations in Tiled, easier and quicker this way.
+
+I figure we have 3 kinds of data in the TILED editor:
+Sprite level - a frame that has key attributes for the sprite
+animation level - defines a series of animations.
+frame level - usually this is just 'name'.  All frames must have a matching name.
+
 
 11/11
 Fixed StringToEnum error

@@ -6,8 +6,7 @@
   "main": "index.html",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "webpack-dev-server --progress --colors --http --content-base dist/",
-    "deploy": "node deploy"
+    "start": "webpack-dev-server --progress --colors --http --content-base dist/"
   },
   "keywords": [],
   "author": "",

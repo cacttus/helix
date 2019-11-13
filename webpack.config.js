@@ -2,7 +2,7 @@ var path = require('path');
 //var WebpackFtpUpload = require('webpack-ftp-upload')
 
 module.exports = {
-  mode: 'development',
+  mode: 'development', //'development' or 'production' will minify the code
   entry: './src/Main.ts',
   devtool: 'inline-source-map',
   module: {

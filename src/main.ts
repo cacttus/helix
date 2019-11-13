@@ -570,14 +570,19 @@ export class SpriteFrame {
 }
 export class FDef {
   //Quick Sprite Keyframe Definition
-  p: ivec2 = null;
-  wh: ivec2 = null;
-  h: boolean = false;
-  v: boolean = false;
-  c: vec4 = null;
+  FramePos: ivec2 = null;
+  FrameWH: ivec2 = null;
+  FlipH: boolean = false;
+  FlipV: boolean = false;
+  Color: vec4 = null;
+  //public RelativeTileOffset: ivec2 = new ivec2(0, 0);
+  public Layer: TileLayerId = TileLayerId.Unset; // If left unset, we set the sprite to the layer that it comes in in the map.
+  public Collision: CollisionHandling = CollisionHandling.None;
+
   image_interpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
 
-  public static default(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false, wh: ivec2 = new ivec2(1, 1)): Array<FDef> {
+  public static default(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false, wh: ivec2 = new ivec2(1, 1), 
+  dlayer:TileLayerId = TileLayerId.Unset, dcol:CollisionHandling = CollisionHandling.None): Array<FDef> {
     let ret: Array<FDef> = new Array<FDef>();
 
     for (let xi = 0; xi < framexys.length; xi++) {
@@ -593,13 +598,18 @@ export class FDef {
     return ret;
   }
 
-  public constructor(dp: ivec2 = null, dh: boolean = null, dv: boolean = null, dc: vec4 = null, ii: SpriteKeyFrameInterpolation = null, dwh: ivec2 = null) {
-    this.p = dp;
-    this.h = dh;
-    this.v = dv;
-    this.c = dc;
-    this.wh = dwh;
+  public constructor(dp: ivec2 = null, dh: boolean = null, dv: boolean = null, dc: vec4 = null, ii: SpriteKeyFrameInterpolation = null,
+     dwh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null) {
+    this.FramePos = dp;
+    this.FlipH = dh;
+    this.FlipV = dv;
+    this.Color = dc;
+    this.FrameWH = dwh;
     this.image_interpolation = ii;
+   // this.RelativeTileOffset = tileoff;
+    this.Layer = layer;
+    this.Collision = collision;
+
   }
   public clone(): FDef {
     let f: FDef = new FDef();
@@ -607,17 +617,26 @@ export class FDef {
     return f;
   }
   public copy(other: FDef) {
-    this.p = other.p ? other.p.clone() : null;
-    this.h = other.h;
-    this.v = other.v;
-    this.c = other.c ? other.c.clone() : null;
-    this.wh = other.wh ? other.wh.clone() : null;
+    this.FramePos = other.FramePos ? other.FramePos.clone() : null;
+    this.FlipH = other.FlipH;
+    this.FlipV = other.FlipV;
+    this.Color = other.Color ? other.Color.clone() : null;
+    this.FrameWH = other.FrameWH ? other.FrameWH.clone() : null;
     this.image_interpolation = other.image_interpolation;
   }
 }
 
+export class GloballyUniqueObject {
+  //Globally unique ID class.
+  private _uniqueId: Int = toInt(-1); // Do not copy
+  private static s_idGen: Int = toInt(1);
+  public get UniqueId(): Int { return this._uniqueId; }
+  public constructor() {
+    this._uniqueId = toInt(SpriteAnimationData.s_idGen++);
+  }
+}
 export enum SpriteKeyFrameInterpolation { Linear, Step }
-export class SpriteKeyFrame {
+export class SpriteKeyFrame extends GloballyUniqueObject {
   //Keyframe for animation
   private _parent: SpriteAnimationData = null;//MUST SET
   private _frame: SpriteFrame = null; //The frame the sprite gets set to
@@ -637,6 +656,8 @@ export class SpriteKeyFrame {
   public get Index(): Int { return this._index; }
   public set Index(x: Int) { this._index = x; }
 
+  public Collision : CollisionHandling = CollisionHandling.None;
+  public Layer : TileLayerId = TileLayerId.Unset;
 
   public get FlipH(): boolean { return this._flipH; }
   public set FlipH(x: boolean) { this._flipH = x; }
@@ -667,22 +688,43 @@ export class SpriteKeyFrame {
   public get Parent(): SpriteAnimationData { return this._parent; }
 
   public constructor(parent: SpriteAnimationData) {
+    super();
     this._parent = parent;
   }
 }
-export class SpriteAnimationData {
+
+export class SpriteAnimationData extends GloballyUniqueObject {
   //Animation sequence for a single sprite component.
   private _name: string = "";
   private _lstKeyFrames: Array<SpriteKeyFrame> = new Array<SpriteKeyFrame>();
   private _duration: number = 0;
+
+  public static createAnimationName(baseName: string, direction: Direction4Way, fliph: boolean, flipv: boolean) {
+    let ret_name = baseName;
+    if (direction !== Direction4Way.None) {
+      ret_name += "_" + Utils.enumToString(toInt(direction), Object.keys(Direction4Way));
+    }
+    if (fliph) {
+      ret_name += "_h";
+    }
+    if (flipv) {
+      ret_name += "_v";
+    }
+    return ret_name;
+  }
 
   public get Duration(): number { return this._duration; }
   public get Name(): string { return this._name; }
   public get KeyFrames(): Array<SpriteKeyFrame> { return this._lstKeyFrames; }
   public set KeyFrames(x: Array<SpriteKeyFrame>) { this._lstKeyFrames = x; }
 
-  public constructor(name: string) {
+  private _direction: Direction4Way = Direction4Way.None;
+  public get Direction(): Direction4Way { return this._direction; }
+
+  public constructor(name: string, direction: Direction4Way) {
+    super();
     this._name = name;
+    this._direction = direction;
   }
   public addKeyFrame(kf: SpriteKeyFrame) {
     this.KeyFrames.push(kf);
@@ -695,21 +737,15 @@ export class SpriteAnimationData {
     }
   }
 }
-export class SpriteTileInfo {
-  //This class defines sprite properties at the sprite level for animation definitions.
-  //specifically, which layer the sprite props should be.
-  public RelativeTileOffset: ivec2 = new ivec2(0, 0);
-  public Layer: TileLayerId = TileLayerId.Unset; // If left unset, we set the sprite to the layer that it comes in in the map.
-  public Collision: CollisionHandling = CollisionHandling.None;
-  public constructor(tileoff: ivec2, layer: TileLayerId, collision: CollisionHandling) {
-    this.RelativeTileOffset = tileoff;
-    this.Layer = layer;
-    this.Collision = collision;
-  }
+
+export enum CollisionHandling {
+  None,
+  Layer, //Collide on the layer only that the player is on.
+  Tile, //Collide on the whole tile, regardless of the player's layer.  This is for hard blockers like level borders.
+  Top, //For tiles, This tile only blocks if it is the top tile. FOr example, water blocks unless it has a dock over it.
 }
-export enum CollisionHandling { None, Layer }
 export enum AnimationPlayback { Playing, Pauseed, Stopped }
-export class Animation25D {
+export class Animation25D extends GloballyUniqueObject {
   //Separate class to deal with animations and transitinos.  Just because Sprite25D was getting big.
   public static readonly c_strDefaultTileAnimation: string = "_default";
 
@@ -795,6 +831,7 @@ export class Animation25D {
   public set FrameBlend(x: number) { this._frameBlend = x; }
 
   public constructor(sprite: Sprite25D) {
+    super();
     this._sprite = sprite;
   }
   public copy(other: Animation25D) {
@@ -922,12 +959,12 @@ export class Animation25D {
     return this._tileData_Cached;
   }
   public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1),
-    props: Array<SpriteTileInfo> = null, frameDuration: number = 0, frameSize: ivec2 = new ivec2(1, 1)): SpriteKeyFrame {
+    /*props: Array<SpriteTileInfo> = null,*/frameDuration: number = 0, frameSize: ivec2 = new ivec2(1, 1)): SpriteKeyFrame {
     //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
     //FrameSize vs ImageSize:
     //ImageSize > 1,1 will create NxM sub-sprites each with frames 1 tile wide.
     //FrameSize > 1,1 will create 1 sprite, and set the frame's size to be NxM.  This is added for performance for UI elements.
-    this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]], false, false, frameSize), frameDuration, atlas, imageSize, true, props);
+    this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]], false, false, frameSize), frameDuration, atlas, Direction4Way.None, imageSize);
 
     let ret = null;
     if (this.TileData && this.TileData.KeyFrames && this.TileData.KeyFrames.length) {
@@ -935,8 +972,9 @@ export class Animation25D {
     }
     return ret;
   }
-  public addTiledAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, imageSize:
-    ivec2 = null, append: boolean = false, props: Array<SpriteTileInfo> = null) {
+  public addTiledAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, direction: Direction4Way, imageSize:
+    ivec2 = null/*, props: Array<SpriteTileInfo> = null*/) {
+
     //This sets 'real' frame-by-frame animation for a multiple tiled sprite, OR can be used to set static tiled animations.
     //if Append is true, we append the given FDef keys to the input animation
     //Frames should reference from the top left corner (root) of the animated image.
@@ -945,33 +983,31 @@ export class Animation25D {
     for (let jtile = 0; jtile < imageSize.y; ++jtile) {
       for (let itile = 0; itile < imageSize.x; ++itile) {
 
-        //Find sprite prop if we have one defined.
-        let prop: SpriteTileInfo = null;
-        if (props && props.length > 0) {
-          for (let ob_prop of props) {
-            if (ob_prop.RelativeTileOffset.x === toInt(itile) && ob_prop.RelativeTileOffset.y === toInt(jtile)) {
-              prop = ob_prop;
-              break;
-            }
-          }
+        // //Find sprite prop if we have one defined.
+        // let prop: SpriteTileInfo = null;
+        // if (props && props.length > 0) {
+        //   for (let ob_prop of props) {
+        //     if (ob_prop.RelativeTileOffset.x === toInt(itile) && ob_prop.RelativeTileOffset.y === toInt(jtile)) {
+        //       prop = ob_prop;
+        //       break;
+        //     }
+        //   }
 
-          if (prop === null) {
-            Globals.logError("Could not find tiled sprite prop for a property-defined tiled sprite.");
-            Globals.debugBreak();
-          }
-        }
-
-
+        //   if (prop === null) {
+        //     Globals.logError("Could not find tiled sprite prop for a property-defined tiled sprite.");
+        //     Globals.debugBreak();
+        //   }
+        // }
 
         if (itile === 0 && jtile === 0) {
           this.Sprite.SubTile = new vec2(itile, jtile);
           //Root tile is tile 0,0
           //Add the animation to THIS sprite.
-          this.addAnimation(animation_name, frames, duration, atlas, append);
+          this.addOrAppendAnimation(animation_name, frames, duration, atlas, direction);
 
-          if (prop) {
-            this.Sprite.applyProp(prop);
-          }
+          // if (prop) {
+          //   this.Sprite.applyProp(prop);
+          // }
         }
         else {
           //SUB-TILE
@@ -985,36 +1021,27 @@ export class Animation25D {
             this.Sprite.add(sp);
           }
 
-          sp.Animation.addAnimation(animation_name, frames, duration, atlas, append);
+          sp.Animation.addOrAppendAnimation(animation_name, frames, duration, atlas, direction);
           sp.Position.set(
             this.Sprite.Position.x + itile * this.Sprite.Size.x,
             this.Sprite.Position.y + jtile * this.Sprite.Size.y,
             this.Sprite.Position.z);
 
-          if (prop) {
-            sp.applyProp(prop);
-          }
+          // if (prop) {
+          //   sp.applyProp(prop);
+          // }
         }
       }
     }
+
   }
-  private addAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, append: boolean = false, isTileFrame: boolean = false): SpriteAnimationData {
+  private addOrAppendAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, direction: Direction4Way, isTileFrame: boolean = false): SpriteAnimationData {
     //if Append is true, we append the given FDef keys to the input animation
     let ret: SpriteAnimationData = null;
 
     ret = this.Animations.get(animation_name);
-    if (ret) {
-      if (append === false) {
-        Globals.logError("Tried to add another animation named " + animation_name + " -- already added.");
-        Globals.debugBreak();
-        return null;
-      }
-      else {
-        //Do nothign, we got it
-      }
-    }
-    else {
-      ret = new SpriteAnimationData(animation_name);
+    if (!ret) {
+      ret = new SpriteAnimationData(animation_name, direction);
     }
 
     //If we are a sub-tile animation, then add the parent sprite's sub-tile coordinates to the input animation.
@@ -1031,14 +1058,17 @@ export class Animation25D {
 
       let kf = new SpriteKeyFrame(ret);
 
-      let tiles_w = def.wh ? def.wh.x : 1;
-      let tiles_h = def.wh ? def.wh.y : 1;
+      let tiles_w = def.FrameWH ? def.FrameWH.x : 1;
+      let tiles_h = def.FrameWH ? def.FrameWH.y : 1;
 
-      kf.Frame = atlas.getFrame(toInt(def.p.x + sub_x), toInt(def.p.y + sub_y), toInt(tiles_w), toInt(tiles_h));
+      kf.Frame = atlas.getFrame(toInt(def.FramePos.x + sub_x), toInt(def.FramePos.y + sub_y), toInt(tiles_w), toInt(tiles_h));
 
-      kf.Color = def.c ? def.c : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
-      kf.FlipH = def.h ? def.h : false;
-      kf.FlipV = def.v ? def.v : false;
+      kf.Color = def.Color ? def.Color : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
+      kf.FlipH = def.FlipH ? def.FlipH : false;
+      kf.FlipV = def.FlipV ? def.FlipV : false;
+
+      kf.Layer = def.Layer;
+      kf.Collision = def.Collision;
 
       kf.ImageInterpolation = def.image_interpolation;
 
@@ -1162,12 +1192,10 @@ export class Animation25D {
 export interface CollisionFunction25D { (thisObj: Phyobj25D, other: Phyobj25D, this_block: TileBlock, other_block: TileBlock): void; }
 export interface GestureCallback { (thisObj: Sprite25D, this_block: TileBlock, hand: Tickler): void; }
 export enum DirtyFlag { /*Transform = 0x01,*/ UVs = 0x02, Normals = 0x04, Colors = 0x08, All = 0x01 | 0x02 | 0x04 | 0x08 }
-export class Sprite25D {
+export class Sprite25D extends GloballyUniqueObject {
 
-  private static _idGen = 1; // Do not clone
   private _helixTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
   private _name: string = "";
-  private _uniqueId: number = 0;// DO NOT CLONE
   private _worldView: WorldView25D = null; // Do not clone
   private _dirty: boolean = false;// Do not clone MUST default to false.  
   private _destroyed: boolean = false; // Do not clone
@@ -1294,7 +1322,7 @@ export class Sprite25D {
   public get FlipV(): boolean { return this._flipV; }
   public set FlipV(x: boolean) { this._flipV = x; }
 
-  public get UniqueId(): number { return this._uniqueId; }
+  //public get UniqueId(): number { return this._uniqueId; }
   public get Origin(): vec3 { return this._origin; }
   public get DirtyFlags(): number { return this._dirtyFlags; }
   public get Visible(): boolean { return this._visible; }
@@ -1317,29 +1345,6 @@ export class Sprite25D {
   public set Scale(x: vec2) { this._scale = x; }
   public get Color(): vec4 { return this._color; }
   public set Color(x: vec4) { this._color = x; this.markDirty(DirtyFlag.Colors); }
-
-
-  public getCurrentCellR3(add: vec3 = null): Cell {
-    //Hacky way to get the player's current cell.
-    //TODO: this isn't workking
-    let loc = null;
-    // if (this instanceof Character) {
-    //   let cv = new vec3(g_atlas.TileWidthR3 * 0.5, g_atlas.TileWidthR3 * 1.5, 0);
-    //   loc = this._location.clone().add(cv);
-
-    // }
-    // else {
-    loc = this.Center;
-    //}
-
-    if (add) {
-      loc.add(add);
-    }
-
-    let ret = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(loc);
-    return ret;
-  }
-
 
   public get Center(): vec3 {
     //Returns the sprite tile center in Tile World space without depth applied.
@@ -1369,6 +1374,7 @@ export class Sprite25D {
   private _debugBox: THREE.Box3Helper = null;
 
   public constructor(atlas: Atlas/*, name: string = null, tileId: HelixTileId = MasterMap.UNDEFINED_TILE, layer: TileLayerId = null*/) {
+    super();
     this._atlas = atlas;
     if (name) {
       this._name = name;
@@ -1378,7 +1384,6 @@ export class Sprite25D {
     // }
     // this._helixTileId = tileId;
 
-    this._uniqueId = Sprite25D._idGen++;
     this._animation = new Animation25D(this);
 
     this._size.x = atlas.TileWidthR3;
@@ -1487,6 +1492,30 @@ export class Sprite25D {
     let tmp = this._boundBox_world.Min.y;
     this._boundBox_world.Min.y = -this._boundBox_world.Max.y;
     this._boundBox_world.Max.y = -tmp;
+  }
+  public validate() {
+    //Inherit this to validate the sprite loaded properly.
+  }
+
+  public getCurrentCellR3(add: vec3 = null): Cell {
+    //Hacky way to get the player's current cell.
+    //TODO: this isn't workking
+    let loc = null;
+    // if (this instanceof Character) {
+    //   let cv = new vec3(g_atlas.TileWidthR3 * 0.5, g_atlas.TileWidthR3 * 1.5, 0);
+    //   loc = this._location.clone().add(cv);
+
+    // }
+    // else {
+    loc = this.Center;
+    //}
+
+    if (add) {
+      loc.add(add);
+    }
+
+    let ret = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(loc);
+    return ret;
   }
   public calcBoundBoxGrid(nextpos_grid: vec3 = null) {
     let v = nextpos_grid ? nextpos_grid : this.Position;
@@ -1603,10 +1632,10 @@ export class Sprite25D {
     this._dirtyFlags = 0;
   }
 
-  public applyProp(sp: SpriteTileInfo) {
-    this.Layer = sp.Layer;
-    this.CollisionHandling = sp.Collision;
-  }
+  // public applyProp(sp: SpriteTileInfo) {
+  //   this.Layer = sp.Layer;
+  //   this.CollisionHandling = sp.Collision;
+  // }
   protected checkCollision(cell: Cell): boolean {
     var res: { value: boolean } = { value: false };
     this.checkCollision_r(cell, res);
@@ -1618,20 +1647,17 @@ export class Sprite25D {
       return;
     }
 
-    if (cell.isBlocked(this.Layer as Int)) {
+    if (cell.isObjectBlocked(this.Layer as Int)) {
       result.value = true;
       return;
     }
 
     for (let ch of this.Children) {
-      if (ch.canCollide()) {
+      if (ch.CollisionHandling !== CollisionHandling.None) {
         ch.checkCollision_r(cell, result);
       }
     }
 
-  }
-  public canCollide(): boolean {
-    return this.CollisionHandling === CollisionHandling.Layer;
   }
   public getTileBounds(): Box2f {
     let ret = new Box2f();
@@ -1725,8 +1751,6 @@ export class Phyobj25D extends Sprite25D {
         this.ApplySnap = false;
       }
 
-
-
       //Reset velocity
       this.Velocity.set(0, 0, 0);
     }
@@ -1739,6 +1763,7 @@ export class Phyobj25D extends Sprite25D {
   }
 
 }
+export enum Symmetry { None, H, V, HV }
 export enum Direction4Way { None, Left, Right, Up, Down };
 export class Character extends Phyobj25D {
   private _bMoving: boolean = false;
@@ -1758,7 +1783,6 @@ export class Character extends Phyobj25D {
   public get SpeedMultiplier(): number { return this._speedMultiplier; }
   public get IsPlayer(): boolean { return this._isPlayer; }
   public set IsPlayer(x: boolean) { this._isPlayer = x; }
-
 
   public constructor(atlas: Atlas) {
     super(atlas);
@@ -1927,16 +1951,16 @@ export class Character extends Phyobj25D {
   }
   public static getAnimationNameForMovementDirection(dir: Direction4Way): string {
     if (dir === Direction4Way.Left) {
-      return "move_left";
+      return "walk_Right_h";
     }
     else if (dir === Direction4Way.Right) {
-      return "move_right";
+      return "walk_Right";
     }
     else if (dir === Direction4Way.Up) {
-      return "move_up";
+      return "walk_Up";
     }
     else if (dir === Direction4Way.Down) {
-      return "move_down"
+      return "walk_Down"
     }
     Globals.logError('Inavlid direction supplied to getAnimationNameForMovementDirection');
     return "invalid";
@@ -1957,8 +1981,17 @@ export class Character extends Phyobj25D {
     }
     return n;
   }
+  // public validate(){
+  //   //Check that we have valid up/down/left/right animations.
+
+  // }
 
 
+}
+export class Bird extends Character {
+  public constructor(atlas: Atlas) {
+    super(atlas);
+  }
 }
 export class Viewport25D {
   private _widthPixels: number = 0;
@@ -2435,7 +2468,15 @@ export class WorldView25D extends Object3D {
       frame = block.SpriteRef.Animation.CurrentFrameIndex;
     }
 
-    this.copyCellTiles(c, block.SpriteRef, frame, block);
+    if (frame >= 0) {
+      this.copyCellTiles(c, block.SpriteRef, frame, block);
+    }
+    else {
+      if (Globals.isDebug() && (Globals.getFrameNumber() % 10 === 0)) {
+        Globals.logWarn("Frame wasn't set for sprite: " + ((block && block.SpriteRef) ? block.SpriteRef.Name : "undefined"));
+      }
+    }
+
   }
   private getLayerDepth(layer: TileLayerId): number {
     let ret = (layer as number) * WorldView25D.LayerDepth;

@@ -2,11 +2,13 @@ import { Color } from 'three';
 import { ivec2, vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit } from './Math';
 import { Globals } from './Globals';
 import { Utils } from './Utils';
-import { Atlas, Sprite25D, Door25D, FDef, SpriteFrame, Character, Direction4Way, SpriteTileInfo, CollisionHandling, HandGesture, SpriteAnimationData, SpriteKeyFrame, MonsterGrass25D } from './Main';
+import { Atlas, Sprite25D, Door25D, FDef, SpriteFrame, Character, Direction4Way, CollisionHandling, HandGesture, SpriteAnimationData, SpriteKeyFrame, MonsterGrass25D, Animation25D, Symmetry, SpriteKeyFrameInterpolation, Bird } from './Main';
 import { Int, roundToInt, toInt } from './Int';
 import { MultiMap, HashSet, IVec2Set, IVec2Map, RandomSet } from './Base';
 import world_data from './tiles_world.json';
-import master_tileset from './decal_tileset.json';
+import tileset_1 from './decal_tileset.json';
+import tileset_2 from './tiles_2.json';
+import objecttypes from './objecttypes.json';
 
 
 class TmxProperty {
@@ -14,9 +16,15 @@ class TmxProperty {
   public type: string;
   public value: string;
 }
+class TmxAnimationFrame {
+  public duration: number;
+  public tileid: number;
+}
+
 class TmxTilesetTile {
   public id: Int;
   public properties: Array<TmxProperty>;
+  public animation: Array<TmxAnimationFrame> = null;
 }
 class TmxTileset {
   public columns: Int;
@@ -37,17 +45,18 @@ class TmxTileset {
 }
 class TmxMapTileset {
   //Tileset in Tiled.
-  public columns: Int;//":6,
+  //  public columns: Int;//":6,
   public firstgid: Int;//":1,
-  public image: Int; //"..\/..: Int;//\/miner\/Core\/Content\/mintiles-16x16.png",
-  public imageheight: Int;//":512,
-  public imagewidth: Int;//":103,
-  public margin: Int;//":1,
-  public name: Int;//:"WorldTiles",
-  public spacing: Int;//":1,
-  public tilecount: Int;//":180,
-  public tileheight: Int;//":16,
-  public tilewidth: Int;//":16
+  public source: string; //I think this is the newer version - removed embedded tileset info
+  // public image: Int; //"..\/..: Int;//\/miner\/Core\/Content\/mintiles-16x16.png",
+  // public imageheight: Int;//":512,
+  // public imagewidth: Int;//":103,
+  // public margin: Int;//":1,
+  // public name: string;//:"WorldTiles",
+  // public spacing: Int;//":1,
+  // public tilecount: Int;//":180,
+  // public tileheight: Int;//":16,
+  // public tilewidth: Int;//":16
 }
 class TmxLayer {
   //Layer in Tiled
@@ -94,8 +103,14 @@ class TmxMap {
 }
 
 class TiledUtils {
-  public static propMatch(name: string, p: TmxProperty): boolean {
-    if (p.name.trim().toLowerCase() === name.trim().toLowerCase()) {
+
+  public static cleanProp(s: string): string {
+    let x = Utils.copyString(s).trim().toLowerCase();
+    return x;
+  }
+
+  public static propMatch(name: string, tmx_prop_name: string): boolean {
+    if (tmx_prop_name.trim().toLowerCase() === name.trim().toLowerCase()) {
       return true;
     }
     return false;
@@ -129,15 +144,14 @@ export enum TileLayerId {
 
   Border = 0,
   Background = 1,
-  Elevation = 2,
-  Water = 3, //Midground = 2,
-  AboveWater = 4,
-  Objects = 5,
-  Objects2 = 6,
-  Foreground = 7,
-  Conduit = 8,
-  Data_Objects = 9,
-  LayerCountEnum = 10,
+  Background_Border = 2,
+  Elevation = 3,
+  Objects = 4,
+  Objects2 = 5,
+  Foreground = 6,
+  Conduit = 7,
+  Data_Objects = 8,
+  LayerCountEnum = 9,
 
   Player_Relative_Foreground = 90, // Goes in front of player if player is on tile, or behind player if player is in front.
   DebugBackground = 91,
@@ -166,7 +180,7 @@ export class SpriteFrameDefinition {
 
   //FromTILED
   public after_load: string = null;
-  public animation: Array<Array<number>> = null;
+  //public animation: Array<Array<number>> = null;
   public typescript_class: string = null;
   public collision: CollisionHandling = null;
   public collision_bits: Int = null; //CollisionBits enum
@@ -176,15 +190,24 @@ export class SpriteFrameDefinition {
   public is_key: boolean = false;
   public is_player: boolean = false;
   public layer: TileLayerId = TileLayerId.Unset;  //o
-  public duration: number = null;
   public name: string = "";
   public tiling: Tiling = null;
   public random_prob_element: number = null;
+  public frame_width: number = null;
+  public frame_height: number = null;
   public tiles_width: number = null;
   public tiles_height: number = null;
+  public tiling_animated: boolean = null;
+
+  public animation_name: string = null;
+  public animation_direction: Direction4Way = null;
+  public animation_dupe: Symmetry = null;
+  public animation_duration: number = null;
+
+  public tiled_animation: Array<TmxAnimationFrame> = null; //this is the animation stragiht from tiled.
 
   public static readonly prop_after_load: string = "after_load";//  - function to run (compiled javascript) after loading
-  public static readonly prop_animation: string = "animation";// - the tile animation.
+  //public static readonly prop_animation: string = "animation";// - the tile animation.
   public static readonly prop_class: string = "class";//  - character and treasrue chest subclasses of Phy25, otherwise, the class iks Sprite25D
   public static readonly prop_collision: string = "collision";//  - none, layer (collide with layer objects)
   public static readonly prop_collision_bits: string = "collision_bits";//- the borders of this tile that can be collided, in TOP, RIGHT, BOTTOM, LEFT order, ex: to collide top and left: 1001.  Default value is : 1111 for all collided sprites.
@@ -194,47 +217,56 @@ export class SpriteFrameDefinition {
   public static readonly prop_is_key: string = "is_key";//  - only one per sprite.  this sprite has the key default attributes for all other sprites
   public static readonly prop_is_player: string = "is_player";//  - if this sprite is the player sprite
   public static readonly prop_layer: string = "layer";// - if layer is specified then the tile is placed on that layer, otherwise the tile is placed on the layer that it was read in as.
-  public static readonly prop_duration: string = "duration";//    - frame duration for the default tile animation
   public static readonly prop_name: string = "name";//- name
   public static readonly prop_tiling: string = "tiling";//  - none (tile is decal), random, fence, dock, white_border
   public static readonly prop_random_prob_element: string = "random_prob_element";//               - the probability of this tile in the tiling is random
-  public static readonly prop_tiles_width: string = "tiles_width";//      - the sets of random tiles that this is included with.
-  public static readonly prop_tiles_height: string = "tiles_height";//      - the sets of random tiles that this is included with.
+  public static readonly prop_frame_width: string = "frame_width";//          the w/h of THIS frame that it's define don
+  public static readonly prop_frame_height: string = "frame_height";//      
+  public static readonly prop_tiles_width: string = "tiles_width";//          For KEY sprites, this is the W/h of a multi-tiled sprite
+  public static readonly prop_tiles_height: string = "tiles_height";//      
+  public static readonly prop_tiling_animated: string = "tiling_animated";//
+  public static readonly prop_animation_name: string = "a_name";//          
+  public static readonly prop_animation_dir: string = "a_dir";//            
+  public static readonly prop_animation_dupe: string = "a_dupe";//          
+  public static readonly prop_animation_duration: string = "a_duration";//  
 
-
-  public static parse(tiled_tileset_id: Int, props: Array<TmxProperty>): SpriteFrameDefinition {
+  public static parse(tiled_tileset_id: Int, animation: Array<TmxAnimationFrame>, props: Array<TmxProperty>): SpriteFrameDefinition {
     let ret: SpriteFrameDefinition = new SpriteFrameDefinition();
     ret.tiled_id = tiled_tileset_id;
+    ret.tiled_animation = animation;
 
     let debug_name = "";
     //Parse name first so we have some way to breakpoint this
-    for (let prop of props) {
-      if (TiledUtils.propMatch(SpriteFrameDefinition.prop_name, prop)) {
-        TiledUtils.validateProp(ret.name = prop.value);
-        debug_name = ret.name;
+    for (let prop_p of props) {
+      let key = TiledUtils.cleanProp(prop_p.name);
+      let val = TiledUtils.cleanProp(prop_p.value);
+
+      if (TiledUtils.propMatch(SpriteFrameDefinition.prop_name, key)) {
+        TiledUtils.validateProp(ret.name = val);
+        debug_name = TiledUtils.cleanProp(ret.name);
       }
     }
 
     //Parse all props
-    for (let prop of props) {
-      if (TiledUtils.propMatch(SpriteFrameDefinition.prop_after_load, prop)) {
-        TiledUtils.validateProp(ret.after_load = prop.value);
+    for (let prop_p of props) {
+      let key = TiledUtils.cleanProp(prop_p.name);
+      let val = TiledUtils.cleanProp(prop_p.value);
+
+      if (TiledUtils.propMatch(SpriteFrameDefinition.prop_after_load, key)) {
+        TiledUtils.validateProp(ret.after_load = val);
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation, prop)) {
-        TiledUtils.validateProp(ret.animation = JSON.parse(JSON.stringify(prop.value)));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_class, key)) {
+        TiledUtils.validateProp(ret.typescript_class = val);
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_class, prop)) {
-        TiledUtils.validateProp(ret.typescript_class = prop.value);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_collision, key)) {
+        TiledUtils.validateProp(ret.collision = Utils.stringToEnum(val, Object.keys(CollisionHandling)) as CollisionHandling);
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_collision, prop)) {
-        TiledUtils.validateProp(ret.collision = Utils.stringToEnum(prop.value, Object.keys(CollisionHandling)) as CollisionHandling);
-      }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_collision_bits, prop)) {
-        if (prop.value.length === 4) {
-          let top: boolean = prop.value.substr(0, 1) === "1";
-          let right: boolean = prop.value.substr(1, 1) === "1";
-          let bot: boolean = prop.value.substr(2, 1) === "1";
-          let left: boolean = prop.value.substr(3, 1) === "1";
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_collision_bits, key)) {
+        if (val.length === 4) {
+          let top: boolean = val.substr(0, 1) === "1";
+          let right: boolean = val.substr(1, 1) === "1";
+          let bot: boolean = val.substr(2, 1) === "1";
+          let left: boolean = val.substr(3, 1) === "1";
 
           ret.collision_bits = toInt((top ? CollisionBits.Top : 0) | (right ? CollisionBits.Right : 0) | (bot ? CollisionBits.Bot : 0) | (left ? CollisionBits.Left : 0));
         }
@@ -244,54 +276,124 @@ export class SpriteFrameDefinition {
         }
       }
 
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_default_character_animation, prop)) {
-        TiledUtils.validateProp(ret.default_character_animation = Utils.parseBool(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_default_character_animation, key)) {
+        TiledUtils.validateProp(ret.default_character_animation = Utils.parseBool(val));
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_frame_index, prop)) {
-        TiledUtils.validateProp(ret.frame_index = Utils.parseInt(prop.value))
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_frame_index, key)) {
+        TiledUtils.validateProp(ret.frame_index = Utils.parseInt(val))
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_gesture, prop)) {
-        TiledUtils.validateProp(ret.gesture = Utils.stringToEnum(prop.value, Object.keys(HandGesture)) as HandGesture);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_gesture, key)) {
+        TiledUtils.validateProp(ret.gesture = Utils.stringToEnum(val, Object.keys(HandGesture)) as HandGesture);
       }
 
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_is_key, prop)) {
-        TiledUtils.validateProp(ret.is_key = Utils.parseBool(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_is_key, key)) {
+        TiledUtils.validateProp(ret.is_key = Utils.parseBool(val));
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_is_player, prop)) {
-        TiledUtils.validateProp(ret.is_player = Utils.parseBool(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_is_player, key)) {
+        TiledUtils.validateProp(ret.is_player = Utils.parseBool(val));
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_layer, prop)) {
-        TiledUtils.validateProp(ret.layer = Utils.stringToEnum(prop.value, Object.keys(TileLayerId)) as TileLayerId);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_layer, key)) {
+        TiledUtils.validateProp(ret.layer = Utils.stringToEnum(val, Object.keys(TileLayerId)) as TileLayerId);
         if (ret.layer === TileLayerId.Player_Relative_Foreground) {
           let nnn = 0;
           nnn++;
         }
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiling, prop)) {
-        TiledUtils.validateProp(ret.tiling = Utils.stringToEnum(prop.value, Object.keys(Tiling)) as Tiling);
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiling, key)) {
+        TiledUtils.validateProp(ret.tiling = Utils.stringToEnum(val, Object.keys(Tiling)) as Tiling);
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_random_prob_element, prop)) {
-        TiledUtils.validateProp(ret.random_prob_element = Utils.parseNumber(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_random_prob_element, key)) {
+        TiledUtils.validateProp(ret.random_prob_element = Utils.parseNumber(val));
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiles_height, prop)) {
-        TiledUtils.validateProp(ret.tiles_height = Utils.parseNumber(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_frame_height, key)) {
+        TiledUtils.validateProp(ret.frame_height = Utils.parseNumber(val));
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiles_width, prop)) {
-        TiledUtils.validateProp(ret.tiles_width = Utils.parseNumber(prop.value));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_frame_width, key)) {
+        TiledUtils.validateProp(ret.frame_width = Utils.parseNumber(val));
+      }
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiles_height, key)) {
+        TiledUtils.validateProp(ret.tiles_height = Utils.parseNumber(val));
+      }
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiles_width, key)) {
+        TiledUtils.validateProp(ret.tiles_width = Utils.parseNumber(val));
+      }
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiling_animated, key)) {
+        TiledUtils.validateProp(ret.tiling_animated = Utils.parseBool(val));
+      }
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_duration, key)) {
+        TiledUtils.validateProp(ret.animation_duration = Utils.parseNumber(val));
       }
 
-
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_name, key)) {
+        TiledUtils.validateProp(ret.animation_name = val);
+      }
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_dir, key)) {
+        TiledUtils.validateProp(ret.animation_direction = Utils.stringToEnum(val, Object.keys(Direction4Way)));
+      }
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_dupe, key)) {
+        TiledUtils.validateProp(ret.animation_dupe = Utils.stringToEnum(val, Object.keys(Symmetry)));
+      }
     }
     return ret;
   }
 }
-export class SpriteDefs {
+class TiledParsedTileId {
+  // http://doc.mapeditor.org/reference/tmx-map-format/#tile-flipping
+  private static readonly FLIPPED_HORIZONTALLY_FLAG = 0x80000000;
+  private static readonly FLIPPED_VERTICALLY_FLAG = 0x40000000;
+  private static readonly FLIPPED_DIAGONALLY_FLAG = 0x20000000;
+
+  //Tiled tile IDs use some compressed bitshift magic
+  public flip_h: boolean = false;
+  public flip_v: boolean = false;
+  public flip_d: boolean = false;
+  public tiled_tileid: TiledTileId = toInt(-1);
+  public xy: ivec2 = null;
+
+  public static tiledMAPTileIdFromGid(id: TiledTileId) {
+    //This is to be constructed on a TILED MAP not on a tileset.
+    //Map offsets are 1 off
+    let ret = (id as number) & ~(TiledParsedTileId.FLIPPED_HORIZONTALLY_FLAG |
+      TiledParsedTileId.FLIPPED_VERTICALLY_FLAG |
+      TiledParsedTileId.FLIPPED_DIAGONALLY_FLAG);
+
+    //This converts it to the acutal tiled id
+    //ret -= 1;
+    //So I thnk we no longer need to do -1 here.  the reason is that adding the tileset GID solves this issue, converting 0 tileset tile IDs into 1.
+    return ret;
+  }
+
+  public constructor(tiled_tileid_global_int: TiledTileId, atlas: Atlas) {
+    let tiled_tileid_global = tiled_tileid_global_int as number;
+
+    this.flip_h = (tiled_tileid_global & TiledParsedTileId.FLIPPED_HORIZONTALLY_FLAG) > 0;
+    this.flip_v = (tiled_tileid_global & TiledParsedTileId.FLIPPED_VERTICALLY_FLAG) > 0;
+    this.flip_d = (tiled_tileid_global & TiledParsedTileId.FLIPPED_DIAGONALLY_FLAG) > 0;
+
+    // Clear the flags
+    tiled_tileid_global = TiledParsedTileId.tiledMAPTileIdFromGid(tiled_tileid_global_int);
+
+    this.tiled_tileid = toInt(tiled_tileid_global);
+
+    this.xy = atlas.tiledFrameIdToTuple(this.tiled_tileid);
+  }
+}
+export class SpriteSet {
   //This is the definitions for all tiles in the game.
   //If we get Monogame Toolkit to work... we can eventually do away with this.
   private _sprites: Map<HelixTileId, Sprite25D> = new Map<HelixTileId, Sprite25D>();
   private _defs: Array<SpriteFrameDefinition> = new Array<SpriteFrameDefinition>();
-  private _spriteLUT: Map<TiledTileId, HelixTileId>; // Lookup table to convert TMX tileset ID into a Sprite ID the engine can use.
-  private _frameLUT: Map<HelixTileId, Int>; // Lookup table to convert the helix ID of a tile to the keyframe offset.
+  private _spriteLUT: Map<TiledTileId, TileMapTileData>//HelixTileId>; // Lookup table to convert TMX tileset ID into a Sprite the engine can use.
+  private _gids: Map<TmxTileset, Int> = null;//Globally unique id Offsets starting each tileset.
+
+  public getTileData(id: TiledTileId): TileMapTileData {
+    //The input ID should be the TIled ID WITHOUT the bitflags (fliph,flipv)
+    let ret = this._spriteLUT.get(id);
+    if (!ret) {
+      return null;
+    }
+    return ret;
+  }
 
   private _borderTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
   private _playerTileId: HelixTileId = MasterMap.UNDEFINED_TILE;
@@ -302,22 +404,55 @@ export class SpriteDefs {
   public get PlayerTileId(): HelixTileId { return this._playerTileId; }
   public get DoorTileId(): HelixTileId { return this._portalTileId; }
   public get ConduitTileId(): HelixTileId { return this._conduitTileId; }
-  public SpriteSets: Array<RandomSet<Sprite25D>> = new Array<RandomSet<Sprite25D>>();
-  public FrameSets: Map<Sprite25D, RandomSet<SpriteKeyFrame>> = new Map<Sprite25D, RandomSet<SpriteKeyFrame>>();
-
+  public SpriteRandomSets: Array<RandomSet<Sprite25D>> = new Array<RandomSet<Sprite25D>>();
+  public FrameRandomSets: Map<Sprite25D, RandomSet<SpriteKeyFrame>> = new Map<Sprite25D, RandomSet<SpriteKeyFrame>>();
   public static readonly prop_random_sprite_sets: string = "random_sprite_sets";//      - the sets of random tiles that this is included with.
+  private _random_set_strings: Array<string> = new Array<string>();
 
-  private _random_set_string: string = null;
+  public constructor(atlas: Atlas, map: TmxMap, tileset_files: Map<TmxTileset, string>) {
+    this._sprites = new Map<HelixTileId, Sprite25D>();
+    this._spriteLUT = new Map<TiledTileId, TileMapTileData>();
+    this._defs = new Array<SpriteFrameDefinition>();
+    this._gids = new Map<TmxTileset, Int>();
 
-  public constructor(atlas: Atlas, tileset: TmxTileset) {
-    this.parseMapProperties(tileset);
-    this.parseTileDefs(atlas, tileset);
+    this.parseTilesetGIDs(map, tileset_files);
+
+    for (let [set, fname] of tileset_files) {
+      Globals.logDebug("Parsing tileset: " + set.name + " ..");
+      this.parseMapProperties(set);
+      this.parseTileDefs(atlas, set);
+      Globals.logDebug("...done parsing tileset: " + set.name);
+    }
+
     this.assembleSprites(atlas);
+  }
+  private parseTilesetGIDs(map: TmxMap, tileset_files: Map<TmxTileset, string>) {
+    for (let mts of map.tilesets) {
+      for (let [set, fname] of tileset_files) {
+        if (mts.source.includes(fname)) {
+          this._gids.set(set, mts.firstgid);
+          break;
+        }
+      }
+    }
+  }
+  private getTilesetGID(tileset: TmxTileset) {
+    let g = this._gids.get(tileset);
+    if (!g) {
+      Globals.logError("Could not get tileset GID for tileset" + tileset.name);
+      Globals.debugBreak();
+      return null;
+    }
+    return g;
   }
   public update(dt: number) {
     //Update the animations of the static tiles.
     for (let [k, v] of this._sprites) {
       if (v.TilingAnimated) {
+        //Force automatic playing of animation
+        if (!v.Animation.isPlaying(Animation25D.c_strDefaultTileAnimation)) {
+          v.Animation.play(Animation25D.c_strDefaultTileAnimation);
+        }
         v.update(dt);
       }
     }
@@ -337,27 +472,6 @@ export class SpriteDefs {
   public getTile(id: HelixTileId) {
     let ret = this._sprites.get(id);
     return ret || null;
-  }
-  public getTileFrameIndex(tiled_id: TiledTileId, helix_id: HelixTileId): Int {
-    //Map the tiled frame to the keyframe offset in our helix sprite.
-    //returns 0 as default
-    let ret: Int = toInt(0);
-    ret = this._frameLUT.get(tiled_id);
-    if (!ret) {
-      return toInt(0);
-    }
-    return ret;
-  }
-  public tiledIdtoHelixId(id: Int): Int {
-    //Convert the ACTUAL tiled ID to helix.  The Tiled Id is +1 when exported so it should be subtracted before this function.
-    //Also, when we convert this, we convert arrays of frames.  By convention you can use any frame in TILED to define the map, but
-    //we aggregate them to sprite animations here.
-    //New function - this maps a SET of tiled sprites to a Helix sprite object.
-    let idr = this._spriteLUT.get(id);
-    if (!idr) {
-      return null;
-    }
-    return toInt(idr);
   }
   public debug_printLUT() {
     let s: string = "";
@@ -381,14 +495,17 @@ export class SpriteDefs {
     return found;
   }
   public getFrameRandomSet(sp: Sprite25D): RandomSet<SpriteKeyFrame> {
-    let ret = this.FrameSets.get(sp);
+    let ret = this.FrameRandomSets.get(sp);
     if (!ret) {
       ret = null;
     }
     return ret;
   }
   public getSpriteRandomSet(sp: Sprite25D): RandomSet<Sprite25D> {
-    for (let ss of this.SpriteSets) {
+    for (let ss of this.SpriteRandomSets) {
+      if (ss === null) {
+        Globals.debugBreak();//debug
+      }
       for (let [p, s] of ss.Elements) {
         if (s === sp) {
           return ss;
@@ -397,39 +514,41 @@ export class SpriteDefs {
     }
     return null;
   }
-
-
   private parseMapProperties(tileset: TmxTileset) {
-    for (let prop of tileset.properties) {
-      //Parse the random sets.
-      if (TiledUtils.propMatch(SpriteDefs.prop_random_sprite_sets, prop)) {
-        TiledUtils.validateProp(this._random_set_string = prop.value);
+    if (tileset.properties) {
+      for (let prop_p of tileset.properties) {
+        let key = TiledUtils.cleanProp(prop_p.name);
+        let val = TiledUtils.cleanProp(prop_p.value);
+
+        //Parse the random sets.
+        if (TiledUtils.propMatch(SpriteSet.prop_random_sprite_sets, key)) {
+          let str = "";
+          TiledUtils.validateProp(str = val);
+          this._random_set_strings.push(str);
+        }
       }
     }
   }
-  private _max_frame_id = -9999;
   private parseTileDefs(atlas: Atlas, tileset: TmxTileset) {
     //parses the tileset into frame definitions to be assembled into sprites
     try {
       let debug_info: string = "";
-      this._defs = new Array<SpriteFrameDefinition>();
+
+      let GID = this.getTilesetGID(tileset);
 
       if (tileset.tiles) {
         for (let tile of tileset.tiles) {
-          let tiled_tileset_id = tile.id;
-          if (this._max_frame_id < tile.id) {
-            this._max_frame_id = tile.id;
-          }
+          //Add GID to the tile ID to make it global across this map.
+          let tiled_tileset_id = toInt(GID + tile.id);
 
           if (tile.properties) {
-            let frameData = SpriteFrameDefinition.parse(tiled_tileset_id, tile.properties);
+            let frameData = SpriteFrameDefinition.parse(tiled_tileset_id, tile.animation, tile.properties);
             this._defs.push(frameData);
           }
           else {
             Globals.logWarn("Tile id '" + tiled_tileset_id + " " + "' did not have a 'name' property at least.  This is required.  Tile will not be used!");
             debug_info += "Error! = " + tiled_tileset_id + " " + "\r\n";
           }
-
         }
       }
       else {
@@ -444,9 +563,6 @@ export class SpriteDefs {
     }
   }
   private assembleSprites(atlas: Atlas) {
-    this._spriteLUT = new Map<TiledTileId, HelixTileId>();
-    this._frameLUT = new Map<TiledTileId, Int>();
-    this._sprites = new Map<HelixTileId, Sprite25D>();
 
     let nSpritesCreated = 0;
     //First create all key sprites so we have our sprite created. if there are no key sprites just make the default the top-left most 
@@ -494,9 +610,11 @@ export class SpriteDefs {
   }
   private makeCharacterSprite(atlas: Atlas, def: SpriteFrameDefinition): Character {
     let ret = new Character(atlas);
+
     ret.Name = def.name;
     ret.HelixTileId = this.genHelixSpriteId();
     ret.Layer = def.layer;
+
     if (def.is_player) {
       (ret as Character).IsPlayer = true;
       if (this._playerTileId !== MasterMap.UNDEFINED_TILE) {
@@ -508,24 +626,6 @@ export class SpriteDefs {
       }
     }
 
-    //Apply character animation.
-    if (!def.default_character_animation || def.default_character_animation === true) {
-      // let ret: Array<Array<Array<number>>> = JSON.parse(JSON.stringify(def.animation));
-      if (ret) {
-        this.addCharacterAnimation(ret as Character, atlas,
-          [[3, 1], [4, 1], [3, 1], [5, 1]],
-          [[3, 1], [4, 1], [3, 1], [5, 1]],
-          [[6, 1], [7, 1], [6, 1], [8, 1]],
-          [[0, 1], [1, 1], [0, 1], [2, 1]]
-        );
-      }
-      else {
-        Globals.logError("Sprite animation was not defined correctly.");
-      }
-    }
-    else {
-      Globals.logError("Unsupported animation without char");
-    }
     return ret;
   }
   private makeTileSprite(atlas: Atlas, def: SpriteFrameDefinition): Sprite25D {
@@ -615,6 +715,14 @@ export class SpriteDefs {
       else if (Utils.lcmp(def.typescript_class, "UI")) {
         ret = this.makeUISprite(atlas, def);
       }
+      else if (Utils.lcmp(def.typescript_class, "duck")) {
+        ret = new Bird(atlas);
+        ret.Name = def.name;
+        ret.HelixTileId = this.genHelixSpriteId();
+        ret.Layer = def.layer;
+        ret.TileType = HelixTileType.Character;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+        return ret;
+      }
       else if (Utils.lcmp(def.typescript_class, "MonsterGrass")) {
         ret = this.makeMonsterGrassSprite(atlas, def);
       }
@@ -624,12 +732,10 @@ export class SpriteDefs {
       }
     }
 
-
     //If we didn't have a class or couldn't find one, then instantiate as basic tile.
     if (ret === null) {
       Globals.logWarn("Sprite class not created, defaulting to Tile for def: " + def.name)
       ret = this.makeTileSprite(atlas, def);
-      //Globals.debugBreak();
     }
 
     if (def.collision) {
@@ -644,38 +750,17 @@ export class SpriteDefs {
     else {
       ret.Tiling = Tiling.None;
     }
-
+    if (def.tiling_animated) {
+      ret.TilingAnimated = true;
+    }
 
     return ret;
   }
   private parseRandomSets() {
     let errors = "";
-    if (this._random_set_string) {
-      if (Utils.isValidJson(this._random_set_string)) {
-        let vals: Array<Map<string, number>> = JSON.parse(this._random_set_string);
-        if (vals) {
-          for (let v_set of vals) {
-            let rs = new RandomSet<Sprite25D>();
-            this.SpriteSets.push(rs);
-
-            for (let [k, v] of v_set) {
-              let sp: Sprite25D = this.getSpriteByName(k);
-              if (!sp) {
-                errors += " sprite '" + k + "'could not be found when creating random set\r\n.";
-              }
-              else {
-                rs.set(sp, v);
-              }
-            }
-
-          }
-        }
-        else {
-          errors += "Could not parse valid Map<k,v> json : '" + this._random_set_string + "'";
-        }
-      }
-      else {
-        errors += "Random set json was not valid : '" + this._random_set_string + "'";
+    if (this._random_set_strings && this._random_set_strings.length) {
+      for (let random_set_str of this._random_set_strings) {
+        errors += this.parseRandomSetString(random_set_str);
       }
     }
 
@@ -695,6 +780,39 @@ export class SpriteDefs {
       Globals.logError(errors);
     }
   }
+  private parseRandomSetString(random_set_str: string) {
+    let errors = "";
+    if (Utils.isValidJson(random_set_str)) {
+      let vals: Array<Map<string, number>> = JSON.parse(random_set_str);
+      if (vals) {
+        for (let v_set of vals) {
+          let rs = new RandomSet<Sprite25D>();
+
+          for (let [k, v] of v_set) {
+            let sp: Sprite25D = this.getSpriteByName(k);
+            if (!sp) {
+              errors += " sprite '" + k + "'could not be found when creating random set\r\n.";
+            }
+            else {
+              rs.set(sp, v);
+            }
+          }
+          if (rs.Elements === null) {
+            Globals.debugBreak();
+          }
+
+          this.SpriteRandomSets.push(rs);
+        }
+      }
+      else {
+        errors += "Could not parse valid Map<k,v> json : '" + random_set_str + "'";
+      }
+    }
+    else {
+      errors += "Random set json was not valid : '" + random_set_str + "'";
+    }
+    return errors;
+  }
   private addSpriteFrame(atlas: Atlas, frameDef: SpriteFrameDefinition, sprite: Sprite25D) {
     if (frameDef.after_load) {
       if (sprite.AfterLoadCallback !== null) {
@@ -713,62 +831,105 @@ export class SpriteDefs {
       }
     }
 
-    // let frame_index = null;
-    // if (frameDef.frame_index) {
-    //   frame_index = frameDef.frame_index;
-    // }
-
     let frame_w = 1;
-    if (frameDef.tiles_width) {
-      frame_w = frameDef.tiles_width;
+    if (frameDef.frame_width) {
+      frame_w = frameDef.frame_width;
     }
     let frame_h = 1;
-    if (frameDef.tiles_height) {
-      frame_h = frameDef.tiles_height;
+    if (frameDef.frame_height) {
+      frame_h = frameDef.frame_height;
+    }
+    let layer = TileLayerId.Unset;
+    if (frameDef.layer) {
+      layer = frameDef.layer;
+    }
+    let collision = CollisionHandling.None;
+    if (frameDef.collision) {
+      collision = frameDef.collision;
+    }
+    let direction = Direction4Way.None
+    if (frameDef.animation_direction) {
+      direction = frameDef.animation_direction;
     }
 
-    let tuple = atlas.tiledFrameIdToTuple(frameDef.tiled_id);
 
-    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(tuple, atlas, new ivec2(1, 1), [], frameDef.duration, new ivec2(frame_w, frame_h));
+    //If the animation name is not defined then we are a cell tile animation.  This plays automatically.
+    //Otherwise we are added to a new animation
+    let parsedTile = new TiledParsedTileId(frameDef.tiled_id, atlas);
+    if (frameDef.animation_name) {
+      if (frameDef.tiled_animation) {
+        //we have an animation.  Oh my!
+
+        if (!frameDef.tiles_height || !frameDef.tiles_width) {
+          Globals.logWarn("Sprite did not have tiles_height and tiles_width defined for its animation, defaulting to 1x1");
+        }
+        let th = frameDef.tiles_height ? frameDef.tiles_height : 1;
+        let tw = frameDef.tiles_width ? frameDef.tiles_width : 1;
+
+
+        //Offset is for multi-tile animations like character.
+        // It needs to be computed by the tiles_width, tiles_height attribute and add or subtract the key position
+        //For now, we are using single tile animations.
+        //Wenn we convert this into a character animation then we need to add this.
+        let off: ivec2 = new ivec2(0, 0);
+
+        //simple lambda to parameterize symmetry.
+        let add_a = (h: boolean, v: boolean) => {
+          // Animation names are ALL generated.
+          let a_name = SpriteAnimationData.createAnimationName(frameDef.animation_name, direction, h, v);
+
+          //Create defs and props.
+          let fdefs: Array<FDef> = new Array<FDef>();
+          for (let f of frameDef.tiled_animation) {
+            for (let ih = 0; ih < th; ++ih) {
+              for (let iw = 0; iw < tw; ++iw) {
+
+                let parsed_frame = new TiledParsedTileId(f.tileid as Int, atlas);
+                let fd: FDef = new FDef(parsed_frame.xy, h, v, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, new ivec2(1, 1), layer, collision);
+                fdefs.push(fd);
+
+              }
+            }
+          }
+
+          sprite.Animation.addTiledAnimation(a_name, fdefs, frameDef.animation_duration, atlas, direction, new ivec2(tw, th));
+        };
+        add_a(false, false);
+
+        //duplicate the animation if symmetry is specified
+        if (frameDef.animation_dupe) {
+          let h: boolean = frameDef.animation_dupe === Symmetry.H || frameDef.animation_dupe === Symmetry.HV;
+          let v: boolean = frameDef.animation_dupe === Symmetry.V || frameDef.animation_dupe === Symmetry.HV;
+          if (h) {
+            add_a(h, false);
+          }
+          if (v) {
+            add_a(v, false);
+          }
+        }
+
+
+      }
+      else {
+        Globals.logWarn("Frame had an animation name specified, but no animation was present.")
+      }
+    }
+
+    //So we add to an animation if one is specified, however we need to set the visible tile (decal).
+    //So to solve this problem, we simply always add to default animation, this way we always can have a frame in the LUT.
+    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(parsedTile.xy, atlas, new ivec2(1, 1), [], frameDef.animation_duration, new ivec2(frame_w, frame_h));
+    let frame_index = sprite.Animation.TileData.KeyFrames.length - 1;
+    this.addToLUT(frameDef.tiled_id, sprite, sprite.Animation.TileData.UniqueId, toInt(frame_index), parsedTile.flip_h, parsedTile.flip_v);
 
     //Set the random frame if it is set.
     if (frameDef.random_prob_element) {
       let rs: RandomSet<SpriteKeyFrame> = this.getFrameRandomSet(sprite);
       if (rs === null) {
         rs = new RandomSet<SpriteKeyFrame>();
-        this.FrameSets.set(sprite, rs);
+        this.FrameRandomSets.set(sprite, rs);
       }
       rs.set(fr, frameDef.random_prob_element, false);
     }
-
-    //Set the LUT to quickly convert from the tiled index to the Helix index.
-    this.addToLUT(frameDef.tiled_id, sprite.HelixTileId, toInt(sprite.Animation.TileData.KeyFrames.length - 1));
-  }
-
-  private addCharacterAnimation(char: Character, atlas: Atlas, left: any, right: any, up: any, down: any) {
-
-    //This places the char's head above things in the world, and also makes it not collidable.
-    let props = [
-      new SpriteTileInfo(new ivec2(0, 0), TileLayerId.Foreground, CollisionHandling.None),
-      new SpriteTileInfo(new ivec2(0, 1), TileLayerId.Objects, CollisionHandling.Layer)
-    ]
-
-    char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Down),
-      FDef.default(down),
-      0.7, atlas,
-      new ivec2(1, 2), true, props);
-    char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Right),
-      FDef.default(right),
-      0.7, atlas,
-      new ivec2(1, 2), true, props);
-    char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Left),
-      FDef.default(left, true),
-      0.7, atlas,
-      new ivec2(1, 2), true, props);
-    char.Animation.addTiledAnimation(Character.getAnimationNameForMovementDirection(Direction4Way.Up),
-      FDef.default(up),
-      0.7, atlas,
-      new ivec2(1, 2), true, props);
   }
   private getKeySpriteFrameDef(name: string, orReturnDefaultKeySprite: boolean = false): SpriteFrameDefinition {
     let ret: SpriteFrameDefinition = null;
@@ -787,42 +948,46 @@ export class SpriteDefs {
         }
       }
     }
-
     return ret;
   }
-
   private validateNoDupes(def: SpriteFrameDefinition) {
     if (this._spriteLUT.get(def.tiled_id)) {
       Globals.logWarn("Tile id '" + def.tiled_id + " " + "' was already contained in the tile LUT!");
       Globals.debugBreak();
     }
   }
-
   private _next_helix_id: Int = toInt(1);
   private genHelixSpriteId(): Int {
     let id = toInt(this._next_helix_id);
     this._next_helix_id++;
     return id;
   }
-  private addToLUT(tiledId: TiledTileId, helixId: HelixTileId, frameId: Int) {
+  private addToLUT(tiledId: TiledTileId, spr: Sprite25D, animation_gid: Int, keyframe: Int, fliph: boolean, flipv: boolean) {
     if (this._spriteLUT.get(tiledId)) {
       Globals.logError("Tile was already found in LUT.");
       Globals.debugBreak();
     }
-    this._spriteLUT.set(tiledId, helixId);
-    this._frameLUT.set(tiledId, frameId);
+    this._spriteLUT.set(tiledId, new TileMapTileData(spr, animation_gid, keyframe, fliph, flipv));
   }
-
 }
 export class TileMapTileData {
-  public TileID: HelixTileId = MasterMap.EMPTY_TILE;
-  public FrameIndex: Int = toInt(0);
-  public constructor(id: HelixTileId, frameIndex: Int) {
-    this.TileID = id;
-    this.FrameIndex = frameIndex;
+  //Data for a single Tile Block in the Helix tile map.
+  //public HelixTileId: HelixTileId = MasterMap.EMPTY_TILE;
+  public Sprite: Sprite25D = null;
+  public AnimationId: Int = toInt(-1);
+  public AnimationFrame: Int = toInt(0);
+  public FlipH: boolean = false;
+  public FlipV: boolean = false;
+  public constructor(sprite: Sprite25D, animation_gid: Int, frame_gid: Int, fliph: boolean, flipv: boolean) {
+    this.Sprite = sprite;
+    this.AnimationId = animation_gid;
+    this.AnimationFrame = frame_gid;
+    this.FlipH = fliph;
+    this.FlipV = flipv;
   }
 }
 export class TileMapLayerData {
+  //A layer of tiles in the Helix Tile Map
   public data: Array<TileMapTileData> = new Array<TileMapTileData>();
 }
 export class TileMapData {
@@ -835,20 +1000,18 @@ export class TileMapData {
 
   public PlayerStartXY: ivec2 = null;
   public errors: string = "";
-  private _spriteDefs: SpriteDefs = null;
+  private _sprites: SpriteSet = null;
 
-  public get Sprites(): SpriteDefs { return this._spriteDefs; }
-
+  public get Sprites(): SpriteSet { return this._sprites; }
   public get Layers(): Array<TileMapLayerData> { return this._layers; }
   public get Width(): Int { return this._width; }
   public get Height(): Int { return this._height; }
 
-  public constructor(atlas: Atlas, map: TmxMap, tileset: TmxTileset) {
+  public constructor(atlas: Atlas, map: TmxMap, tilesets: Map<TmxTileset, string>) {
     this._width = map.width;
     this._height = map.height;
 
-
-    this._spriteDefs = new SpriteDefs(atlas, tileset);
+    this._sprites = new SpriteSet(atlas, map, tilesets);
 
     this.parseMap(map);
 
@@ -856,21 +1019,9 @@ export class TileMapData {
       this.debugPrint();
     }
   }
-  // private getProp<T>(prop: string, props: Array<TmxProperty>, nocase: boolean = true): T {
-  //   for (let p of props) {
-  //     if (nocase) {
-  //       if (p.name.trim().toLowerCase() === prop.trim().toLowerCase()) {
-  //         return p.value as unknown as T;
-  //       }
-  //     }
-  //   }
-  //   return null;
-  // }
-
-
-  public setTile(x: Int, y: Int, layer: Int, spriteId: HelixTileId, frame: Int) {
-    if (spriteId === null) {
-      this.errors += "set tile value was null.\r\n";
+  public setGridTileDataAtLocation(x: Int, y: Int, layer: Int, tileData: TileMapTileData) {// spriteId: HelixTileId, animationId: Int, frame: Int, fliph: boolean, flipv: boolean) {
+    if (tileData.Sprite === null) {
+      this.errors += "setGridTileAtLocation value was null.\r\n";
     }
     if (y < 0 || y >= this.Height) {
       return;
@@ -882,7 +1033,7 @@ export class TileMapData {
       if (this.Layers && layer < this.Layers.length) {
         let off = this.xyToLinear(x, y);
         if (this.Layers[layer].data.length > off) {
-          this.Layers[layer].data[off] = new TileMapTileData(spriteId, frame);
+          this.Layers[layer].data[off] = new TileMapTileData(tileData.Sprite, tileData.AnimationId, tileData.AnimationFrame, tileData.FlipH, tileData.FlipV);
           return;
         }
       }
@@ -924,9 +1075,13 @@ export class TileMapData {
     //Returns the tileindex at the XY offset.
     let tile: TileMapTileData = this.tileXY_World_Object(x, y, layer);
     if (tile === null) {
+      Globals.logError("Tile data was null for offset, tiledata should always be set, but may have null sprite");
+      Globals.debugBreak();
+    }
+    if (tile.Sprite === null) {
       return MasterMap.EMPTY_TILE as Int;
     }
-    return tile.TileID;
+    return tile.Sprite.HelixTileId;
   }
   public tileXY_World_Object(x: Int, y: Int, layer: Int): TileMapTileData {
     //Returns the tile object with the sprite, and the frame
@@ -960,7 +1115,7 @@ export class TileMapData {
 
       for (let iy = 0 as Int; iy < this.Height; ++iy) {
         for (let ix = 0; ix < this.Width; ++ix) {
-          this.Layers[iLayer].data.push(new TileMapTileData(MasterMap.EMPTY_TILE, toInt(0)));
+          this.Layers[iLayer].data.push(new TileMapTileData(null, toInt(-1), toInt(-1), false, false));
         }
       }
 
@@ -982,62 +1137,41 @@ export class TileMapData {
       //string to enum
       let layerId: Int = TileLayerId[(layer.name as string) as keyof typeof TileLayerId] as Int;
 
-      if (layerId === -1) {
+      if (layerId < 0) {
         Globals.debugBreak();
       }
-      else {
-        if (layer.data) {
-          for (let iTile = 0; iTile < layer.data.length; iTile++) {
-            let tiled_tileid: Int = layer.data[iTile];
-            let helix_tileid: Int = toInt(MasterMap.EMPTY_TILE);
-            let helix_tile_frame: Int = toInt(0);
-            let tilexy: ivec2 = this.linearToXY(toInt(iTile));
 
-            //***SO***  Tile Id's are +1 in the EXPORTED TILED JSON file.  NOT in the Tiled map or the tiled tileset.
-            //Really annoying, can I get a beer over here?
-            tiled_tileid = toInt(tiled_tileid as number - 1);
-            let name = "";
+      if (!layer.data) {
+        //A layer may not have data, this is ok (for ex, data_objects).
+        continue;
+      }
 
-            if (tiled_tileid === -1) {
-              //-1 ie empty, or 0
-              helix_tileid = MasterMap.EMPTY_TILE;
-            }
-            else {
-              helix_tileid = this.Sprites.tiledIdtoHelixId(tiled_tileid);
-              helix_tile_frame = this.Sprites.getTileFrameIndex(tiled_tileid, helix_tileid);
-            }
+      for (let iTile = 0; iTile < layer.data.length; iTile++) {
+        let tiled_tileid_global: Int = toInt(layer.data[iTile]);
+        let tilexy: ivec2 = this.linearToXY(toInt(iTile));
 
-            if (helix_tileid === null) {
-              helix_tileid = MasterMap.EMPTY_TILE;
-              debug_did_not_find += tiled_tileid + ",";
-            }
+        let tiled_tileid = toInt(TiledParsedTileId.tiledMAPTileIdFromGid(tiled_tileid_global));
 
-            if (helix_tileid !== MasterMap.EMPTY_TILE) {
-              //Debug - name of sprite
-              if (Globals.isDebug()) {
-                let tile = this.Sprites.getTile(helix_tileid);
-                if (tile === null) {
-                  //This should never happen.
-                  Globals.debugBreak();
-                }
-                else {
-                  name = this.Sprites.getTile(helix_tileid).Name;
-                }
-              }
-            }
+        let data: TileMapTileData = null;
+        if (tiled_tileid !== MasterMap.EMPTY_TILE) {
+          data = this.Sprites.getTileData(tiled_tileid);
 
-            this.setTile(tilexy.x, tilexy.y, layerId, helix_tileid, helix_tile_frame);
+          if (data === null) {
+            Globals.logError("Data was null.")
+            Globals.debugBreak();
+          }
+          else {
+            this.setGridTileDataAtLocation(tilexy.x, tilexy.y, layerId, data/*helix_tileid, animation_id, helix_tile_frame, fliph, flipv*/);
 
             //Check the tile id's for special things
-            if (helix_tileid === this.Sprites.PlayerTileId) {
+            if (data && data.Sprite && data.Sprite.HelixTileId === this.Sprites.PlayerTileId) {
               //here is our start point, flood fill this area.
               this.PlayerStartXY = new ivec2(tilexy.x, tilexy.y);
             }
-
           }
+
         }
       }
-
     }
 
 
@@ -1072,10 +1206,13 @@ export class TileMapData {
       let del: string = "";
       for (let iLayer = 0; iLayer < this.Layers.length; ++iLayer) {
         for (let xx = 0; xx < this.Layers[iLayer].data.length; ++xx) {
-          let t = this.Layers[iLayer].data[xx].TileID;
-          tiles += del + t;
-          del = ",";
-          mapTiles.set(t, t);
+          if (this.Layers[iLayer].data[xx] && this.Layers[iLayer].data[xx].Sprite) {
+            let t = this.Layers[iLayer].data[xx].Sprite.HelixTileId;
+            tiles += del + t;
+            del = ",";
+            mapTiles.set(t, t);
+          }
+
         }
       }
       let unique: string = "";
@@ -1093,7 +1230,7 @@ export class MasterMap {
   //This class is the container, it's job is mostly to create the world and
   //map ponints from Map space to World space.
   public static readonly UNDEFINED_TILE: Int = toInt(-2);
-  public static readonly EMPTY_TILE: Int = toInt(-1);
+  public static readonly EMPTY_TILE: Int = toInt(0); //NOTE: setting this to 0 now that we are using Tiled correctly with GID, which starts all tiles at 1
 
   private _atlas: Atlas = null;
   public _area: MapArea = null; //{ get; private set; }
@@ -1120,11 +1257,20 @@ export class MasterMap {
   }
   public constructor(atlas: Atlas) {
     this._atlas = atlas;
+    let fn_tileset_1 = 'decal_tileset.json'; // do not use any path stuf
 
-    let tile_set: TmxTileset = JSON.parse(JSON.stringify(master_tileset));
+    let tile_set1: TmxTileset = JSON.parse(JSON.stringify(tileset_1));
     if (Globals.isDebug()) {
-      Globals.logDebug("Tiles:\r\n" + JSON.stringify(master_tileset));
+      Globals.logDebug("Tiles-1:\r\n" + JSON.stringify(tileset_1));
     }
+
+    let fn_tileset_2 = 'tiles_2.json'; // do not use any path stuf
+    let tile_set2: TmxTileset = JSON.parse(JSON.stringify(tileset_2));
+    if (Globals.isDebug()) {
+      Globals.logDebug("Tiles-2:\r\n" + JSON.stringify(tileset_2));
+    }
+
+    let tileset_files = new Map<TmxTileset, string>([[tile_set1, fn_tileset_1], [tile_set2, fn_tileset_2]]);
 
     let map: TmxMap = JSON.parse(JSON.stringify(world_data));
     if (Globals.isDebug()) {
@@ -1136,7 +1282,7 @@ export class MasterMap {
     this._mapLayerCount = map.layers.length as Int;
 
     //Create the map
-    this._tileMap = new TileMapData(atlas, map, tile_set);
+    this._tileMap = new TileMapData(atlas, map, tileset_files);
 
     if (this._tileMap.PlayerStartXY === null) {
       Globals.logError("Could not find a player start position.  Make sure is_player is a true property on the sprite and it is added to the map.");
@@ -1437,34 +1583,37 @@ export class TileGrid {
     }
 
   }
+
   private setCellData(c: Cell, cellPos: ivec2) {
     //Set the Cell Data.  This is where the love happens.
     for (let iLayer = 0; iLayer < this.Area.Map.MapLayerCount; iLayer++) {
       let tile: TileMapTileData = this.Area.Map.MapData.tileXY_World_Object(cellPos.x, cellPos.y, iLayer as Int);
 
-      if (tile && tile.TileID !== MasterMap.EMPTY_TILE && tile.TileID !== this.Area.Map.MapData.Sprites.BorderTileId) {
-        let tileSprite: Sprite25D = this.Area.Map.MapData.Sprites.getTile(tile.TileID);
+      if (tile && tile.Sprite !== null && tile.Sprite.HelixTileId !== this.Area.Map.MapData.Sprites.BorderTileId) {
+        let tileSprite: Sprite25D = tile.Sprite;//this.Area.Map.MapData.Sprites.getTile(tile.HelixTileId);
 
         if (!tileSprite) {
-          this.errors += "Could not find tile def (TileDef) for helix tile ID " + tile.TileID + "\r\n";
+          this.errors += "Could not find tile def (TileDef) for helix tile ID " + tileSprite.HelixTileId + "\r\n";
 
-          if (tile.TileID > 1000) {
+          if (tileSprite.HelixTileId > 1000) {
             Globals.debugBreak();
           }
         }
         else {
-          let computed_tile_data: { sprite: Sprite25D, frame: Int, layer: Int, animation: SpriteAnimationData } = {
+          let computed_tile_data: { sprite: Sprite25D, frame: Int, layer: Int, animation: SpriteAnimationData, fliph: boolean, flipv: boolean } = {
             sprite: tileSprite,
             frame: toInt(-1),
             layer: toInt(iLayer),
-            animation: tileSprite.Animation.TileData
+            animation: tileSprite.Animation.TileData,
+            fliph: tile.FlipH,
+            flipv: tile.FlipV,
           };
 
           if (tileSprite.TileType == HelixTileType.CellTile) {
             this.getSpriteTileFrame(c.CellPos_World.x, c.CellPos_World.y, toInt(iLayer as number), tileSprite, tile, computed_tile_data);
           }
           else if (tileSprite.TileType == HelixTileType.Object) {
-            //Objects are multi-sized.  IDK really.  Should just be a tilesprite.
+            //We're an object.  Objects are multi-sized, so which cell "owns it".  The origin.  IDK really.  Should just be a tilesprite.  This needs fixing.
           }
 
           //Add a tile block.
@@ -1474,6 +1623,8 @@ export class TileGrid {
             c.Blocks[c.Blocks.length - 1].FrameIndex = computed_tile_data.frame;
             c.Blocks[c.Blocks.length - 1].Layer = computed_tile_data.layer;
             c.Blocks[c.Blocks.length - 1].AnimationData = computed_tile_data.animation;
+            c.Blocks[c.Blocks.length - 1].FlipH = computed_tile_data.flipv;
+            c.Blocks[c.Blocks.length - 1].FlipV = computed_tile_data.flipv;
           }
 
 
@@ -1593,6 +1744,7 @@ export class TileGrid {
     //let ret: Int = toInt(0);
     out_data.sprite = tileSprite;
     out_data.layer = toInt(layer);
+    let spriteId = tile.Sprite.HelixTileId;
 
     if (tileSprite.Tiling === Tiling.RandomSprite) {
       this.selectRandomSpriteAndFrame(tileSprite, out_data);
@@ -1601,10 +1753,10 @@ export class TileGrid {
       out_data.frame = this.selectRandomFrame(tileSprite);
     }
     else if (tileSprite.Tiling === Tiling.FoliageTiling) {
-      out_data.frame = this.GetTileIndexFoliageBorder(x, y, layer, tile.TileID);
+      out_data.frame = this.GetTileIndexFoliageBorder(x, y, layer, spriteId);
     }
     else if (tileSprite.Tiling === Tiling.FenceRules) {
-      out_data.frame = this.GetTileIndexFence(x, y, layer, tile.TileID);
+      out_data.frame = this.GetTileIndexFence(x, y, layer, spriteId);
     }
     // else if (tileSprite.Tiling === Tiling.Set3x3Block) {
     //   ret = this.GetTileIndex3x3Block(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
@@ -1613,10 +1765,10 @@ export class TileGrid {
     //   ret = this.GetTileIndex3x3Seamless(x, y, layer, tileId, HashSet.construct<Int>([tileId]), true);
     // }
     else if (tileSprite.Tiling === Tiling.HardBorderRules) {
-      out_data.frame = this.GetTileIndexHardBorder(x, y, layer, tile.TileID);
+      out_data.frame = this.GetTileIndexHardBorder(x, y, layer, spriteId);
     }
     else if (tileSprite.Tiling === Tiling.DockRules) {
-      let arr = this.getSurroundingTiles3x3(x, y, tile.TileID, layer, HashSet.construct<Int>([tile.TileID]), true);
+      let arr = this.getSurroundingTiles3x3(x, y, spriteId, layer, HashSet.construct<Int>([spriteId]), true);
       let h: boolean = false;
       let v: boolean = false;
       if (arr[3] && arr[5]) {
@@ -1634,7 +1786,7 @@ export class TileGrid {
       out_data.frame = toInt(0);
     }
     else if (tileSprite.Tiling === Tiling.None) {
-      out_data.frame = tile.FrameIndex;
+      out_data.frame = tile.AnimationFrame;
     }
     else {
       Globals.logError("Invalid tiling type for setCellData() for sprite '" + tileSprite.Name + "': " + tileSprite.Tiling);
@@ -1857,6 +2009,9 @@ export class TileBlock {
 
   public Verts: Array<vec3> = new Array<vec3>();
 
+  public FlipH: boolean = false;
+  public FlipV: boolean = false;
+
   public get AnimationData(): SpriteAnimationData { return this._animationData; }
   public set AnimationData(x: SpriteAnimationData) { this._animationData = x; }
 
@@ -1894,30 +2049,41 @@ export class Cell {
   public DebugVerts: Array<vec3> = new Array<vec3>();
   public static DebugFrame: SpriteFrame = null; // thisis just for debug
 
-  public hasTile(s:string) : boolean { 
-    for(let b of this.Blocks){
-      if(b.SpriteRef){
-        if(b.SpriteRef.Name === s){
+  public hasTile(s: string): boolean {
+    for (let b of this.Blocks) {
+      if (b.SpriteRef) {
+        if (b.SpriteRef.Name === s) {
           return true;
         }
       }
     }
     return false;
   }
+  public isObjectBlocked(layer: Int): boolean {
+    let b: boolean = false;
 
-  public isBlocked(layer: Int): boolean {
-    for (let block of this.Blocks) {
-      if (block.Layer === layer) {
-        if (block.SpriteRef) {
+    for (let i = 0; i < this.Blocks.length; ++i) {
+      let block = this.Blocks[i];
 
-          if (block.SpriteRef.canCollide()) {
-            return true;
-          }
+      if (block.SpriteRef) {
+        let ch = block.SpriteRef.CollisionHandling;
+
+        if (ch === CollisionHandling.Top && i === this.Blocks.length - 1) {
+          b = true;
+          break;
         }
-
+        else if (ch === CollisionHandling.Tile) {
+          b = true;
+          break;
+        }
+        else if ((ch === CollisionHandling.Layer) && (layer === block.SpriteRef.Layer)) {
+          b = true;
+          break;
+        }
       }
     }
-    return false;
+
+    return b;
   }
   public removeBlock(block: TileBlock): boolean {
     for (let bi = this.Blocks.length - 1; bi >= 0; bi--) {

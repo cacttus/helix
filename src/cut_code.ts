@@ -1301,3 +1301,24 @@
   //   let tile = x();
   //   this._sprites.set(tile.HelixSpriteId, tile);
   // }
+
+  -
+    //Removing specific character animation for generic character animation.
+    // //Apply character animation.
+    // if (!def.default_character_animation || def.default_character_animation === true) {
+    //   // let ret: Array<Array<Array<number>>> = JSON.parse(JSON.stringify(def.animation));
+    //   if (ret) {
+    //     this.addCharacterAnimation(ret as Character, atlas,
+    //       [[3, 1], [4, 1], [3, 1], [5, 1]],
+    //       [[3, 1], [4, 1], [3, 1], [5, 1]],
+    //       [[6, 1], [7, 1], [6, 1], [8, 1]],
+    //       [[0, 1], [1, 1], [0, 1], [2, 1]]
+    //     );
+    //   }
+    //   else {
+    //     Globals.logError("Sprite animation was not defined correctly.");
+    //   }
+    // }
+    // else {
+    //   Globals.logError("Unsupported animation without char");
+    // }
