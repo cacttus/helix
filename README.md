@@ -3,7 +3,7 @@ Helix is a 2D game in VR.  The purpose of this project is to demonstrate how VR 
 
 Graduate Seminar Term Project Fall 2019
 
-Adding some mergable text.
+Adding some mergable text. #2
 
 ## Trello
 https://trello.com/b/d4cSwyt3
