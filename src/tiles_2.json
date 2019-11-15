@@ -10,6 +10,19 @@
  "tileheight":16,
  "tiles":[
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":0
+                }, 
+                {
+                 "duration":200,
+                 "tileid":1
+                }, 
+                {
+                 "duration":200,
+                 "tileid":2
+                }],
          "id":0,
          "properties":[
                 {
@@ -47,21 +60,6 @@
          "id":1,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"left"
-                }, 
-                {
-                 "name":"a_dupe",
-                 "type":"string",
-                 "value":"h"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"fly"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"duck"
@@ -71,27 +69,21 @@
          "id":2,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"left"
-                }, 
-                {
-                 "name":"a_dupe",
-                 "type":"string",
-                 "value":"h"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"fly"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"duck"
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":3
+                }, 
+                {
+                 "duration":200,
+                 "tileid":4
+                }],
          "id":3,
          "properties":[
                 {
@@ -119,27 +111,29 @@
          "id":4,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"left"
-                }, 
-                {
-                 "name":"a_dupe",
-                 "type":"string",
-                 "value":"h"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"duck"
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":5
+                }, 
+                {
+                 "duration":200,
+                 "tileid":6
+                }, 
+                {
+                 "duration":200,
+                 "tileid":5
+                }, 
+                {
+                 "duration":200,
+                 "tileid":7
+                }],
          "id":5,
          "properties":[
                 {
@@ -162,16 +156,6 @@
          "id":6,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"down"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"duck"
@@ -181,22 +165,17 @@
          "id":7,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"down"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"duck"
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":100,
+                 "tileid":30
+                }],
          "id":30,
          "properties":[
                 {
@@ -221,6 +200,11 @@
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":100,
+                 "tileid":31
+                }],
          "id":31,
          "properties":[
                 {
@@ -240,6 +224,11 @@
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":100,
+                 "tileid":32
+                }],
          "id":32,
          "properties":[
                 {
@@ -259,6 +248,23 @@
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":33
+                }, 
+                {
+                 "duration":200,
+                 "tileid":34
+                }, 
+                {
+                 "duration":200,
+                 "tileid":33
+                }, 
+                {
+                 "duration":200,
+                 "tileid":35
+                }],
          "id":33,
          "properties":[
                 {
@@ -281,16 +287,6 @@
          "id":34,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"up"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"duck"
@@ -299,16 +295,6 @@
         {
          "id":35,
          "properties":[
-                {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"up"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
                 {
                  "name":"name",
                  "type":"string",

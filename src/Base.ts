@@ -23,9 +23,18 @@ export interface Dictionary<T> {
   [key: string]: T;
 }
 
-//How is this working as not a multimap?
 export class IVec2Map<K> {
   private map: Map<Int, Map<Int, K>> = new Map<Int, Map<Int, K>>();
+
+  *[Symbol.iterator](): IterableIterator<[ivec2, K]> {
+    //let it = new IterableIterator<[K, V]>;
+    for (let [n0, m2] of this.map) {
+      for(let [n1, k] of m2){
+        let r = new ivec2(n0,n1);
+        yield [r, k];
+      }
+    }
+  }
 
   public constructor() {
   }

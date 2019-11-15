@@ -504,54 +504,24 @@
                  "value":"walk"
                 }, 
                 {
-                 "name":"after_load",
+                 "name":"a_offset",
                  "type":"string",
-                 "value":"sprite.face(4); \n"
+                 "value":"0,-1"
                 }, 
                 {
-                 "name":"class",
+                 "name":"layer",
                  "type":"string",
-                 "value":"Character"
-                }, 
-                {
-                 "name":"is_key",
-                 "type":"string",
-                 "value":"true"
-                }, 
-                {
-                 "name":"is_player",
-                 "type":"string",
-                 "value":"true"
+                 "value":"foreground"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
-                }, 
-                {
-                 "name":"tiles_height",
-                 "type":"string",
-                 "value":"1"
-                }, 
-                {
-                 "name":"tiles_width",
-                 "type":"string",
-                 "value":"1"
                 }]
         }, 
         {
          "id":31,
          "properties":[
-                {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"down"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -561,16 +531,6 @@
         {
          "id":32,
          "properties":[
-                {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"down"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -603,14 +563,14 @@
                  "value":"right"
                 }, 
                 {
-                 "name":"a_dupe",
-                 "type":"string",
-                 "value":"h"
-                }, 
-                {
                  "name":"a_name",
                  "type":"string",
                  "value":"walk"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,-1"
                 }, 
                 {
                  "name":"name",
@@ -622,21 +582,6 @@
          "id":34,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"right"
-                }, 
-                {
-                 "name":"a_dupe",
-                 "type":"string",
-                 "value":"h"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -645,21 +590,6 @@
         {
          "id":35,
          "properties":[
-                {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"right"
-                }, 
-                {
-                 "name":"a_dupe",
-                 "type":"string",
-                 "value":"h"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -697,6 +627,11 @@
                  "value":"walk"
                 }, 
                 {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,-1"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -706,16 +641,6 @@
          "id":37,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"up"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -724,16 +649,6 @@
         {
          "id":38,
          "properties":[
-                {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"up"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -1028,6 +943,23 @@
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":60
+                }, 
+                {
+                 "duration":200,
+                 "tileid":61
+                }, 
+                {
+                 "duration":200,
+                 "tileid":60
+                }, 
+                {
+                 "duration":200,
+                 "tileid":62
+                }],
          "id":60,
          "properties":[
                 {
@@ -1041,6 +973,36 @@
                  "value":"walk"
                 }, 
                 {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
+                }, 
+                {
+                 "name":"after_load",
+                 "type":"string",
+                 "value":"sprite.face(4); \n"
+                }, 
+                {
+                 "name":"class",
+                 "type":"string",
+                 "value":"Character"
+                }, 
+                {
+                 "name":"is_key",
+                 "type":"string",
+                 "value":"true"
+                }, 
+                {
+                 "name":"is_player",
+                 "type":"string",
+                 "value":"true"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1049,16 +1011,6 @@
         {
          "id":61,
          "properties":[
-                {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"down"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -1069,22 +1021,29 @@
          "id":62,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"down"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":63
+                }, 
+                {
+                 "duration":200,
+                 "tileid":64
+                }, 
+                {
+                 "duration":200,
+                 "tileid":63
+                }, 
+                {
+                 "duration":200,
+                 "tileid":65
+                }],
          "id":63,
          "properties":[
                 {
@@ -1103,6 +1062,11 @@
                  "value":"walk"
                 }, 
                 {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1111,21 +1075,6 @@
         {
          "id":64,
          "properties":[
-                {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"right"
-                }, 
-                {
-                 "name":"a_dupe",
-                 "type":"string",
-                 "value":"h"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -1136,27 +1085,29 @@
          "id":65,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"right"
-                }, 
-                {
-                 "name":"a_dupe",
-                 "type":"string",
-                 "value":"h"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":66
+                }, 
+                {
+                 "duration":200,
+                 "tileid":67
+                }, 
+                {
+                 "duration":200,
+                 "tileid":66
+                }, 
+                {
+                 "duration":200,
+                 "tileid":68
+                }],
          "id":66,
          "properties":[
                 {
@@ -1170,6 +1121,11 @@
                  "value":"walk"
                 }, 
                 {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1179,16 +1135,6 @@
          "id":67,
          "properties":[
                 {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"up"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1197,16 +1143,6 @@
         {
          "id":68,
          "properties":[
-                {
-                 "name":"a_dir",
-                 "type":"string",
-                 "value":"up"
-                }, 
-                {
-                 "name":"a_name",
-                 "type":"string",
-                 "value":"walk"
-                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -2348,9 +2284,14 @@
          "id":155,
          "properties":[
                 {
-                 "name":"a_duration",
+                 "name":"a_name",
                  "type":"string",
-                 "value":"2.4"
+                 "value":"tile"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
                 }, 
                 {
                  "name":"class",
@@ -2373,6 +2314,16 @@
                  "value":"water_ocean"
                 }, 
                 {
+                 "name":"tiles_height",
+                 "type":"string",
+                 "value":"1"
+                }, 
+                {
+                 "name":"tiles_width",
+                 "type":"string",
+                 "value":"1"
+                }, 
+                {
                  "name":"tiling_animated",
                  "type":"string",
                  "value":"true"
@@ -2381,11 +2332,6 @@
         {
          "id":156,
          "properties":[
-                {
-                 "name":"a_duration",
-                 "type":"string",
-                 "value":"2.1"
-                }, 
                 {
                  "name":"class",
                  "type":"string",
@@ -2405,11 +2351,6 @@
         {
          "id":157,
          "properties":[
-                {
-                 "name":"a_duration",
-                 "type":"string",
-                 "value":"2.0"
-                }, 
                 {
                  "name":"class",
                  "type":"string",
@@ -2439,9 +2380,14 @@
          "id":158,
          "properties":[
                 {
-                 "name":"a_duration",
+                 "name":"a_name",
                  "type":"string",
-                 "value":"3.4"
+                 "value":"tile"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
                 }, 
                 {
                  "name":"class",
@@ -2464,6 +2410,16 @@
                  "value":"water_pond"
                 }, 
                 {
+                 "name":"tiles_height",
+                 "type":"string",
+                 "value":"1"
+                }, 
+                {
+                 "name":"tiles_width",
+                 "type":"string",
+                 "value":"1"
+                }, 
+                {
                  "name":"tiling_animated",
                  "type":"string",
                  "value":"true"
@@ -2472,11 +2428,6 @@
         {
          "id":159,
          "properties":[
-                {
-                 "name":"a_duration",
-                 "type":"string",
-                 "value":"3.1"
-                }, 
                 {
                  "name":"class",
                  "type":"string",
@@ -2697,24 +2648,19 @@
          "id":180,
          "properties":[
                 {
-                 "name":"after_load",
+                 "name":"a_dir",
                  "type":"string",
-                 "value":"sprite.face(4); \n"
+                 "value":"down"
                 }, 
                 {
-                 "name":"class",
+                 "name":"a_name",
                  "type":"string",
-                 "value":"Character"
+                 "value":"walk"
                 }, 
                 {
-                 "name":"is_key",
+                 "name":"a_offset",
                  "type":"string",
-                 "value":"true"
-                }, 
-                {
-                 "name":"is_player",
-                 "type":"string",
-                 "value":"false"
+                 "value":"0,-1"
                 }, 
                 {
                  "name":"name",
@@ -2761,6 +2707,21 @@
          "id":183,
          "properties":[
                 {
+                 "name":"a_dir",
+                 "type":"string",
+                 "value":"right"
+                }, 
+                {
+                 "name":"a_name",
+                 "type":"string",
+                 "value":"walk"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,-1"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -2804,6 +2765,21 @@
                 }],
          "id":186,
          "properties":[
+                {
+                 "name":"a_dir",
+                 "type":"string",
+                 "value":"up"
+                }, 
+                {
+                 "name":"a_name",
+                 "type":"string",
+                 "value":"walk"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,-1"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -3101,8 +3077,65 @@
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":210
+                }, 
+                {
+                 "duration":200,
+                 "tileid":211
+                }, 
+                {
+                 "duration":200,
+                 "tileid":210
+                }, 
+                {
+                 "duration":200,
+                 "tileid":212
+                }],
          "id":210,
          "properties":[
+                {
+                 "name":"a_dir",
+                 "type":"string",
+                 "value":"down"
+                }, 
+                {
+                 "name":"a_name",
+                 "type":"string",
+                 "value":"walk"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
+                }, 
+                {
+                 "name":"after_load",
+                 "type":"string",
+                 "value":"sprite.face(4); \n"
+                }, 
+                {
+                 "name":"class",
+                 "type":"string",
+                 "value":"Character"
+                }, 
+                {
+                 "name":"is_key",
+                 "type":"string",
+                 "value":"true"
+                }, 
+                {
+                 "name":"is_player",
+                 "type":"string",
+                 "value":"false"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -3128,8 +3161,45 @@
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":213
+                }, 
+                {
+                 "duration":200,
+                 "tileid":214
+                }, 
+                {
+                 "duration":200,
+                 "tileid":213
+                }, 
+                {
+                 "duration":200,
+                 "tileid":215
+                }],
          "id":213,
          "properties":[
+                {
+                 "name":"a_dir",
+                 "type":"string",
+                 "value":"right"
+                }, 
+                {
+                 "name":"a_dupe",
+                 "type":"string",
+                 "value":"h"
+                }, 
+                {
+                 "name":"a_name",
+                 "type":"string",
+                 "value":"walk"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -3155,8 +3225,40 @@
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":200,
+                 "tileid":216
+                }, 
+                {
+                 "duration":200,
+                 "tileid":217
+                }, 
+                {
+                 "duration":200,
+                 "tileid":216
+                }, 
+                {
+                 "duration":200,
+                 "tileid":218
+                }],
          "id":216,
          "properties":[
+                {
+                 "name":"a_dir",
+                 "type":"string",
+                 "value":"right"
+                }, 
+                {
+                 "name":"a_name",
+                 "type":"string",
+                 "value":"walk"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
+                }, 
                 {
                  "name":"name",
                  "type":"string",

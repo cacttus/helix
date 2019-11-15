@@ -3,7 +3,7 @@ import { Color, Box3, Object3D, MeshBasicMaterial, Material, Quaternion, Box3Hel
 import { Globals, GameState, ResizeMode } from './Globals';
 //import { basename } from 'upath';
 import { Utils } from './Utils';
-import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer, GlobalEvent, GlobalEventObject, HashSet, MultiMap, RandomSet } from './Base';
+import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer, GlobalEvent, GlobalEventObject, HashSet, MultiMap, RandomSet, IVec2Map } from './Base';
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, toInt } from './Int';
@@ -495,8 +495,21 @@ export class Atlas extends ImageResource {
 
     this.load(tex, afterLoad);
   }
-  public getFrame(tx: Int, ty: Int, tiles_width: Int = 1 as Int, tiles_height: Int = 1 as Int, spacing_h: Int = 1 as Int, spacing_v: Int = 1 as Int, margin: number = 0.0004): SpriteFrame {
+  public getFrame(tx: Int, ty: Int, tiles_width: Int, tiles_height: Int, spacing_h: Int = null as Int, spacing_v: Int = null as Int, dir: Direction4Way = null, margin: number = null): SpriteFrame {
     let atlas = this;
+    if (margin === null) {
+      margin = 0.0004;
+    }
+    if (dir === null) {
+      dir = Direction4Way.None;
+    }
+    if (spacing_h === null) {
+      spacing_h = this._xSpace;
+    }
+    if (spacing_v === null) {
+      spacing_v = this._ySpace;
+    }
+
     //Tiles_width / height is a multiple-segment frame (ex. 2 16x16 frames)
     //Spacing is a pixel space between multiple tile segments (ex. tiles_width>1)
     //Margin will shrink or grow the image to reduce texel border artifacts
@@ -512,6 +525,7 @@ export class Atlas extends ImageResource {
     f.tile_y_tiles = ty;
     f.tile_width_tiles = tiles_width;
     f.tile_height_tiles = tiles_height;
+    f.dir = dir;
 
     if (margin !== 0) {
       f.shrink(margin);
@@ -532,6 +546,8 @@ export class SpriteFrame {
   public y: number = 0;
   public w: number = 0;
   public h: number = 0;
+  public dir: Direction4Way = null;
+
   public shrink(amt: number) {
     //Add a slight margin to this frame in order to prevent small amounts of texture error.  Works well for pixel level textures with nearest filtering.
     this.x += amt;
@@ -570,46 +586,51 @@ export class SpriteFrame {
 }
 export class FDef {
   //Quick Sprite Keyframe Definition
-  FramePos: ivec2 = null;
-  FrameWH: ivec2 = null;
-  FlipH: boolean = false;
-  FlipV: boolean = false;
-  Color: vec4 = null;
-  //public RelativeTileOffset: ivec2 = new ivec2(0, 0);
+  public FramePos: ivec2 = null;
+  public FlipH: boolean = false;
+  public FlipV: boolean = false;
+  public Color: vec4 = null;
+  public FrameWH: ivec2 = null;
+  public Interpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
+  public Direction: Direction4Way = null;
   public Layer: TileLayerId = TileLayerId.Unset; // If left unset, we set the sprite to the layer that it comes in in the map.
   public Collision: CollisionHandling = CollisionHandling.None;
+  public Duration: number = null;
 
-  image_interpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
-
-  public static default(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false, wh: ivec2 = new ivec2(1, 1), 
-  dlayer:TileLayerId = TileLayerId.Unset, dcol:CollisionHandling = CollisionHandling.None): Array<FDef> {
-    let ret: Array<FDef> = new Array<FDef>();
+  public static tileDefault(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false, wh: ivec2 = new ivec2(1, 1),
+    dlayer: TileLayerId = TileLayerId.Unset, dcol: CollisionHandling = CollisionHandling.None, dir: Direction4Way = null, duration: number = null): IVec2Map<Array<FDef>> {
+    let ret: IVec2Map<Array<FDef>> = new IVec2Map<Array<FDef>>();
+    //Returns an FDEF for a cell tile (single animated cell frame)
+    let arr: Array<FDef> = new Array<FDef>();
 
     for (let xi = 0; xi < framexys.length; xi++) {
       if (framexys[xi].length !== 2) {
+        Globals.logError("Inavlid frame xy numbers in FDef.default");
         Globals.logError("Inavlid frame xy numbers in FDef.default");
         Globals.debugBreak();
       }
       let ix: Int = framexys[xi][0] as Int;
       let iy: Int = framexys[xi][1] as Int;
-      let d = new FDef(new ivec2(ix, iy), fliph, flipv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, wh);
-      ret.push(d);
+      let d = new FDef(new ivec2(ix, iy), fliph, flipv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, wh, dlayer, dcol, dir, duration);
+      arr.push(d);
     }
+
+    ret.set(new ivec2(0, 0), arr);
     return ret;
   }
 
-  public constructor(dp: ivec2 = null, dh: boolean = null, dv: boolean = null, dc: vec4 = null, ii: SpriteKeyFrameInterpolation = null,
-     dwh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null) {
-    this.FramePos = dp;
-    this.FlipH = dh;
-    this.FlipV = dv;
-    this.Color = dc;
-    this.FrameWH = dwh;
-    this.image_interpolation = ii;
-   // this.RelativeTileOffset = tileoff;
+  public constructor(tile_off: ivec2 = null, flip_h: boolean = null, flip_v: boolean = null, color: vec4 = null, interp: SpriteKeyFrameInterpolation = null,
+    frame_wh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null, dir: Direction4Way = null, duration: number = null) {
+    this.FramePos = tile_off;
+    this.FlipH = flip_h;
+    this.FlipV = flip_v;
+    this.Color = color;
+    this.FrameWH = frame_wh;
+    this.Interpolation = interp;
+    this.Direction = dir;
     this.Layer = layer;
     this.Collision = collision;
-
+    this.Duration = duration;
   }
   public clone(): FDef {
     let f: FDef = new FDef();
@@ -622,7 +643,12 @@ export class FDef {
     this.FlipV = other.FlipV;
     this.Color = other.Color ? other.Color.clone() : null;
     this.FrameWH = other.FrameWH ? other.FrameWH.clone() : null;
-    this.image_interpolation = other.image_interpolation;
+    this.Interpolation = other.Interpolation;
+    this.Direction = other.Direction;
+    this.Layer = other.Layer;
+    this.Collision = other.Collision;
+    this.Duration = other.Duration;
+
   }
 }
 
@@ -652,12 +678,18 @@ export class SpriteKeyFrame extends GloballyUniqueObject {
   private _flipH: boolean = false;
   private _flipV: boolean = false;
   private _index: Int = toInt(-1);
+  private _collision: CollisionHandling = CollisionHandling.None;
+  private _layer: TileLayerId = TileLayerId.Unset;
+  //private _direction: Direction4Way = Direction4Way.None;//Optional.
+  //Direction is in the SpriteFrame itself, there is no reason for the keyframe to have direction
+
+  public get Collision(): CollisionHandling { return this._collision; }
+  public set Collision(x: CollisionHandling) { this._collision = x; }
+  public get Layer(): TileLayerId { return this._layer; }
+  public set Layer(x: TileLayerId) { this._layer = x; }
 
   public get Index(): Int { return this._index; }
   public set Index(x: Int) { this._index = x; }
-
-  public Collision : CollisionHandling = CollisionHandling.None;
-  public Layer : TileLayerId = TileLayerId.Unset;
 
   public get FlipH(): boolean { return this._flipH; }
   public set FlipH(x: boolean) { this._flipH = x; }
@@ -699,19 +731,6 @@ export class SpriteAnimationData extends GloballyUniqueObject {
   private _lstKeyFrames: Array<SpriteKeyFrame> = new Array<SpriteKeyFrame>();
   private _duration: number = 0;
 
-  public static createAnimationName(baseName: string, direction: Direction4Way, fliph: boolean, flipv: boolean) {
-    let ret_name = baseName;
-    if (direction !== Direction4Way.None) {
-      ret_name += "_" + Utils.enumToString(toInt(direction), Object.keys(Direction4Way));
-    }
-    if (fliph) {
-      ret_name += "_h";
-    }
-    if (flipv) {
-      ret_name += "_v";
-    }
-    return ret_name;
-  }
 
   public get Duration(): number { return this._duration; }
   public get Name(): string { return this._name; }
@@ -725,6 +744,43 @@ export class SpriteAnimationData extends GloballyUniqueObject {
     super();
     this._name = name;
     this._direction = direction;
+  }
+  public static createAnimationName(baseName: string, direction: Direction4Way, fliph: boolean = null, flipv: boolean = null) {
+    //leave H and v to null if we're creating a searchable animation
+    //Flippage - flip the animation direction
+    let ret_name = baseName;
+    if (direction !== null && direction !== Direction4Way.None) {
+
+      if (fliph) {
+        if (direction === Direction4Way.Left) {
+          direction = Direction4Way.Right;
+        }
+        else if (direction === Direction4Way.Right) {
+          direction = Direction4Way.Left;
+        }
+        else {
+          Globals.logError("Invalid animation flippage : " + baseName);
+          Globals.debugBreak();
+        }
+      }
+      if (flipv) {
+        if (direction === Direction4Way.Up) {
+          direction = Direction4Way.Down;
+        }
+        else if (direction === Direction4Way.Down) {
+          direction = Direction4Way.Up;
+        }
+        else {
+          Globals.logError("Invalid animation flippage : " + baseName);
+          Globals.debugBreak();
+        }
+      }
+
+      ret_name += "_" + Utils.enumToString(toInt(direction), Object.keys(Direction4Way));
+    }
+
+    ret_name = ret_name.toLowerCase();
+    return ret_name;
   }
   public addKeyFrame(kf: SpriteKeyFrame) {
     this.KeyFrames.push(kf);
@@ -747,7 +803,8 @@ export enum CollisionHandling {
 export enum AnimationPlayback { Playing, Pauseed, Stopped }
 export class Animation25D extends GloballyUniqueObject {
   //Separate class to deal with animations and transitinos.  Just because Sprite25D was getting big.
-  public static readonly c_strDefaultTileAnimation: string = "_default";
+  public static readonly c_strTileData: string = "_default"; //This is the default data that is stored.  A list of all frames.  There is no real reason for it.
+  public static readonly c_strDefaultTileAnimation: string = "tile"; //This is a constant - set tile to the animated to make it aimat.
 
   private _sprite: Sprite25D = null; // DO NOT COPY
   private _animated_location: vec3 = new vec3(0, 0, 0); // Animated attributes.  These are applied if there is animation on the object.
@@ -886,20 +943,28 @@ export class Animation25D extends GloballyUniqueObject {
       }//if(anim)
     }
   }
+  public setDefault() {
+    //In case we forget to specify an animation, set the frame of this sprite to the default, first tiledata. 
+    let td = this.TileData;
 
-  public setKeyFrame(frameIndex: number, anim: string = null, recursive: boolean = true) {
-    let my_anim: SpriteAnimationData = null;
+    if (!td) {
+      Globals.debugBreak("Tiledata was not specified for sprite " + this.Sprite.Name);
+      //would be nice to set a default X sprite here, 
+      return;
+    }
+    if (!td.KeyFrames || !td.KeyFrames.length) {
+      Globals.debugBreak("Tiledata had no keyframes for sprite " + this.Sprite.Name);
+      //would be nice to set a default X sprite here, 
+      return;
+    }
 
-    if (anim !== null) {
-      my_anim = this.Animations.get(anim);
-    }
-    if (my_anim === null) {
-      my_anim = this._currentAnimation;
-    }
+    this.setKeyFrame(0, this.TileData);
+  }
+  public setKeyFrame(frameIndex: number, anim: SpriteAnimationData = null, recursive: boolean = true) {
     //Sets the given keyframe data for the character.
-    if (my_anim) {
-      if (my_anim.KeyFrames.length > frameIndex) {
-        let key = my_anim.KeyFrames[frameIndex];
+    if (anim) {
+      if (anim.KeyFrames.length > frameIndex) {
+        let key = anim.KeyFrames[frameIndex];
         this.interpolateKeyFrames(key, null, 0);
       }
       else {
@@ -907,9 +972,10 @@ export class Animation25D extends GloballyUniqueObject {
       }
     }
 
-    if (recursive) {
+    if (recursive && anim) {
       for (const c of this.Sprite.Children) {
-        c.Animation.setKeyFrame(frameIndex, anim, recursive);
+        let ca = c.Animation.findByName(anim.Name);
+        c.Animation.setKeyFrame(frameIndex, ca, recursive);
       }
     }
 
@@ -923,6 +989,29 @@ export class Animation25D extends GloballyUniqueObject {
   public isPlaying(name: string): boolean {
     let r = (this._playback === AnimationPlayback.Playing) && this.CurrentAnimation && (this.CurrentAnimation.Name === name);
     return r;
+  }
+  public findByName(base_name: string, direction: Direction4Way = null, symmetry: Symmetry = null) {
+    let ret: SpriteAnimationData = null;
+    let fliph: boolean = false;
+    let flipv: boolean = false;
+
+    if (symmetry === Symmetry.H || symmetry === Symmetry.HV) {
+      fliph = true;
+    }
+    if (symmetry === Symmetry.V || symmetry === Symmetry.HV) {
+      flipv = true;
+    }
+
+    let name = SpriteAnimationData.createAnimationName(base_name, direction, fliph, flipv);
+
+    for (let [k, v] of this.Animations) {
+      if (Utils.startsWith(k, name, false)) {
+        ret = v;
+        break;
+      }
+    }
+
+    return ret;
   }
   public play(animation_name: string = null, restart: boolean = true) {
     //if PreventRestart is true, then skip setting a new animation if the same animation is already playing.
@@ -954,17 +1043,17 @@ export class Animation25D extends GloballyUniqueObject {
   private _tileData_Cached: SpriteAnimationData = null;//Store it for easier retrieval.
   public get TileData(): SpriteAnimationData {
     if (!this._tileData_Cached) {
-      this._tileData_Cached = this.Animations.get(Animation25D.c_strDefaultTileAnimation);
+      this._tileData_Cached = this.Animations.get(Animation25D.c_strTileData);
     }
     return this._tileData_Cached;
   }
   public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1),
-    /*props: Array<SpriteTileInfo> = null,*/frameDuration: number = 0, frameSize: ivec2 = new ivec2(1, 1)): SpriteKeyFrame {
+    /*props: Array<SpriteTileInfo> = null,*/frameSize: ivec2 = new ivec2(1, 1)): SpriteKeyFrame {
     //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
     //FrameSize vs ImageSize:
     //ImageSize > 1,1 will create NxM sub-sprites each with frames 1 tile wide.
     //FrameSize > 1,1 will create 1 sprite, and set the frame's size to be NxM.  This is added for performance for UI elements.
-    this.addTiledAnimation(Animation25D.c_strDefaultTileAnimation, FDef.default([[tile.x, tile.y]], false, false, frameSize), frameDuration, atlas, Direction4Way.None, imageSize);
+    this.addTiledAnimation(Animation25D.c_strTileData, FDef.tileDefault([[tile.x, tile.y]], false, false, frameSize), atlas, Direction4Way.None, imageSize);
 
     let ret = null;
     if (this.TileData && this.TileData.KeyFrames && this.TileData.KeyFrames.length) {
@@ -972,84 +1061,43 @@ export class Animation25D extends GloballyUniqueObject {
     }
     return ret;
   }
-  public addTiledAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, direction: Direction4Way, imageSize:
-    ivec2 = null/*, props: Array<SpriteTileInfo> = null*/) {
-
-    //This sets 'real' frame-by-frame animation for a multiple tiled sprite, OR can be used to set static tiled animations.
-    //if Append is true, we append the given FDef keys to the input animation
-    //Frames should reference from the top left corner (root) of the animated image.
-    //This both creates sprites and adds animations to them.
-    //Props: Note that if you have props you must define a prop for each tile in the image.
-    for (let jtile = 0; jtile < imageSize.y; ++jtile) {
-      for (let itile = 0; itile < imageSize.x; ++itile) {
-
-        // //Find sprite prop if we have one defined.
-        // let prop: SpriteTileInfo = null;
-        // if (props && props.length > 0) {
-        //   for (let ob_prop of props) {
-        //     if (ob_prop.RelativeTileOffset.x === toInt(itile) && ob_prop.RelativeTileOffset.y === toInt(jtile)) {
-        //       prop = ob_prop;
-        //       break;
-        //     }
-        //   }
-
-        //   if (prop === null) {
-        //     Globals.logError("Could not find tiled sprite prop for a property-defined tiled sprite.");
-        //     Globals.debugBreak();
-        //   }
-        // }
-
-        if (itile === 0 && jtile === 0) {
-          this.Sprite.SubTile = new vec2(itile, jtile);
-          //Root tile is tile 0,0
-          //Add the animation to THIS sprite.
-          this.addOrAppendAnimation(animation_name, frames, duration, atlas, direction);
-
-          // if (prop) {
-          //   this.Sprite.applyProp(prop);
-          // }
+  public addTiledAnimation(animation_name: string, frames_reltile: IVec2Map<Array<FDef>>, atlas: Atlas, direction: Direction4Way, imageSize: ivec2 = null) {
+    //frames: A mapping of relative coordinates to the array of keyframes for that cell. for example <-1,-1> => [frame1, frame2..]
+    let errors = "";
+    for (let [k, v] of frames_reltile) {
+      if (k.x === 0 && k.y === 0) {
+        this.Sprite.SubTile = new vec2(0, 0);
+        this.addOrAppendAnimation(animation_name, v, atlas, direction);
+      }
+      else {
+        let sp: Sprite25D = this.Sprite.getSubTile(k.x, k.y);
+        if (sp === null) {
+          sp = new Sprite25D(atlas);
+          sp.Name = this.Sprite.Name + "_subtile_" + k.x + "_" + k.y;
+          sp.Layer = this.Sprite.Layer;
+          sp.SubTile = new vec2(k.x, k.y);
+          this.Sprite.add(sp);
         }
-        else {
-          //SUB-TILE
-          //Get the given sub-tile sprite, or create and add it to this sprite.
-          let sp: Sprite25D = this.Sprite.getSubTile(itile, jtile);
-          if (sp === null) {
-            sp = new Sprite25D(atlas);
-            sp.Name = this.Sprite.Name + "_subtile_" + itile + "_" + jtile;
-            sp.Layer = this.Sprite.Layer;
-            sp.SubTile = new vec2(itile, jtile);
-            this.Sprite.add(sp);
-          }
 
-          sp.Animation.addOrAppendAnimation(animation_name, frames, duration, atlas, direction);
-          sp.Position.set(
-            this.Sprite.Position.x + itile * this.Sprite.Size.x,
-            this.Sprite.Position.y + jtile * this.Sprite.Size.y,
-            this.Sprite.Position.z);
-
-          // if (prop) {
-          //   sp.applyProp(prop);
-          // }
-        }
+        sp.Animation.addOrAppendAnimation(animation_name, v, atlas, direction);
+        sp.Position.set(
+          this.Sprite.Position.x + k.x * this.Sprite.Size.x,
+          this.Sprite.Position.y + k.y * this.Sprite.Size.y,
+          this.Sprite.Position.z);
       }
     }
 
+    if (errors.length) {
+      Globals.logError(errors);
+    }
   }
-  private addOrAppendAnimation(animation_name: string, frames: Array<FDef>, duration: number, atlas: Atlas, direction: Direction4Way, isTileFrame: boolean = false): SpriteAnimationData {
+  private addOrAppendAnimation(animation_name: string, frames: Array<FDef>, atlas: Atlas, direction: Direction4Way): SpriteAnimationData {
     //if Append is true, we append the given FDef keys to the input animation
     let ret: SpriteAnimationData = null;
 
     ret = this.Animations.get(animation_name);
     if (!ret) {
       ret = new SpriteAnimationData(animation_name, direction);
-    }
-
-    //If we are a sub-tile animation, then add the parent sprite's sub-tile coordinates to the input animation.
-    let sub_x = 0;
-    let sub_y = 0;
-    if (this.Sprite.SubTile) {
-      sub_x = this.Sprite.SubTile.x;
-      sub_y = this.Sprite.SubTile.y;
     }
 
     //Create Tiles.
@@ -1061,7 +1109,7 @@ export class Animation25D extends GloballyUniqueObject {
       let tiles_w = def.FrameWH ? def.FrameWH.x : 1;
       let tiles_h = def.FrameWH ? def.FrameWH.y : 1;
 
-      kf.Frame = atlas.getFrame(toInt(def.FramePos.x + sub_x), toInt(def.FramePos.y + sub_y), toInt(tiles_w), toInt(tiles_h));
+      kf.Frame = atlas.getFrame(toInt(def.FramePos.x), toInt(def.FramePos.y), toInt(tiles_w), toInt(tiles_h), null, null, def.Direction, null);
 
       kf.Color = def.Color ? def.Color : new vec4(1, 1, 1, 1);// Random.randomVec4(0, 1);
       kf.FlipH = def.FlipH ? def.FlipH : false;
@@ -1070,23 +1118,13 @@ export class Animation25D extends GloballyUniqueObject {
       kf.Layer = def.Layer;
       kf.Collision = def.Collision;
 
-      kf.ImageInterpolation = def.image_interpolation;
-
-      if (isTileFrame) {
-        kf.Duration = 9999999;
-      }
-      else {
-        kf.Duration = duration / frames.length;
-      }
+      kf.ImageInterpolation = def.Interpolation;
+      kf.Duration = def.Duration;
 
       ret.addKeyFrame(kf);
     }
 
-    if (isTileFrame) {
-    }
-    else {
-      this.Animations.set(animation_name, ret);
-    }
+    this.Animations.set(animation_name, ret);
 
     ret.calcDuration();
 
@@ -1247,7 +1285,7 @@ export class Sprite25D extends GloballyUniqueObject {
   private _gesture: HandGesture = HandGesture.None;
   private _r3Parent: Object3D = null; // Do not clone - Remove this when we've created gesture sprites as PhysicsObjects 
 
-  public AfterLoadCallback: Function = null; //Called after the sprite is created.
+  public AfterLoadCallbacks: Array<Function> = new Array<Function>(); //Called after the sprite is created.
 
   private _tileType: HelixTileType = HelixTileType.Unset;
 
@@ -1766,6 +1804,9 @@ export class Phyobj25D extends Sprite25D {
 export enum Symmetry { None, H, V, HV }
 export enum Direction4Way { None, Left, Right, Up, Down };
 export class Character extends Phyobj25D {
+  //list of defined character animations.
+  protected static readonly c_Animation_Walk = "walk";
+
   private _bMoving: boolean = false;
   private _eMoveDirection: Direction4Way = Direction4Way.None;
   private _startPosition: vec3 = new vec3();
@@ -1830,10 +1871,10 @@ export class Character extends Phyobj25D {
   }
   private stopMovementAnimation() {
     this.Animation.pause();
-    this.Animation.setKeyFrame(0, null, true);
+    this.Animation.setKeyFrame(0, this.Animation.CurrentAnimation, true);
   }
   private playMovementAnimation(dir: Direction4Way) {
-    let a: string = Character.getAnimationNameForMovementDirection(dir);
+    let a: string = SpriteAnimationData.createAnimationName(Character.c_Animation_Walk, dir);
     if (!this.Animation.isPlaying(a)) {
       this.Animation.play(a, true);
     }
@@ -1946,25 +1987,48 @@ export class Character extends Phyobj25D {
   }
   public face(dir: Direction4Way) {
     //face a certain direction.
-    let a = Character.getAnimationNameForMovementDirection(dir);
-    this.Animation.setKeyFrame(0, a, true);
+    let anim: SpriteAnimationData = this.Animation.findByName(Character.c_Animation_Walk, dir);
+    if (anim) {
+      this.Animation.setKeyFrame(0, anim, true);
+    }
+    else {
+      Globals.logError("Could not set face animation for " + this.Name);
+      Globals.debugBreak();
+    }
   }
-  public static getAnimationNameForMovementDirection(dir: Direction4Way): string {
-    if (dir === Direction4Way.Left) {
-      return "walk_Right_h";
+  public getFace(): Direction4Way {
+    //Returns the direction information for the given frame, or animation
+    let d: Direction4Way = Direction4Way.None;
+    if (this.Animation.Frame) {
+      if (this.Animation.Frame.dir !== Direction4Way.None) {
+        d = this.Animation.Frame.dir
+      }
+      else if (this.Animation.CurrentAnimation) {
+        if (this.Animation.CurrentAnimation.Direction !== Direction4Way.None) {
+          d = this.Animation.CurrentAnimation.Direction;
+        }
+      }
     }
-    else if (dir === Direction4Way.Right) {
-      return "walk_Right";
-    }
-    else if (dir === Direction4Way.Up) {
-      return "walk_Up";
-    }
-    else if (dir === Direction4Way.Down) {
-      return "walk_Down"
-    }
-    Globals.logError('Inavlid direction supplied to getAnimationNameForMovementDirection');
-    return "invalid";
+    return d;
   }
+  // public static getAnimationBaseNameForMovementDirection(dir: Direction4Way): string {
+  //   let base = "walk";
+
+  //   if (dir === Direction4Way.Left) {
+  //     return "walk";
+  //   }
+  //   else if (dir === Direction4Way.Right) {
+  //     return "walk";
+  //   }
+  //   else if (dir === Direction4Way.Up) {
+  //     return "walk";
+  //   }
+  //   else if (dir === Direction4Way.Down) {
+  //     return "walk"
+  //   }
+  //   Globals.logError('Inavlid direction supplied to getAnimationNameForMovementDirection');
+  //   return "invalid";
+  // }
   public static getMovementNormalForDirection(dir: Direction4Way): vec3 {
     let n: vec3 = null;
     if (dir === Direction4Way.Down) {
@@ -1991,6 +2055,13 @@ export class Character extends Phyobj25D {
 export class Bird extends Character {
   public constructor(atlas: Atlas) {
     super(atlas);
+    this.AfterLoadCallbacks.push((sprite: Sprite25D) => {
+      let d = this.getFace();
+      this.face(d);
+    });
+  }
+  public postLoad() {
+    //after the sprite animations are defined and such.
   }
 }
 export class Viewport25D {
@@ -2526,7 +2597,7 @@ export class WorldView25D extends Object3D {
   public blockTileToSprite(block: TileBlock, cell: Cell): Sprite25D {
     let ret: Sprite25D = block.SpriteRef.clone();
 
-    ret.Animation.setKeyFrame(block.FrameIndex, block.AnimationData.Name);
+    ret.Animation.setKeyFrame(block.FrameIndex, block.AnimationData);
 
     g_mainWorld.addObject25(ret, null);
 
@@ -2656,18 +2727,18 @@ export class TileBuffer extends THREE.BufferGeometry {
   public copyObjectTile(tile: Sprite25D, depth: number) {
     tile.calcQuadVerts();
 
-    if (tile.Animation.Frame) {
-      if (tile.Animation.Frame2 && tile.Animation.FrameBlend > 0.0001) {
-        this.copyTileFrame(tile, tile.Animation.Frame, tile.Animation.FrameBlend, null, depth);
-        this.copyTileFrame(tile, tile.Animation.Frame2, 1 - tile.Animation.FrameBlend, null, depth);
-      }
-      else {
-        this.copyTileFrame(tile, tile.Animation.Frame, 1, null, depth);
-      }
+    if (!tile.Animation.Frame) {
+      tile.Animation.setDefault();
+      Globals.logWarn("Tile frame was not present, setting to default.")
+    }
+
+
+    if (tile.Animation.Frame2 && tile.Animation.FrameBlend > 0.0001) {
+      this.copyTileFrame(tile, tile.Animation.Frame, tile.Animation.FrameBlend, null, depth);
+      this.copyTileFrame(tile, tile.Animation.Frame2, 1 - tile.Animation.FrameBlend, null, depth);
     }
     else {
-      //Error.
-      Globals.debugBreak();
+      this.copyTileFrame(tile, tile.Animation.Frame, 1, null, depth);
     }
   }
   public copyCellTile(cell: Cell, tile: Sprite25D, frame: Int, depth: number, block: TileBlock) {

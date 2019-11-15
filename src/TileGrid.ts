@@ -195,14 +195,14 @@ export class SpriteFrameDefinition {
   public random_prob_element: number = null;
   public frame_width: number = null;
   public frame_height: number = null;
-  public tiles_width: number = null;
-  public tiles_height: number = null;
+  // public tiles_width: number = null;
+  // public tiles_height: number = null;
   public tiling_animated: boolean = null;
+  public animation_offset: ivec2 = null;
 
   public animation_name: string = null;
   public animation_direction: Direction4Way = null;
   public animation_dupe: Symmetry = null;
-  public animation_duration: number = null;
 
   public tiled_animation: Array<TmxAnimationFrame> = null; //this is the animation stragiht from tiled.
 
@@ -228,7 +228,7 @@ export class SpriteFrameDefinition {
   public static readonly prop_animation_name: string = "a_name";//          
   public static readonly prop_animation_dir: string = "a_dir";//            
   public static readonly prop_animation_dupe: string = "a_dupe";//          
-  public static readonly prop_animation_duration: string = "a_duration";//  
+  public static readonly prop_animation_offset: string = "a_offset";//  
 
   public static parse(tiled_tileset_id: Int, animation: Array<TmxAnimationFrame>, props: Array<TmxProperty>): SpriteFrameDefinition {
     let ret: SpriteFrameDefinition = new SpriteFrameDefinition();
@@ -293,7 +293,11 @@ export class SpriteFrameDefinition {
         TiledUtils.validateProp(ret.is_player = Utils.parseBool(val));
       }
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_layer, key)) {
-        TiledUtils.validateProp(ret.layer = Utils.stringToEnum(val, Object.keys(TileLayerId)) as TileLayerId);
+        let vv = val;
+        if (vv.toLowerCase() === "object") {
+          vv = "objects";
+        }
+        TiledUtils.validateProp(ret.layer = Utils.stringToEnum(vv, Object.keys(TileLayerId)) as TileLayerId);
         if (ret.layer === TileLayerId.Player_Relative_Foreground) {
           let nnn = 0;
           nnn++;
@@ -311,17 +315,12 @@ export class SpriteFrameDefinition {
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_frame_width, key)) {
         TiledUtils.validateProp(ret.frame_width = Utils.parseNumber(val));
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiles_height, key)) {
-        TiledUtils.validateProp(ret.tiles_height = Utils.parseNumber(val));
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_offset, key)) {
+        TiledUtils.validateProp(ret.animation_offset = Utils.parseIVec2(val));
       }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiles_width, key)) {
-        TiledUtils.validateProp(ret.tiles_width = Utils.parseNumber(val));
-      }
+
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiling_animated, key)) {
         TiledUtils.validateProp(ret.tiling_animated = Utils.parseBool(val));
-      }
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_duration, key)) {
-        TiledUtils.validateProp(ret.animation_duration = Utils.parseNumber(val));
       }
 
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_name, key)) {
@@ -351,19 +350,16 @@ class TiledParsedTileId {
   public xy: ivec2 = null;
 
   public static tiledMAPTileIdFromGid(id: TiledTileId) {
-    //This is to be constructed on a TILED MAP not on a tileset.
-    //Map offsets are 1 off
     let ret = (id as number) & ~(TiledParsedTileId.FLIPPED_HORIZONTALLY_FLAG |
       TiledParsedTileId.FLIPPED_VERTICALLY_FLAG |
       TiledParsedTileId.FLIPPED_DIAGONALLY_FLAG);
-
-    //This converts it to the acutal tiled id
-    //ret -= 1;
-    //So I thnk we no longer need to do -1 here.  the reason is that adding the tileset GID solves this issue, converting 0 tileset tile IDs into 1.
     return ret;
   }
 
   public constructor(tiled_tileid_global_int: TiledTileId, atlas: Atlas) {
+    //Note: In the Tilesets, the tile ID is correct for this function.
+    //However, in the MAP the tile ID is 1 off, so you need to subtract 1 from it.
+
     let tiled_tileid_global = tiled_tileid_global_int as number;
 
     this.flip_h = (tiled_tileid_global & TiledParsedTileId.FLIPPED_HORIZONTALLY_FLAG) > 0;
@@ -563,16 +559,15 @@ export class SpriteSet {
     }
   }
   private assembleSprites(atlas: Atlas) {
-
     let nSpritesCreated = 0;
+    let keyInfos: string = "";
+
     //First create all key sprites so we have our sprite created. if there are no key sprites just make the default the top-left most 
     for (let def of this._defs) {
-      let key = this.getKeySpriteFrameDef(def.name, true);
       if (!this.getSpriteByName(def.name)) {
-        //Create new key 
-        let spr: Sprite25D = this.makeNewSprite(atlas, def);
+        let key = this.getKeySpriteFrameDef(def.name, keyInfos);
+        let spr: Sprite25D = this.makeNewSprite(atlas, key);
         this._sprites.set(spr.HelixTileId, spr);
-
         nSpritesCreated++;
       }
     }
@@ -594,6 +589,10 @@ export class SpriteSet {
       }
     }
 
+    if (keyInfos) {
+      Globals.logDebug("(not an error) No key specified for sprites: " + keyInfos);
+    }
+
     if (frameerror.length) {
       Globals.logError(frameerror);
     }
@@ -602,12 +601,21 @@ export class SpriteSet {
 
     //run all callbacks after sprites are loaded.
     for (let [k, v] of this._sprites) {
-      if (v.AfterLoadCallback) {
-        v.AfterLoadCallback(v);
+      if (v.AfterLoadCallbacks) {
+        for (let f of v.AfterLoadCallbacks) {
+          try {
+            f(v);
+          }
+          catch (ex) {
+            Globals.logError("Callback failed on sprite " + v.Name + ": \r\n" + f.toString() + "\r\n\r\nException:\r\n" + ex ? ex : '');
+          }
+        }
+
       }
     }
 
   }
+
   private makeCharacterSprite(atlas: Atlas, def: SpriteFrameDefinition): Character {
     let ret = new Character(atlas);
 
@@ -665,6 +673,7 @@ export class SpriteSet {
     let ret: Sprite25D = null;
 
     this.validateNoDupes(def);
+
 
     if (def.typescript_class) {
       if (Utils.lcmp(def.typescript_class, "Character")) {
@@ -815,20 +824,11 @@ export class SpriteSet {
   }
   private addSpriteFrame(atlas: Atlas, frameDef: SpriteFrameDefinition, sprite: Sprite25D) {
     if (frameDef.after_load) {
-      if (sprite.AfterLoadCallback !== null) {
-        Globals.logWarn(sprite.Name + ": After load was already defined. ")
+      //if the code defined an afterload callback, then call it.
+      let newfunc = (sprite: Sprite25D) => {
+        new Function("sprite", frameDef.after_load).call(this, sprite);
       }
-      else {
-        sprite.AfterLoadCallback = function (sprite: Sprite25D) {
-          try {
-            new Function("sprite", frameDef.after_load).call(this, sprite);
-            //window.eval.call(window, '(function (element) {' + frameDef.after_load + '})')(sprite);
-          }
-          catch (ex) {
-            Globals.logError("Eval failed on sprite " + sprite.Name + ": \r\n" + frameDef.after_load + "\r\n\r\nException:\r\n" + ex ? ex : '');
-          }
-        }
-      }
+      sprite.AfterLoadCallbacks.push(newfunc);
     }
 
     let frame_w = 1;
@@ -851,48 +851,54 @@ export class SpriteSet {
     if (frameDef.animation_direction) {
       direction = frameDef.animation_direction;
     }
+    let offset: ivec2 = new ivec2(0, 0);
+    if (frameDef.animation_offset) {
+      offset = frameDef.animation_offset.clone();
+    }
 
+    //Validate the animation data is there.
+    if(frameDef.tiled_animation){
+      if(!frameDef.animation_name){
+        Globals.logError("Animation name was not present.  This is required sprite:" + sprite.Name)
+      }
+      if(!frameDef.animation_direction){
+        if(frameDef.animation_name && frameDef.animation_name.toLowerCase()==='tile'){
+          //no direction needed for tile animatiosn
+        }
+        else{
+          Globals.logError("Animation direction was not present.  This is required. sprite:" + sprite.Name)
+        }
+      }
+      if(!frameDef.animation_offset){
+        Globals.logWarn("Animation offset not specified for sprite " + sprite.Name + " animation, this is highly recommended.");
+      }
+    }
 
     //If the animation name is not defined then we are a cell tile animation.  This plays automatically.
     //Otherwise we are added to a new animation
-    let parsedTile = new TiledParsedTileId(frameDef.tiled_id, atlas);
     if (frameDef.animation_name) {
-      if (frameDef.tiled_animation) {
-        //we have an animation.  Oh my!
-
-        if (!frameDef.tiles_height || !frameDef.tiles_width) {
-          Globals.logWarn("Sprite did not have tiles_height and tiles_width defined for its animation, defaulting to 1x1");
-        }
-        let th = frameDef.tiles_height ? frameDef.tiles_height : 1;
-        let tw = frameDef.tiles_width ? frameDef.tiles_width : 1;
-
-
-        //Offset is for multi-tile animations like character.
-        // It needs to be computed by the tiles_width, tiles_height attribute and add or subtract the key position
-        //For now, we are using single tile animations.
-        //Wenn we convert this into a character animation then we need to add this.
-        let off: ivec2 = new ivec2(0, 0);
+      if (frameDef.tiled_animation && frameDef.tiled_animation.length) {
 
         //simple lambda to parameterize symmetry.
-        let add_a = (h: boolean, v: boolean) => {
+        let add_a = (fh: boolean, fv: boolean) => {
           // Animation names are ALL generated.
-          let a_name = SpriteAnimationData.createAnimationName(frameDef.animation_name, direction, h, v);
+          if(frameDef.animation_name.trim().toLowerCase() === Animation25D.c_strDefaultTileAnimation.trim().toLowerCase()){
+            //Prevent invalid animation names being generated for tile animations.
+            direction = Direction4Way.None;
+          }
+          let a_name = SpriteAnimationData.createAnimationName(frameDef.animation_name, direction, fh, fv);
 
           //Create defs and props.
-          let fdefs: Array<FDef> = new Array<FDef>();
-          for (let f of frameDef.tiled_animation) {
-            for (let ih = 0; ih < th; ++ih) {
-              for (let iw = 0; iw < tw; ++iw) {
-
-                let parsed_frame = new TiledParsedTileId(f.tileid as Int, atlas);
-                let fd: FDef = new FDef(parsed_frame.xy, h, v, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, new ivec2(1, 1), layer, collision);
-                fdefs.push(fd);
-
-              }
-            }
+          let arr = new Array<FDef>();
+          for (let fr of frameDef.tiled_animation) {
+            let frame = new TiledParsedTileId(fr.tileid as Int, atlas);
+            let duration = fr.duration / 1000;  //in TILED it's in ms
+            let fd: FDef = new FDef(frame.xy, fh, fv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, new ivec2(frame_w, frame_h), layer, collision, direction, duration);
+            arr.push(fd);
           }
-
-          sprite.Animation.addTiledAnimation(a_name, fdefs, frameDef.animation_duration, atlas, direction, new ivec2(tw, th));
+          let fdefs: IVec2Map<Array<FDef>> = new IVec2Map<Array<FDef>>();
+          fdefs.set(offset, arr);
+          sprite.Animation.addTiledAnimation(a_name, fdefs, atlas, direction, new ivec2(1, 1));
         };
         add_a(false, false);
 
@@ -908,16 +914,17 @@ export class SpriteSet {
           }
         }
 
-
       }
       else {
-        Globals.logWarn("Frame had an animation name specified, but no animation was present.")
+        Globals.logWarn("Frame for '" + frameDef.name + "' had an animation name specified '" + frameDef.animation_name + "', but no animation was present.")
       }
     }
 
     //So we add to an animation if one is specified, however we need to set the visible tile (decal).
     //So to solve this problem, we simply always add to default animation, this way we always can have a frame in the LUT.
-    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(parsedTile.xy, atlas, new ivec2(1, 1), [], frameDef.animation_duration, new ivec2(frame_w, frame_h));
+    //The constraint of tiles is that all tile frames are 1x1 so we hard codes ize here.
+    let parsedTile = new TiledParsedTileId(frameDef.tiled_id - 1 as Int, atlas);
+    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(parsedTile.xy, atlas, new ivec2(1, 1), new ivec2(frame_w, frame_h));
     let frame_index = sprite.Animation.TileData.KeyFrames.length - 1;
     this.addToLUT(frameDef.tiled_id, sprite, sprite.Animation.TileData.UniqueId, toInt(frame_index), parsedTile.flip_h, parsedTile.flip_v);
 
@@ -931,23 +938,29 @@ export class SpriteSet {
       rs.set(fr, frameDef.random_prob_element, false);
     }
   }
-  private getKeySpriteFrameDef(name: string, orReturnDefaultKeySprite: boolean = false): SpriteFrameDefinition {
+  private getKeySpriteFrameDef(name: string, info: string): SpriteFrameDefinition {
     let ret: SpriteFrameDefinition = null;
+    let found = false;
     for (let f of this._defs) {
       if (Utils.copyString(f.name).toLowerCase().trim() === Utils.copyString(name).toLowerCase().trim()) {
-        ret = f;
-        break;
-      }
-    }
-
-    //Didn't find a is_key sprite so just return the lowest sprite ID.  This will correspond to the top left corner of all frame blocks.
-    if (!ret && orReturnDefaultKeySprite) {
-      for (let f of this._defs) {
-        if (!ret || f.tiled_id < ret.tiled_id) {
+        if (f.is_key) {
           ret = f;
+          found = true;
+          break;
+        }
+        else {
+          if (!ret || f.tiled_id < ret.tiled_id) {
+            ret = f;
+          }
         }
       }
     }
+
+    if (!found) {
+      //Didn't find a is_key sprite
+      info += "," + name;
+    }
+
     return ret;
   }
   private validateNoDupes(def: SpriteFrameDefinition) {

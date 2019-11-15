@@ -436,7 +436,10 @@ export class _Globals {
       this._composer.render();
     }
   }
-  public debugBreak() {
+  public debugBreak(msg:string=null) {
+    if(msg){
+      Globals.logError(msg);
+    }
     debugger;
   }
 

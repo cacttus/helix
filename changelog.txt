@@ -1,40 +1,7 @@
-TODO 
-Grass 2 tiles high 
-  so, objects.
-  multiple tiles high/wide.
-  must be interactible.
-  possibly cell-bound.  Not necessary really.
+11/13
+Yet another way to do animation
+The spriteanimationdata is simply an offset into the Sprite's TileData set of frames.
 
-  TileGrid
-    <objects> createdObjects
-
-    if TileType === object
-      ob = sprite.clone()
-
-  WorldView25D -> load
-    for ob of tilegrid->createdObjects  
-      objects.add(ob)
-
-List of objects on cell.
-  objects are static.
-
-
-  **Can't use TileBlock for objects, the main function is TileBlock has the frame quads.
-
-Orthogonal Camera
-hand grab animation & hand grab object to physicsobject3d
-doors and moving to another area.
-fix character cell position to be body instead of head.
-fix missing door sprites in conduit
-
-need to change framelut to map animation as well as animation frame.
-SpriteLut will now map to a sprite, and the sprite will have a TILED LUT on top of that.
-
-
-
-NPCs
-npc Dialogue
-Walls
 
 11/11
 Fixed the tiled collisions.

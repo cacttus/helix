@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Vector3, Vector2, Vector4, Color, ShapeUtils, Mesh, PerspectiveCamera, Box3, Geometry, Scene, Matrix4, Matrix3, Object3D, AlwaysStencilFunc, MeshStandardMaterial, MeshBasicMaterial, RGBA_ASTC_10x5_Format, Material, BoxHelper } from 'three';
 import { Dictionary } from './Base';
-import { vec4 } from './Math';
+import { vec4, ivec2 } from './Math';
 import { Globals } from './Globals';
 import { toInt, Int } from './Int';
 
@@ -12,6 +12,134 @@ export enum BrowserType {
   Chrome, Edge, IE, Opera, Firefox, Safari, Blink, Undefined
 }
 export class Utils {
+  public static parseIVec2(str: string): ivec2 {
+    let arr = Utils.parseTuple(str);
+    if (!arr || arr.length !== 2) {
+      throw "parseTuple returned invalid data.";
+    }
+    let ret: ivec2 = new ivec2(arr[0], arr[1]);
+    return ret;
+  }
+  public static parseTuple(str: string, noParens: boolean = true): Array<number> {
+    //Parse a string of the form (012,012,012,...)
+    let ret: Array<number> = new Array<number>();
+
+    let cn: string = "";
+    let error: boolean = false;
+    let state: number = 0; // 0=none, 1 = (, 2 = 0-9,.-, 3 = )
+    let dec: boolean = false;
+    let sign: boolean = false;
+
+    let push_number = () => {
+      try {
+        let pn: number = Utils.parseNumber(cn);
+        ret.push(pn);
+        cn = "";
+        dec = false;
+        sign = false;
+      }
+      catch (ex) {
+        error = true;
+      }
+    }
+
+    for (let c of str) {
+      if (c === '(') {
+        if (state === 0) {
+          state = 1;
+        }
+        else {
+          error = true;
+        }
+      }
+      else if (c === ')') {
+        if (state === 2 && cn.length > 0) {
+          push_number();
+          state = 3;
+          break;
+        }
+        else {
+          error = true;
+        }
+      }
+      else if (c === '-' || c === '+') {
+        if ((state >= 1 || noParens) && cn.length === 0 && sign === false) {
+          state = 2;
+          cn += c;
+          sign = true;
+        }
+        else {
+          error = true;
+        }
+      }
+      else if ((c == '.')) {
+        if ((state >= 1 || noParens) && dec === false) {
+          state = 2;
+          cn += c;
+          dec = true;
+        }
+        else {
+          error = true;
+        }
+      }
+      else if ((c >= '0' && c <= '9')) {
+        if (state >= 1 || noParens) {
+          state = 2;
+          cn += c;
+        }
+        else {
+          error = true;
+        }
+      }
+      else if (c == ',') {
+        if (state === 2 && cn.length > 0) {
+          push_number();
+        }
+        else {
+          error = true;
+        }
+      }
+      if (error) {
+        Globals.debugBreak();
+        throw "Error parsing ivec2";
+        break;
+      }
+    }
+
+    if (state === 2 && noParens) {
+      push_number();
+    }
+    else if (state !== 3 && noParens === false) {
+      Globals.debugBreak();
+      throw "Error parsing ivec2 - no end parentheses";
+    }
+
+    return ret;
+  }
+  public static startsWith(haystack: string, needle: string, caseSensitive: boolean = false): boolean {
+    let b: boolean = true;
+    if (needle.length > haystack.length) {
+      return false;
+    }
+
+    let sn, sh;
+    sn = Utils.copyString(needle);
+    sh = Utils.copyString(haystack);
+    if (!caseSensitive) {
+      sn = sn.toLowerCase();
+      sh = sh.toLowerCase();
+    }
+
+    //Need for unicode normalization, for now, this works.
+    //https://stackoverflow.com/questions/10805711/javascript-string-comparison-fails-when-comparing-unicode-characters/10805884
+    for (let ci = 0; ci < sh.length && ci < sn.length; ++ci) {
+      if (sn[ci] !== sh[ci]) {
+        b = false;
+        break;
+      }
+    }
+    return b;
+  }
   public static getParam(s: string): string {
     const url_params = (new URL("" + document.location)).searchParams;
     let v = url_params.get(s);
@@ -141,7 +269,7 @@ export class Utils {
     let kv = Utils.enumKeyVals(object_keys);
 
     for (let [k, v] of kv) {
-      if (returnValue) { 
+      if (returnValue) {
         //return enum value
         let d_k = Utils.copyString(k).trim();
         let d_s = Utils.copyString(in_s).trim();
@@ -154,7 +282,7 @@ export class Utils {
           return v;
         }
       }
-      else { 
+      else {
         // return enum key
         if (in_v === v) {
           return k;
