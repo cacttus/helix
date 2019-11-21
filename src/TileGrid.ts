@@ -601,6 +601,7 @@ export class SpriteSet {
 
     //run all callbacks after sprites are loaded.
     for (let [k, v] of this._sprites) {
+      v.validate(null);
       if (v.AfterLoadCallbacks) {
         for (let f of v.AfterLoadCallbacks) {
           try {
@@ -843,9 +844,13 @@ export class SpriteSet {
     if (frameDef.layer) {
       layer = frameDef.layer;
     }
-    let collision = CollisionHandling.None;
+    let collision: CollisionHandling = null;
     if (frameDef.collision) {
       collision = frameDef.collision;
+    }
+    let collision_bits: Int = null; //Must be null
+    if (frameDef.collision_bits) {
+      collision_bits = frameDef.collision_bits;
     }
     let direction = Direction4Way.None
     if (frameDef.animation_direction) {
@@ -857,19 +862,19 @@ export class SpriteSet {
     }
 
     //Validate the animation data is there.
-    if(frameDef.tiled_animation){
-      if(!frameDef.animation_name){
+    if (frameDef.tiled_animation) {
+      if (!frameDef.animation_name) {
         Globals.logError("Animation name was not present.  This is required sprite:" + sprite.Name)
       }
-      if(!frameDef.animation_direction){
-        if(frameDef.animation_name && frameDef.animation_name.toLowerCase()==='tile'){
+      if (!frameDef.animation_direction) {
+        if (frameDef.animation_name && frameDef.animation_name.toLowerCase() === 'tile') {
           //no direction needed for tile animatiosn
         }
-        else{
+        else {
           Globals.logError("Animation direction was not present.  This is required. sprite:" + sprite.Name)
         }
       }
-      if(!frameDef.animation_offset){
+      if (!frameDef.animation_offset) {
         Globals.logWarn("Animation offset not specified for sprite " + sprite.Name + " animation, this is highly recommended.");
       }
     }
@@ -882,7 +887,7 @@ export class SpriteSet {
         //simple lambda to parameterize symmetry.
         let add_a = (fh: boolean, fv: boolean) => {
           // Animation names are ALL generated.
-          if(frameDef.animation_name.trim().toLowerCase() === Animation25D.c_strDefaultTileAnimation.trim().toLowerCase()){
+          if (frameDef.animation_name.trim().toLowerCase() === Animation25D.c_strDefaultTileAnimation.trim().toLowerCase()) {
             //Prevent invalid animation names being generated for tile animations.
             direction = Direction4Way.None;
           }
@@ -893,7 +898,8 @@ export class SpriteSet {
           for (let fr of frameDef.tiled_animation) {
             let frame = new TiledParsedTileId(fr.tileid as Int, atlas);
             let duration = fr.duration / 1000;  //in TILED it's in ms
-            let fd: FDef = new FDef(frame.xy, fh, fv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, new ivec2(frame_w, frame_h), layer, collision, direction, duration);
+            let fd: FDef = new FDef(frame.xy, fh, fv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step,
+              new ivec2(frame_w, frame_h), layer, collision, collision_bits, direction, duration);
             arr.push(fd);
           }
           let fdefs: IVec2Map<Array<FDef>> = new IVec2Map<Array<FDef>>();
@@ -924,7 +930,7 @@ export class SpriteSet {
     //So to solve this problem, we simply always add to default animation, this way we always can have a frame in the LUT.
     //The constraint of tiles is that all tile frames are 1x1 so we hard codes ize here.
     let parsedTile = new TiledParsedTileId(frameDef.tiled_id - 1 as Int, atlas);
-    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(parsedTile.xy, atlas, new ivec2(1, 1), new ivec2(frame_w, frame_h));
+    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(parsedTile.xy, atlas, new ivec2(1, 1), new ivec2(frame_w, frame_h), collision, collision_bits);
     let frame_index = sprite.Animation.TileData.KeyFrames.length - 1;
     this.addToLUT(frameDef.tiled_id, sprite, sprite.Animation.TileData.UniqueId, toInt(frame_index), parsedTile.flip_h, parsedTile.flip_v);
 
@@ -2025,6 +2031,17 @@ export class TileBlock {
   public FlipH: boolean = false;
   public FlipV: boolean = false;
 
+  public get KeyFrame(): SpriteKeyFrame {
+    //Quick getter to easily access teh selected block frame.
+    let f: SpriteKeyFrame = null;
+    if (this._spriteRef) {
+      if (this._frameIndex >= 0) {
+        f = this._spriteRef.Animation.TileData.KeyFrames[this._frameIndex];
+      }
+    }
+    return f;
+  }
+
   public get AnimationData(): SpriteAnimationData { return this._animationData; }
   public set AnimationData(x: SpriteAnimationData) { this._animationData = x; }
 
@@ -2072,31 +2089,68 @@ export class Cell {
     }
     return false;
   }
-  public isObjectBlocked(layer: Int): boolean {
+  public isObjectBlocked(layer: Int, incomingDirection: Direction4Way): boolean {
+    //incomingDirection: Assuming object is on an adjacent tile, the direction the object is coming IN to the tile.
     let b: boolean = false;
 
     for (let i = 0; i < this.Blocks.length; ++i) {
       let block = this.Blocks[i];
 
       if (block.SpriteRef) {
-        let ch = block.SpriteRef.CollisionHandling;
+        //change this to be the CH of the frame.
+        let bits: Int = null;
+        let ch: CollisionHandling = null;
+        let kf = block.KeyFrame;
+
+        if (kf && kf.CollisionHandling !== null) {
+          ch = kf.CollisionHandling;
+          bits = kf.CollisionBits;
+        }
+        else {
+          ch = block.SpriteRef.CollisionHandling;
+          bits = block.SpriteRef.CollisionBits;
+        }
 
         if (ch === CollisionHandling.Top && i === this.Blocks.length - 1) {
-          b = true;
-          break;
+          //Top Tile
+          b = this.checkBits(bits, incomingDirection);
         }
         else if (ch === CollisionHandling.Tile) {
-          b = true;
-          break;
+          b = this.checkBits(bits, incomingDirection);
         }
         else if ((ch === CollisionHandling.Layer) && (layer === block.SpriteRef.Layer)) {
-          b = true;
+          b = this.checkBits(bits, incomingDirection);
+        }
+
+        if (b) {
           break;
         }
       }
     }
 
     return b;
+  }
+  private checkBits(bits: Int, incomingDirection: Direction4Way): boolean {
+    //Check the collision bitmask "1111"
+    let ret = false;
+    if (bits === null) {
+      //Null - we collide with the whole tile.
+      ret = true;
+    }
+    else if ((bits & CollisionBits.Top) && (incomingDirection === Direction4Way.Down)) {
+      ret = true;
+    }
+    else if ((bits & CollisionBits.Right) && (incomingDirection === Direction4Way.Left)) {
+      ret = true;
+    }
+    else if ((bits & CollisionBits.Bot) && (incomingDirection === Direction4Way.Up)) {
+      ret = true;
+    }
+    else if ((bits & CollisionBits.Left) && (incomingDirection === Direction4Way.Right)) {
+      ret = true;
+    }
+
+    return ret;
   }
   public removeBlock(block: TileBlock): boolean {
     for (let bi = this.Blocks.length - 1; bi >= 0; bi--) {

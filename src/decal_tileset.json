@@ -523,6 +523,11 @@
          "id":31,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -531,6 +536,11 @@
         {
          "id":32,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -563,6 +573,11 @@
                  "value":"right"
                 }, 
                 {
+                 "name":"a_dupe",
+                 "type":"string",
+                 "value":"h"
+                }, 
+                {
                  "name":"a_name",
                  "type":"string",
                  "value":"walk"
@@ -571,6 +586,11 @@
                  "name":"a_offset",
                  "type":"string",
                  "value":"0,-1"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
                 }, 
                 {
                  "name":"name",
@@ -582,6 +602,11 @@
          "id":34,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -590,6 +615,11 @@
         {
          "id":35,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -632,6 +662,11 @@
                  "value":"0,-1"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -641,6 +676,11 @@
          "id":37,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -649,6 +689,11 @@
         {
          "id":38,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -1012,6 +1057,11 @@
          "id":61,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1020,6 +1070,11 @@
         {
          "id":62,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -1067,6 +1122,11 @@
                  "value":"0,0"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1076,6 +1136,11 @@
          "id":64,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1084,6 +1149,11 @@
         {
          "id":65,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -1126,6 +1196,11 @@
                  "value":"0,0"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1135,6 +1210,11 @@
          "id":67,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"player_char"
@@ -1143,6 +1223,11 @@
         {
          "id":68,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -2663,6 +2748,11 @@
                  "value":"0,-1"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -2672,6 +2762,11 @@
          "id":181,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -2680,6 +2775,11 @@
         {
          "id":182,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -2712,6 +2812,11 @@
                  "value":"right"
                 }, 
                 {
+                 "name":"a_dupe",
+                 "type":"string",
+                 "value":"h"
+                }, 
+                {
                  "name":"a_name",
                  "type":"string",
                  "value":"walk"
@@ -2720,6 +2825,11 @@
                  "name":"a_offset",
                  "type":"string",
                  "value":"0,-1"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
                 }, 
                 {
                  "name":"name",
@@ -2731,6 +2841,11 @@
          "id":184,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -2739,6 +2854,11 @@
         {
          "id":185,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -2781,6 +2901,11 @@
                  "value":"0,-1"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -2790,6 +2915,11 @@
          "id":187,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -2798,6 +2928,11 @@
         {
          "id":188,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -2833,7 +2968,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -2862,7 +2997,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -2886,7 +3021,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -2910,7 +3045,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -2934,7 +3069,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -2958,7 +3093,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -2982,7 +3117,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -3146,6 +3281,11 @@
          "id":211,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -3154,6 +3294,11 @@
         {
          "id":212,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -3201,6 +3346,11 @@
                  "value":"0,0"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -3210,6 +3360,11 @@
          "id":214,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -3218,6 +3373,11 @@
         {
          "id":215,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -3247,7 +3407,7 @@
                 {
                  "name":"a_dir",
                  "type":"string",
-                 "value":"right"
+                 "value":"up"
                 }, 
                 {
                  "name":"a_name",
@@ -3260,6 +3420,11 @@
                  "value":"0,0"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -3269,6 +3434,11 @@
          "id":217,
          "properties":[
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"girl_char"
@@ -3277,6 +3447,11 @@
         {
          "id":218,
          "properties":[
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
+                }, 
                 {
                  "name":"name",
                  "type":"string",
@@ -3312,7 +3487,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -3336,7 +3511,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -3360,7 +3535,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -3384,7 +3559,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -3408,7 +3583,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -3432,7 +3607,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"collision_bits",
@@ -3456,7 +3631,7 @@
                 {
                  "name":"collision",
                  "type":"string",
-                 "value":"layer"
+                 "value":"tile"
                 }, 
                 {
                  "name":"name",

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Color, Box3, Object3D, MeshBasicMaterial, Material, Quaternion, Box3Helper, Texture } from 'three';
+import { Color, Box3, Object3D, MeshBasicMaterial, Material, Quaternion, Box3Helper, Texture, KeyframeTrack } from 'three';
 import { Globals, GameState, ResizeMode } from './Globals';
 //import { basename } from 'upath';
 import { Utils } from './Utils';
@@ -594,11 +594,12 @@ export class FDef {
   public Interpolation: SpriteKeyFrameInterpolation = SpriteKeyFrameInterpolation.Step;
   public Direction: Direction4Way = null;
   public Layer: TileLayerId = TileLayerId.Unset; // If left unset, we set the sprite to the layer that it comes in in the map.
-  public Collision: CollisionHandling = CollisionHandling.None;
+  public Collision: CollisionHandling = null;
   public Duration: number = null;
+  public CollisionBits: Int = null;
 
   public static tileDefault(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false, wh: ivec2 = new ivec2(1, 1),
-    dlayer: TileLayerId = TileLayerId.Unset, dcol: CollisionHandling = CollisionHandling.None, dir: Direction4Way = null, duration: number = null): IVec2Map<Array<FDef>> {
+    dlayer: TileLayerId = TileLayerId.Unset, dcol: CollisionHandling = null, dbits: Int = null, dir: Direction4Way = null, duration: number = null): IVec2Map<Array<FDef>> {
     let ret: IVec2Map<Array<FDef>> = new IVec2Map<Array<FDef>>();
     //Returns an FDEF for a cell tile (single animated cell frame)
     let arr: Array<FDef> = new Array<FDef>();
@@ -611,7 +612,7 @@ export class FDef {
       }
       let ix: Int = framexys[xi][0] as Int;
       let iy: Int = framexys[xi][1] as Int;
-      let d = new FDef(new ivec2(ix, iy), fliph, flipv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, wh, dlayer, dcol, dir, duration);
+      let d = new FDef(new ivec2(ix, iy), fliph, flipv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, wh, dlayer, dcol, dbits, dir, duration);
       arr.push(d);
     }
 
@@ -620,7 +621,7 @@ export class FDef {
   }
 
   public constructor(tile_off: ivec2 = null, flip_h: boolean = null, flip_v: boolean = null, color: vec4 = null, interp: SpriteKeyFrameInterpolation = null,
-    frame_wh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null, dir: Direction4Way = null, duration: number = null) {
+    frame_wh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null, bits: Int = null, dir: Direction4Way = null, duration: number = null) {
     this.FramePos = tile_off;
     this.FlipH = flip_h;
     this.FlipV = flip_v;
@@ -631,6 +632,7 @@ export class FDef {
     this.Layer = layer;
     this.Collision = collision;
     this.Duration = duration;
+    this.CollisionBits = bits;
   }
   public clone(): FDef {
     let f: FDef = new FDef();
@@ -678,13 +680,18 @@ export class SpriteKeyFrame extends GloballyUniqueObject {
   private _flipH: boolean = false;
   private _flipV: boolean = false;
   private _index: Int = toInt(-1);
-  private _collision: CollisionHandling = CollisionHandling.None;
+  private _collision: CollisionHandling = null;
+  private _collisionBits: Int = null;//Bitmask of CollisionBits enum 
+
   private _layer: TileLayerId = TileLayerId.Unset;
   //private _direction: Direction4Way = Direction4Way.None;//Optional.
   //Direction is in the SpriteFrame itself, there is no reason for the keyframe to have direction
 
-  public get Collision(): CollisionHandling { return this._collision; }
-  public set Collision(x: CollisionHandling) { this._collision = x; }
+  public get CollisionHandling(): CollisionHandling { return this._collision; }
+  public set CollisionHandling(x: CollisionHandling) { this._collision = x; }
+  public get CollisionBits(): Int { return this._collisionBits; }
+  public set CollisionBits(x: Int) { this._collisionBits = x; }
+
   public get Layer(): TileLayerId { return this._layer; }
   public set Layer(x: TileLayerId) { this._layer = x; }
 
@@ -795,7 +802,7 @@ export class SpriteAnimationData extends GloballyUniqueObject {
 }
 
 export enum CollisionHandling {
-  None,
+  None, //No collisions happen 
   Layer, //Collide on the layer only that the player is on.
   Tile, //Collide on the whole tile, regardless of the player's layer.  This is for hard blockers like level borders.
   Top, //For tiles, This tile only blocks if it is the top tile. FOr example, water blocks unless it has a dock over it.
@@ -804,7 +811,7 @@ export enum AnimationPlayback { Playing, Pauseed, Stopped }
 export class Animation25D extends GloballyUniqueObject {
   //Separate class to deal with animations and transitinos.  Just because Sprite25D was getting big.
   public static readonly c_strTileData: string = "_default"; //This is the default data that is stored.  A list of all frames.  There is no real reason for it.
-  public static readonly c_strDefaultTileAnimation: string = "tile"; //This is a constant - set tile to the animated to make it aimat.
+  public static readonly c_strDefaultTileAnimation: string = "tile"; //This is a constant - set a_name to "tile" to make a CELL tile animate.
 
   private _sprite: Sprite25D = null; // DO NOT COPY
   private _animated_location: vec3 = new vec3(0, 0, 0); // Animated attributes.  These are applied if there is animation on the object.
@@ -1037,7 +1044,7 @@ export class Animation25D extends GloballyUniqueObject {
     }
 
     for (const c of this.Sprite.Children) {
-      c.Animation.play(animation_name);
+      c.Animation.play(animation_name, restart);
     }
   }
   private _tileData_Cached: SpriteAnimationData = null;//Store it for easier retrieval.
@@ -1047,13 +1054,15 @@ export class Animation25D extends GloballyUniqueObject {
     }
     return this._tileData_Cached;
   }
-  public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 = new ivec2(1, 1),
-    /*props: Array<SpriteTileInfo> = null,*/frameSize: ivec2 = new ivec2(1, 1)): SpriteKeyFrame {
+  public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 /*1,1=default*/,
+    frameSize: ivec2 /*1,1=default*/, collision: CollisionHandling, bits: Int): SpriteKeyFrame {
     //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
     //FrameSize vs ImageSize:
     //ImageSize > 1,1 will create NxM sub-sprites each with frames 1 tile wide.
     //FrameSize > 1,1 will create 1 sprite, and set the frame's size to be NxM.  This is added for performance for UI elements.
-    this.addTiledAnimation(Animation25D.c_strTileData, FDef.tileDefault([[tile.x, tile.y]], false, false, frameSize), atlas, Direction4Way.None, imageSize);
+    this.addTiledAnimation(Animation25D.c_strTileData,
+      FDef.tileDefault([[tile.x, tile.y]], false, false, frameSize, null, collision, bits, null, null),
+      atlas, Direction4Way.None, imageSize);
 
     let ret = null;
     if (this.TileData && this.TileData.KeyFrames && this.TileData.KeyFrames.length) {
@@ -1116,7 +1125,8 @@ export class Animation25D extends GloballyUniqueObject {
       kf.FlipV = def.FlipV ? def.FlipV : false;
 
       kf.Layer = def.Layer;
-      kf.Collision = def.Collision;
+      kf.CollisionHandling = def.Collision;
+      kf.CollisionBits = def.CollisionBits;
 
       kf.ImageInterpolation = def.Interpolation;
       kf.Duration = def.Duration;
@@ -1271,7 +1281,7 @@ export class Sprite25D extends GloballyUniqueObject {
   // private _isCellTile: boolean = false;
   public _layer: TileLayerId = TileLayerId.Unset;
   protected _atlas: Atlas = null;
-  private _collisionHandling: CollisionHandling = CollisionHandling.None;
+  private _collisionHandling: CollisionHandling = null;
 
   private _tiling: Tiling = Tiling.None;
 
@@ -1279,7 +1289,7 @@ export class Sprite25D extends GloballyUniqueObject {
   private _preCollisionFunction: CollisionFunction25D = null;
   private _postCollisionFunction: CollisionFunction25D = null;
   private _collisionFunction: CollisionFunction25D = null;
-  private _collisionBits: Int = toInt(0); // Use the CollisioNbits enum
+  private _collisionBits: Int = null;  //Bitmask of CollisionBits Enum
 
   private _gestureCallback: GestureCallback = null;
   private _gesture: HandGesture = HandGesture.None;
@@ -1531,8 +1541,77 @@ export class Sprite25D extends GloballyUniqueObject {
     this._boundBox_world.Min.y = -this._boundBox_world.Max.y;
     this._boundBox_world.Max.y = -tmp;
   }
-  public validate() {
+  public validate(key_sprite: Sprite25D = null) {
+    //Make sure all properties on sub-sprites duplicate that of the key sprite.
     //Inherit this to validate the sprite loaded properly.
+    if (key_sprite === null) {
+      key_sprite = this;
+    }
+
+    this.validateMissingAnimations(key_sprite);
+
+    for (let c of this.Children) {
+      c.validate(key_sprite);
+    }
+  }
+  private validateMissingAnimations(key_sprite: Sprite25D) {
+    let missing: Array<string> = new Array<string>();
+
+    //Check to make sure the a_dupe property is set on all sub-sprites.
+    for (let [k1, v1] of key_sprite.Animation.Animations) {
+      if (Utils.lcmp(k1, Animation25D.c_strTileData)) {
+        continue;
+      }
+      let found = false;
+      for (let [k2, v2] of this.Animation.Animations) {
+        if (Utils.lcmp(k1, k2)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        missing.push(k1);
+      }
+    }
+
+    //Check for additional animations that one sprite has that another doesn't
+    let addl: Array<string> = new Array<string>();
+    for (let [k1, v1] of this.Animation.Animations) {
+      if (Utils.lcmp(k1, Animation25D.c_strTileData)) {
+        continue;
+      }
+      let found = false;
+      for (let [k2, v2] of key_sprite.Animation.Animations) {
+        if (Utils.lcmp(k1, k2)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        addl.push(k1);
+      }
+    }
+
+    let str = "";
+    if (missing.length > 0) {
+      str += "Sub-Sprite '" + this.Name + "' missing one or more animations that the Key Sprite has: \n";
+      for (let v of missing) {
+        str += v + ",";
+      }
+      str += "\n"
+    }
+    if (addl.length > 0) {
+      str += "Sub-Sprite '" + this.Name + "' has one or more Additional animations that Key Sprite does not: \n";
+      for (let v of addl) {
+        str += v + ",";
+      }
+      str += "\n";
+    }
+
+    if (str.length) {
+      str += "Check that a_dupe is set on all sub-tiles."
+      Globals.logWarn(str);
+    }
   }
 
   public getCurrentCellR3(add: vec3 = null): Cell {
@@ -1674,25 +1753,25 @@ export class Sprite25D extends GloballyUniqueObject {
   //   this.Layer = sp.Layer;
   //   this.CollisionHandling = sp.Collision;
   // }
-  protected checkCollision(cell: Cell): boolean {
+  protected checkCollision(cell: Cell, incomingDirection: Direction4Way): boolean {
     var res: { value: boolean } = { value: false };
-    this.checkCollision_r(cell, res);
+    this.checkCollision_r(cell, incomingDirection, res);
 
     return res.value ? res.value : false;
   }
-  private checkCollision_r(cell: Cell, result: { value: boolean }) {
+  private checkCollision_r(cell: Cell, incomingDirection: Direction4Way, result: { value: boolean }) {
     if (result.value) {
       return;
     }
 
-    if (cell.isObjectBlocked(this.Layer as Int)) {
+    if (cell.isObjectBlocked(toInt(this.Layer), incomingDirection)) {
       result.value = true;
       return;
     }
 
     for (let ch of this.Children) {
       if (ch.CollisionHandling !== CollisionHandling.None) {
-        ch.checkCollision_r(cell, result);
+        ch.checkCollision_r(cell, incomingDirection, result);
       }
     }
 
@@ -1803,6 +1882,25 @@ export class Phyobj25D extends Sprite25D {
 }
 export enum Symmetry { None, H, V, HV }
 export enum Direction4Way { None, Left, Right, Up, Down };
+function getOppositeDirection(d: Direction4Way) {
+  let r: Direction4Way = null;
+  if (d === Direction4Way.None) {
+    r = Direction4Way.None;
+  }
+  else if (d === Direction4Way.Left) {
+    r = Direction4Way.Right;
+  }
+  else if (d === Direction4Way.Right) {
+    r = Direction4Way.Left;
+  }
+  else if (d === Direction4Way.Up) {
+    r = Direction4Way.Down;
+  }
+  else if (d === Direction4Way.Down) {
+    r = Direction4Way.Up;
+  }
+  return r;
+}
 export class Character extends Phyobj25D {
   //list of defined character animations.
   protected static readonly c_Animation_Walk = "walk";
@@ -1933,42 +2031,37 @@ export class Character extends Phyobj25D {
       if (!this._bMoving) {
         let n = Character.getMovementNormalForDirection(this._eCommandedDirection);
         n.multiplyScalar(this.WorldView.Atlas.TileWidthR3);
-        let c = this.getCurrentCellR3(n); //this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center.clone().add(n));
 
-        //Check to see if neighbor cell is blocked.
-        if (c) {
-          if (this.checkCollision(c)) {
-            if (this._hitSoundTimer.ready()) {
-              Globals.audio.play(Files.Audio.HitWall, this.Center);
-              this._hitSoundTimer.reset();
-            }
+        //Check current cell for edge blockers
+        let c_cur = this.getCurrentCellR3(null)
+        //Check next cell for any blockers
+        let c_next = this.getCurrentCellR3(n); //this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center.clone().add(n));
 
-            this.SpeedMultiplier = this._hitSoundTimer.interval;
+        let didCollide = false;
+        if (c_cur) {
+          //Check the "outgoing" tile direction as the inverse of the incoming one.
+          didCollide = didCollide || this.checkCollision(c_cur, getOppositeDirection(this._eCommandedDirection));
+        }
+        if (c_next) {
+          didCollide = didCollide || this.checkCollision(c_next, this._eCommandedDirection);
+        }
+
+
+        if (didCollide || !c_next) {
+          if (this._hitSoundTimer.ready()) {
+            Globals.audio.play(Files.Audio.HitWall, this.Center);
+            this._hitSoundTimer.reset();
           }
-          else {
 
-            if (c.hasTile("monster_grass_short")) {
-              let that = this;
-              window.setTimeout(() => {
-                Globals.audio.play(Files.Audio.GrassBrush, that.Center);
-                that._grassBrushTimer.reset();
-                if (Random.float(0, 1) > 0.2) {
-                  window.setTimeout(() => {
-                    Globals.audio.play(Files.Audio.GrassBrush, that.Center);
-                    that._grassBrushTimer.reset();
-                  }, 100 + Random.float(0, 1) * 260);
-                }
-              }, 100 + Random.float(0, 1) * 260);
-            }
-
-            this._bMoving = true;
-            this._eMoveDirection = this._eCommandedDirection;
-            this._startPosition = this.Position.clone();
-            this._destination = new vec3(c.CellPos_World.x, c.CellPos_World.y, 0);
-          }
+          this.SpeedMultiplier = this._hitSoundTimer.interval;
         }
         else {
-          this._bMoving = false;
+          this.playGroundMovementSound(c_next);
+
+          this._bMoving = true;
+          this._eMoveDirection = this._eCommandedDirection;
+          this._startPosition = this.Position.clone();
+          this._destination = new vec3(c_next.CellPos_World.x, c_next.CellPos_World.y, 0);
         }
 
         this.playMovementAnimation(this._eCommandedDirection);//don't use the move direction
@@ -1984,6 +2077,23 @@ export class Character extends Phyobj25D {
     }
 
     return false;
+  }
+  private playGroundMovementSound(c: Cell) {
+    //Play some monster grass sound.
+    if (c.hasTile("monster_grass_short")) {
+      let that = this;
+      window.setTimeout(() => {
+        Globals.audio.play(Files.Audio.GrassBrush, that.Center);
+        that._grassBrushTimer.reset();
+        if (Random.float(0, 1) > 0.2) {
+          window.setTimeout(() => {
+            Globals.audio.play(Files.Audio.GrassBrush, that.Center);
+            that._grassBrushTimer.reset();
+          }, 100 + Random.float(0, 1) * 260);
+        }
+      }, 100 + Random.float(0, 1) * 260);
+    }
+
   }
   public face(dir: Direction4Way) {
     //face a certain direction.
@@ -2045,10 +2155,7 @@ export class Character extends Phyobj25D {
     }
     return n;
   }
-  // public validate(){
-  //   //Check that we have valid up/down/left/right animations.
 
-  // }
 
 
 }
