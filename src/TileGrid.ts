@@ -131,13 +131,14 @@ export type HelixTileId = Int;
 export enum HelixTileType {
   //This is different from old tiledspriteid because this is determines the class/function of the sprite not just its tileset.
   Unset,
-  Character,
+  //Character, -- object
   PortalTrigger,
   BorderBlocker,
   Conduit,
   CellTile,
   UI,
-  Object
+  Object,
+  //Duck
 }
 export enum TileLayerId {
   /* THESE MUST BE IN ORDER TO GET CELL BLOCKS ARRAY */
@@ -145,7 +146,7 @@ export enum TileLayerId {
   Border = 0,
   Background = 1,
   Background_Border = 2,
-  Elevation = 3,
+  Below_Objects = 3,
   Objects = 4,
   Objects2 = 5,
   Foreground = 6,
@@ -154,7 +155,9 @@ export enum TileLayerId {
   LayerCountEnum = 9,
 
   Player_Relative_Foreground = 90, // Goes in front of player if player is on tile, or behind player if player is in front.
-  DebugBackground = 91,
+  Player_Relative_Background = 91, // Goes behind of player if player is on tile, or behind player if player is in front.
+
+  DebugBackground = 92,
   Unset = 999, // Special layer type indicating that the layer of this
 }
 export enum Tiling {
@@ -174,6 +177,11 @@ export enum CollisionBits {
   Bot = 0x04,
   Left = 0x08
 }
+export enum DoorState {
+  Open,
+  Closed
+}
+
 
 export class SpriteFrameDefinition {
   public tiled_id: TiledTileId = toInt(-1);
@@ -206,6 +214,8 @@ export class SpriteFrameDefinition {
 
   public tiled_animation: Array<TmxAnimationFrame> = null; //this is the animation stragiht from tiled.
 
+  public state: Int = null;
+
   public static readonly prop_after_load: string = "after_load";//  - function to run (compiled javascript) after loading
   //public static readonly prop_animation: string = "animation";// - the tile animation.
   public static readonly prop_class: string = "class";//  - character and treasrue chest subclasses of Phy25, otherwise, the class iks Sprite25D
@@ -229,6 +239,7 @@ export class SpriteFrameDefinition {
   public static readonly prop_animation_dir: string = "a_dir";//            
   public static readonly prop_animation_dupe: string = "a_dupe";//          
   public static readonly prop_animation_offset: string = "a_offset";//  
+  public static readonly prop_state: string = "state";//  
 
   public static parse(tiled_tileset_id: Int, animation: Array<TmxAnimationFrame>, props: Array<TmxProperty>): SpriteFrameDefinition {
     let ret: SpriteFrameDefinition = new SpriteFrameDefinition();
@@ -298,10 +309,6 @@ export class SpriteFrameDefinition {
           vv = "objects";
         }
         TiledUtils.validateProp(ret.layer = Utils.stringToEnum(vv, Object.keys(TileLayerId)) as TileLayerId);
-        if (ret.layer === TileLayerId.Player_Relative_Foreground) {
-          let nnn = 0;
-          nnn++;
-        }
       }
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiling, key)) {
         TiledUtils.validateProp(ret.tiling = Utils.stringToEnum(val, Object.keys(Tiling)) as Tiling);
@@ -332,6 +339,10 @@ export class SpriteFrameDefinition {
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_dupe, key)) {
         TiledUtils.validateProp(ret.animation_dupe = Utils.stringToEnum(val, Object.keys(Symmetry)));
       }
+      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_state, key)) {
+        TiledUtils.validateProp(ret.state = Utils.parseInt(val));
+      }
+
     }
     return ret;
   }
@@ -623,6 +634,7 @@ export class SpriteSet {
     ret.Name = def.name;
     ret.HelixTileId = this.genHelixSpriteId();
     ret.Layer = def.layer;
+    ret.TileType = HelixTileType.Object;
 
     if (def.is_player) {
       (ret as Character).IsPlayer = true;
@@ -650,7 +662,10 @@ export class SpriteSet {
     ret.Name = def.name;
     ret.HelixTileId = this.genHelixSpriteId();
     ret.Layer = def.layer;
-    ret.TileType = HelixTileType.CellTile;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+    ret.TileType = HelixTileType.CellTile;
+    if (def.state) {
+      ret.DoorState = def.state as DoorState;
+    }
     return ret;
   }
   private makeMonsterGrassSprite(atlas: Atlas, def: SpriteFrameDefinition): MonsterGrass25D {
@@ -658,7 +673,7 @@ export class SpriteSet {
     ret.Name = def.name;
     ret.HelixTileId = this.genHelixSpriteId();
     ret.Layer = def.layer;
-    ret.TileType = HelixTileType.CellTile;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+    ret.TileType = HelixTileType.CellTile;
     return ret;
   }
   private makeUISprite(atlas: Atlas, def: SpriteFrameDefinition): Sprite25D {
@@ -666,7 +681,7 @@ export class SpriteSet {
     ret.Name = def.name;
     ret.HelixTileId = this.genHelixSpriteId();
     ret.Layer = def.layer;
-    ret.TileType = HelixTileType.UI;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+    ret.TileType = HelixTileType.UI;
     return ret;
   }
   private makeNewSprite(atlas: Atlas, def: SpriteFrameDefinition): Sprite25D {
@@ -674,7 +689,6 @@ export class SpriteSet {
     let ret: Sprite25D = null;
 
     this.validateNoDupes(def);
-
 
     if (def.typescript_class) {
       if (Utils.lcmp(def.typescript_class, "Character")) {
@@ -730,7 +744,7 @@ export class SpriteSet {
         ret.Name = def.name;
         ret.HelixTileId = this.genHelixSpriteId();
         ret.Layer = def.layer;
-        ret.TileType = HelixTileType.Character;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
+        ret.TileType = HelixTileType.Object;//e.g. class = "Tile"  we don't have a specific "tile" sprite, so this variable servest hat purpose, but we could have e.g. Character, Tile, Chest..
         return ret;
       }
       else if (Utils.lcmp(def.typescript_class, "MonsterGrass")) {
@@ -860,6 +874,10 @@ export class SpriteSet {
     if (frameDef.animation_offset) {
       offset = frameDef.animation_offset.clone();
     }
+    let state: Int = null;
+    if (frameDef.state) {
+      state = frameDef.state;
+    }
 
     //Validate the animation data is there.
     if (frameDef.tiled_animation) {
@@ -930,7 +948,7 @@ export class SpriteSet {
     //So to solve this problem, we simply always add to default animation, this way we always can have a frame in the LUT.
     //The constraint of tiles is that all tile frames are 1x1 so we hard codes ize here.
     let parsedTile = new TiledParsedTileId(frameDef.tiled_id - 1 as Int, atlas);
-    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(parsedTile.xy, atlas, new ivec2(1, 1), new ivec2(frame_w, frame_h), collision, collision_bits);
+    let fr: SpriteKeyFrame = sprite.Animation.addTileFrame(parsedTile.xy, atlas, new ivec2(1, 1), new ivec2(frame_w, frame_h), collision, collision_bits, state);
     let frame_index = sprite.Animation.TileData.KeyFrames.length - 1;
     this.addToLUT(frameDef.tiled_id, sprite, sprite.Animation.TileData.UniqueId, toInt(frame_index), parsedTile.flip_h, parsedTile.flip_v);
 
@@ -1269,7 +1287,8 @@ export class MasterMap {
   public get MapHeightTiles(): Int { return this._mapHeightTiles; }
 
   public static tileTypeIsSpecial(type: HelixTileType): boolean {
-    let b = (type === HelixTileType.PortalTrigger);
+    let b = false;
+    b = b || (type === HelixTileType.PortalTrigger);
     b = b || (type === HelixTileType.BorderBlocker);
     b = b || (type === HelixTileType.Conduit);
     return b;
@@ -1606,10 +1625,10 @@ export class TileGrid {
   private setCellData(c: Cell, cellPos: ivec2) {
     //Set the Cell Data.  This is where the love happens.
     for (let iLayer = 0; iLayer < this.Area.Map.MapLayerCount; iLayer++) {
-      let tile: TileMapTileData = this.Area.Map.MapData.tileXY_World_Object(cellPos.x, cellPos.y, iLayer as Int);
+      let tile: TileMapTileData = this.Area.Map.MapData.tileXY_World_Object(cellPos.x, cellPos.y, toInt(iLayer));
 
       if (tile && tile.Sprite !== null && tile.Sprite.HelixTileId !== this.Area.Map.MapData.Sprites.BorderTileId) {
-        let tileSprite: Sprite25D = tile.Sprite;//this.Area.Map.MapData.Sprites.getTile(tile.HelixTileId);
+        let tileSprite: Sprite25D = tile.Sprite;
 
         if (!tileSprite) {
           this.errors += "Could not find tile def (TileDef) for helix tile ID " + tileSprite.HelixTileId + "\r\n";
@@ -1633,7 +1652,12 @@ export class TileGrid {
           }
           else if (tileSprite.TileType == HelixTileType.Object) {
             //We're an object.  Objects are multi-sized, so which cell "owns it".  The origin.  IDK really.  Should just be a tilesprite.  This needs fixing.
+            Globals.logError("Tile type logic was not implemented for " + tileSprite.Name);
           }
+          else {
+            Globals.logError("Tile type logic was not implemented for " + tileSprite.Name);
+          }
+
 
           //Add a tile block.
           if (computed_tile_data.frame >= 0) {
@@ -2092,6 +2116,7 @@ export class Cell {
   public isObjectBlocked(layer: Int, incomingDirection: Direction4Way): boolean {
     //incomingDirection: Assuming object is on an adjacent tile, the direction the object is coming IN to the tile.
     let b: boolean = false;
+    let top: boolean = false;
 
     for (let i = 0; i < this.Blocks.length; ++i) {
       let block = this.Blocks[i];
@@ -2111,9 +2136,18 @@ export class Cell {
           bits = block.SpriteRef.CollisionBits;
         }
 
-        if (ch === CollisionHandling.Top && i === this.Blocks.length - 1) {
+        if (ch === CollisionHandling.Ignore) {
+          //Ignore water border on top so we can let water be collidable
+          continue;
+        }
+        else if (top) {
+          //Reset top if we set it previously.
+          top = false;
+        }
+
+        if (ch === CollisionHandling.Top) {
           //Top Tile
-          b = this.checkBits(bits, incomingDirection);
+          top = this.checkBits(bits, incomingDirection);
         }
         else if (ch === CollisionHandling.Tile) {
           b = this.checkBits(bits, incomingDirection);
@@ -2126,6 +2160,11 @@ export class Cell {
           break;
         }
       }
+    }
+
+    if (top) {
+      //Top tile had no tiles above it that were ignored.
+      b = true;
     }
 
     return b;

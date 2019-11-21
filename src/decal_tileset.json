@@ -265,7 +265,7 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"Player_Relative_Foreground"
                 }, 
                 {
                  "name":"name",
@@ -764,7 +764,7 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"Player_Relative_Foreground"
                 }, 
                 {
                  "name":"name",
@@ -817,7 +817,7 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"Player_Relative_Foreground"
                 }, 
                 {
                  "name":"name",
@@ -868,14 +868,19 @@
                  "value":"Tile"
                 }, 
                 {
-                 "name":"door_state",
+                 "name":"collision",
                  "type":"string",
-                 "value":"closed"
+                 "value":"tile"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
                  "value":"blue_door"
+                }, 
+                {
+                 "name":"state",
+                 "type":"string",
+                 "value":"1"
                 }]
         }, 
         {
@@ -1304,11 +1309,6 @@
                  "value":"none"
                 }, 
                 {
-                 "name":"door_state",
-                 "type":"string",
-                 "value":"open"
-                }, 
-                {
                  "name":"is_key",
                  "type":"string",
                  "value":"true"
@@ -1316,12 +1316,17 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"below_objects"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
                  "value":"blue_door"
+                }, 
+                {
+                 "name":"state",
+                 "type":"string",
+                 "value":"0"
                 }, 
                 {
                  "name":"tiling",
@@ -1654,6 +1659,11 @@
                  "name":"gesture",
                  "type":"string",
                  "value":"grab"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"object"
                 }, 
                 {
                  "name":"name",
@@ -1990,6 +2000,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"gauntlet"
                 }]
         }, 
         {
@@ -3146,6 +3161,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"wood_floor"
                 }]
         }, 
         {
@@ -3155,6 +3175,16 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"tile"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"wood_wall"
                 }]
         }, 
         {
@@ -4207,7 +4237,7 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"Player_Relative_Foreground"
                 }, 
                 {
                  "name":"name",
@@ -4258,14 +4288,19 @@
                  "value":"Tile"
                 }, 
                 {
-                 "name":"door_state",
+                 "name":"collision",
                  "type":"string",
-                 "value":"closed"
+                 "value":"tile"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
                  "value":"green_door"
+                }, 
+                {
+                 "name":"state",
+                 "type":"string",
+                 "value":"1"
                 }]
         }, 
         {
@@ -4295,6 +4330,11 @@
                  "value":"Tile"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"well"
@@ -4307,6 +4347,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"foreground"
                 }, 
                 {
                  "name":"name",
@@ -4492,7 +4537,7 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"object"
                 }, 
                 {
                  "name":"name",
@@ -4521,7 +4566,7 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"object"
                 }, 
                 {
                  "name":"name",
@@ -4555,12 +4600,17 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"below_objects"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
                  "value":"green_door"
+                }, 
+                {
+                 "name":"state",
+                 "type":"string",
+                 "value":"0"
                 }, 
                 {
                  "name":"tiling",
@@ -4584,7 +4634,7 @@
                 {
                  "name":"layer",
                  "type":"string",
-                 "value":"objects"
+                 "value":"object"
                 }, 
                 {
                  "name":"name",
@@ -4633,6 +4683,11 @@
                  "value":"Tile"
                 }, 
                 {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"player_relative_background"
+                }, 
+                {
                  "name":"name",
                  "type":"string",
                  "value":"well"
@@ -4645,6 +4700,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"player_relative_background"
                 }, 
                 {
                  "name":"name",
@@ -4832,6 +4892,11 @@
                  "value":"Tile"
                 }, 
                 {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
+                }, 
+                {
                  "name":"is_key",
                  "type":"string",
                  "value":"true"
@@ -4849,6 +4914,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -4858,6 +4928,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -4867,6 +4942,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5083,6 +5163,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5092,6 +5177,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5101,6 +5191,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5110,6 +5205,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5326,6 +5426,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5335,6 +5440,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5344,6 +5454,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5353,6 +5468,11 @@
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {
@@ -5470,6 +5590,42 @@
                  "name":"name",
                  "type":"string",
                  "value":"green_dna"
+                }]
+        }, 
+        {
+         "id":431,
+         "properties":[
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
+                }]
+        }, 
+        {
+         "id":432,
+         "properties":[
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
+                }]
+        }, 
+        {
+         "id":433,
+         "properties":[
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
+                }]
+        }, 
+        {
+         "id":434,
+         "properties":[
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"ignore"
                 }]
         }, 
         {

@@ -7,7 +7,7 @@ import { Random, ModelManager, AfterLoadFunction, Frustum, Timer, WaitTimer, Glo
 import { vec2, vec3, vec4, mat3, mat4, ProjectedRay, Box2f, RaycastHit, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, toInt } from './Int';
-import { Tiling, TileGrid, MasterMap, Cell, TileBlock, TiledTileId, HelixTileId, TileLayerId, HelixTileType } from './TileGrid';
+import { Tiling, TileGrid, MasterMap, Cell, TileBlock, TiledTileId, HelixTileId, TileLayerId, HelixTileType, DoorState } from './TileGrid';
 import { PhysicsObject3D } from './Physics3D';
 
 export class Color4 {
@@ -597,9 +597,11 @@ export class FDef {
   public Collision: CollisionHandling = null;
   public Duration: number = null;
   public CollisionBits: Int = null;
+  public State : Int = null;
 
   public static tileDefault(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false, wh: ivec2 = new ivec2(1, 1),
-    dlayer: TileLayerId = TileLayerId.Unset, dcol: CollisionHandling = null, dbits: Int = null, dir: Direction4Way = null, duration: number = null): IVec2Map<Array<FDef>> {
+    dlayer: TileLayerId = TileLayerId.Unset, dcol: CollisionHandling = null, dbits: Int = null, dir: Direction4Way = null, duration: number = null,
+     state:Int = null): IVec2Map<Array<FDef>> {
     let ret: IVec2Map<Array<FDef>> = new IVec2Map<Array<FDef>>();
     //Returns an FDEF for a cell tile (single animated cell frame)
     let arr: Array<FDef> = new Array<FDef>();
@@ -612,7 +614,7 @@ export class FDef {
       }
       let ix: Int = framexys[xi][0] as Int;
       let iy: Int = framexys[xi][1] as Int;
-      let d = new FDef(new ivec2(ix, iy), fliph, flipv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, wh, dlayer, dcol, dbits, dir, duration);
+      let d = new FDef(new ivec2(ix, iy), fliph, flipv, new vec4(1, 1, 1, 1), SpriteKeyFrameInterpolation.Step, wh, dlayer, dcol, dbits, dir, duration, state);
       arr.push(d);
     }
 
@@ -621,7 +623,8 @@ export class FDef {
   }
 
   public constructor(tile_off: ivec2 = null, flip_h: boolean = null, flip_v: boolean = null, color: vec4 = null, interp: SpriteKeyFrameInterpolation = null,
-    frame_wh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null, bits: Int = null, dir: Direction4Way = null, duration: number = null) {
+    frame_wh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null, bits: Int = null, 
+    dir: Direction4Way = null, duration: number = null, state : Int = null) {
     this.FramePos = tile_off;
     this.FlipH = flip_h;
     this.FlipV = flip_v;
@@ -633,6 +636,7 @@ export class FDef {
     this.Collision = collision;
     this.Duration = duration;
     this.CollisionBits = bits;
+    this.State = state;
   }
   public clone(): FDef {
     let f: FDef = new FDef();
@@ -686,6 +690,8 @@ export class SpriteKeyFrame extends GloballyUniqueObject {
   private _layer: TileLayerId = TileLayerId.Unset;
   //private _direction: Direction4Way = Direction4Way.None;//Optional.
   //Direction is in the SpriteFrame itself, there is no reason for the keyframe to have direction
+
+  public State : Int = null; // This is a variable state that changes among objects.
 
   public get CollisionHandling(): CollisionHandling { return this._collision; }
   public set CollisionHandling(x: CollisionHandling) { this._collision = x; }
@@ -803,6 +809,7 @@ export class SpriteAnimationData extends GloballyUniqueObject {
 
 export enum CollisionHandling {
   None, //No collisions happen 
+  Ignore, // Ignore this tile for collisions, allowinng Top to take precedence.
   Layer, //Collide on the layer only that the player is on.
   Tile, //Collide on the whole tile, regardless of the player's layer.  This is for hard blockers like level borders.
   Top, //For tiles, This tile only blocks if it is the top tile. FOr example, water blocks unless it has a dock over it.
@@ -891,6 +898,11 @@ export class Animation25D extends GloballyUniqueObject {
     }
     this._frame2 = x;
   }
+  private _keyFrame: SpriteKeyFrame = null;;
+  private _keyFrame2: SpriteKeyFrame = null;
+  public get KeyFrame() { return this._keyFrame; }
+  public get KeyFrame2() { return this._keyFrame2; }
+
   public get FrameBlend(): number { return this._frameBlend; }
   public set FrameBlend(x: number) { this._frameBlend = x; }
 
@@ -1055,13 +1067,13 @@ export class Animation25D extends GloballyUniqueObject {
     return this._tileData_Cached;
   }
   public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 /*1,1=default*/,
-    frameSize: ivec2 /*1,1=default*/, collision: CollisionHandling, bits: Int): SpriteKeyFrame {
+    frameSize: ivec2 /*1,1=default*/, collision: CollisionHandling, bits: Int, state:Int ): SpriteKeyFrame {
     //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
     //FrameSize vs ImageSize:
     //ImageSize > 1,1 will create NxM sub-sprites each with frames 1 tile wide.
     //FrameSize > 1,1 will create 1 sprite, and set the frame's size to be NxM.  This is added for performance for UI elements.
     this.addTiledAnimation(Animation25D.c_strTileData,
-      FDef.tileDefault([[tile.x, tile.y]], false, false, frameSize, null, collision, bits, null, null),
+      FDef.tileDefault([[tile.x, tile.y]], false, false, frameSize, null, collision, bits, null, null, state),
       atlas, Direction4Way.None, imageSize);
 
     let ret = null;
@@ -1130,6 +1142,7 @@ export class Animation25D extends GloballyUniqueObject {
 
       kf.ImageInterpolation = def.Interpolation;
       kf.Duration = def.Duration;
+      kf.State = def.State;
 
       ret.addKeyFrame(kf);
     }
@@ -1226,12 +1239,16 @@ export class Animation25D extends GloballyUniqueObject {
     //TODO: blended image interpolation
     if (keyB && keyB.ImageInterpolation === SpriteKeyFrameInterpolation.Linear) {
       this.Frame = keyA.Frame;
+      this._keyFrame = keyA;
       this.Frame2 = keyB.Frame;
+      this._keyFrame2 = keyB;
       this.FrameBlend = t01;
     }
     else {
       this.Frame = keyA.Frame;
+      this._keyFrame = keyA;
       this.Frame2 = null;
+      this._keyFrame2 = null;
       this.FrameBlend = 0;
     }
   }
@@ -1303,6 +1320,63 @@ export class Sprite25D extends GloballyUniqueObject {
     if (c) {
       this.Position = new vec3(c.CellPos_World.x, c.CellPos_World.y, 0);
     }
+  }
+
+  public getRenderDepth(defaultLayer: TileLayerId, block_keyframe: SpriteKeyFrame = null, player_y: number = null, cell_y: number = null): number {
+    //Compute layer
+    let layer: TileLayerId = TileLayerId.Objects;
+    if (block_keyframe && block_keyframe.Layer && block_keyframe.Layer !== TileLayerId.Unset) {
+      //we are cell
+      layer = block_keyframe.Layer;
+    }
+    else if (this.Animation && this.Animation.KeyFrame && this.Animation.KeyFrame.Layer !== TileLayerId.Unset) {
+      //frame level
+      layer = this.Animation.KeyFrame.Layer;
+    }
+    else if (this.Layer !== TileLayerId.Unset) {
+      //sprite level
+      layer = this.Layer;
+    }
+    else if (defaultLayer !== null && defaultLayer !== TileLayerId.Unset) {
+      layer = defaultLayer;
+    }
+
+    //Compute depth
+    let depth = 0;
+    if ((layer === TileLayerId.Player_Relative_Foreground || layer === TileLayerId.Player_Relative_Background) && (player_y !== null) && (cell_y !== null)) {
+      let yp = player_y;
+      let yc = cell_y;
+      if (yp < yc) {
+        depth = WorldView25D.getLayerDepth(TileLayerId.Foreground);
+      }
+      else if (yp === yc) {
+        if (layer === TileLayerId.Player_Relative_Foreground) {
+          depth = WorldView25D.getLayerDepth(TileLayerId.Foreground);
+        }
+        else {
+          depth = WorldView25D.getLayerDepth(TileLayerId.Background);
+        }
+      }
+      else if (yp > yc) {
+        depth = WorldView25D.getLayerDepth(TileLayerId.Background);
+      }
+    }
+    else {
+      depth = WorldView25D.getLayerDepth(layer);
+      if (player_y !== null && cell_y !== null) {
+        // Prevent coinciding layers from zfight
+        let yp = player_y;
+        let yc = cell_y;
+        if (yp < yc) {
+          depth += 0.0001;
+        }
+        else if (yp > yc) {
+          depth -= 0.0001;
+        }
+      }
+    }
+
+    return depth;
   }
 
   public get TileType(): HelixTileType { return this._tileType; }
@@ -1797,7 +1871,13 @@ export class Door25D extends Sprite25D {
   public constructor(atlas: Atlas) {
     super(atlas);
   }
-
+  public DoorState: DoorState = DoorState.Closed;
+  public open(){
+    if(this.DoorState === DoorState.Closed){
+      this.DoorState = DoorState.Open;
+      this.
+    }
+  }
 }
 export class MonsterGrass25D extends Sprite25D {
   public constructor(atlas: Atlas) {
@@ -2001,6 +2081,9 @@ export class Character extends Phyobj25D {
         this._bMoving = false;
         this.stopMovementAnimation();
         this.ApplySnap = true;
+
+        this.executeCellActions();
+
       }
       else {
         vel_len = this_len;
@@ -2024,6 +2107,18 @@ export class Character extends Phyobj25D {
     }
 
   }
+  private executeCellActions() { 
+    let c_cur = this.getCurrentCellR3(null);
+    for(let b of c_cur.Blocks){
+      if(b.SpriteRef){
+        if(b.SpriteRef.TileType === HelixTileType.PortalTrigger){
+          Globals.logInfo("Got a trigger");
+        }
+      }
+    }
+
+
+  }
   private computeNextDestination(): boolean {
     //Move 1 tile.
 
@@ -2033,7 +2128,7 @@ export class Character extends Phyobj25D {
         n.multiplyScalar(this.WorldView.Atlas.TileWidthR3);
 
         //Check current cell for edge blockers
-        let c_cur = this.getCurrentCellR3(null)
+        let c_cur = this.getCurrentCellR3(null);
         //Check next cell for any blockers
         let c_next = this.getCurrentCellR3(n); //this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(this.Center.clone().add(n));
 
@@ -2549,7 +2644,7 @@ export class WorldView25D extends Object3D {
 
   private copyObjectTiles(ob: Sprite25D) {
     if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
-      let depth = this.getLayerDepth(ob.Layer);
+      let depth = ob.getRenderDepth(null, null, null, null);
       this._buffer.copyObjectTile(ob, depth);
     }
     ob.clearDirty();
@@ -2560,37 +2655,10 @@ export class WorldView25D extends Object3D {
   }
   private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, block: TileBlock) {
     if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
-      let depth = 0;
-      if (ob.Layer === TileLayerId.Player_Relative_Foreground || block.Layer == TileLayerId.Player_Relative_Foreground) {
-        let yp = this.Player.CurrentCellPosition.y;
-        let yc = cell.CellPos_World.y;
-        if (yp < yc) {
-          depth = this.getLayerDepth(TileLayerId.Foreground);
-        }
-        else if (yp === yc) {
-          depth = this.getLayerDepth(TileLayerId.Background);
-        }
-        else if (yp > yc) {
-          depth = this.getLayerDepth(TileLayerId.Background);
-        }
-
-      }
-      else {
-        //You can override tile layer depth by setting the layer manually on the sprite.
-        depth = (ob.Layer === TileLayerId.Unset ? this.getLayerDepth(block.Layer) : this.getLayerDepth(ob.Layer));
-      }
-
+      let depth = ob.getRenderDepth(block.Layer, block.KeyFrame, this.Player.CurrentCellPosition.y, cell.CellPos_World.y);
       this._buffer.copyCellTile(cell, ob, frame, depth, block);
     }
     ob.clearDirty();
-    //**This is actually incorrect because the TileBLock has the quads.  We can't have children.
-    //Main function of TileBlock is to A) reduce the data footprint of Sprite25D B) optimize drawing of static objects by using a BVH
-    /*
-
-    for (let ci = 0; ci < ob.Children.length; ci++) {
-      this.copyCellTiles(cell, ob.Children[ci], frame, depth, block);
-    }
-    */
   }
   private updateViewport(dt: number) {
     if (!this.Player) {
@@ -2656,7 +2724,7 @@ export class WorldView25D extends Object3D {
     }
 
   }
-  private getLayerDepth(layer: TileLayerId): number {
+  public static getLayerDepth(layer: TileLayerId): number {
     let ret = (layer as number) * WorldView25D.LayerDepth;
     return ret;
   }
