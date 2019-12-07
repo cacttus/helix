@@ -29,8 +29,8 @@ export class IVec2Map<K> {
   *[Symbol.iterator](): IterableIterator<[ivec2, K]> {
     //let it = new IterableIterator<[K, V]>;
     for (let [n0, m2] of this.map) {
-      for(let [n1, k] of m2){
-        let r = new ivec2(n0,n1);
+      for (let [n1, k] of m2) {
+        let r = new ivec2(n0, n1);
         yield [r, k];
       }
     }
@@ -1102,7 +1102,7 @@ class MsEvent {
     this.type = t;
   }
 }
-export class Mouse extends Vector3 {
+export class Mouse extends vec2 {
   public moved: boolean = false;
   public mousePoint: PointGeo = null;
   private _rmbDown: boolean = false;
@@ -1170,7 +1170,6 @@ export class Mouse extends Vector3 {
 
     this.x = x;
     this.y = y;
-    this.z = 0;
 
     this.debugDrawMousePos();
   }
@@ -1236,7 +1235,7 @@ export class Mouse extends Vector3 {
       that.mousePoint.position.set(0, 0, 0);
       that.mousePoint.rotation.set(0, 0, 0);
       that.mousePoint.updateMatrix();
-      that.mousePoint.position.set(that.x, that.y, that.z);
+      that.mousePoint.position.set(that.x, that.y, 0);
       that.mousePoint.updateMatrix();
     }
   }
@@ -1587,23 +1586,42 @@ export class Frustum {
   //A distance of 
   public project(screen_x: number, screen_y: number, dist: number): Vector3 {
 
-    let wrx = screen_x / Globals.screen.elementWidth;//) * 2 - 1;
-    let wry = screen_y / Globals.screen.elementHeight;//) * 2 + 1;
+    //Limit projection bounds to the canvas.
+    if (screen_x < 0) {
+      screen_x = 0;
+    }
+    if (screen_x > Globals.screen.elementWidth) {
+      screen_x = Globals.screen.elementWidth;
+    }
+    if (screen_y < 0) {
+      screen_y = 0;
+    }
+    if (screen_y > Globals.screen.elementHeight) {
+      screen_y = Globals.screen.elementHeight;
+    }
+
+    
+
+    //Project onto screen.
+    let wrx = screen_x / Globals.screen.elementWidth;
+    let wry = screen_y / Globals.screen.elementHeight;
 
     let dx = this._ftr.clone().sub(this._ftl).multiplyScalar(wrx);
     let dy = this._fbl.clone().sub(this._ftl).multiplyScalar(wry);
 
     let back_plane: vec3 = this._ftl.clone().add(dx).add(dy);
 
-    let cam_pos: vec3 = Globals.camera.CamPos.clone();
+    //Limit distance based on orthographic projection paramters of 0,1.
+    if (dist > Globals.camera.Far - Globals.camera.Near) {
+      dist = (Globals.camera.Far - Globals.camera.Near);
+    }
 
-    let projected: vec3 = back_plane.clone().sub(cam_pos).normalize().multiplyScalar(dist);
-
-    projected.add(cam_pos);
+    //Project Into world.
+    let projected: vec3 = back_plane.clone().add( Globals.camera.CamDirBasis.clone().multiplyScalar(dist) );
 
     return projected;
   }
-  public construct(cam_pos: vec3 = null, cam_dir_basis : vec3 = null, cam_up_basis: vec3 = null, cam_right_basis: vec3 = null) {
+  public construct(cam_pos: vec3 = null, cam_dir_basis: vec3 = null, cam_up_basis: vec3 = null, cam_right_basis: vec3 = null) {
     //this is not a correct basis vector.  this is the 'up' reference used to construct the projection matrix
     if (cam_up_basis === null) {
       cam_up_basis = Globals.camera.CamUpBasis.clone();//.normalize();
@@ -1621,18 +1639,18 @@ export class Frustum {
     let fc: vec3 = cam_pos.clone().add(cam_dir_basis.clone().multiplyScalar(Globals.camera.Far));
     let nc: vec3 = cam_pos.clone().add(cam_dir_basis.clone().multiplyScalar(Globals.camera.Near));
 
-    if(Globals.camera.IsPerspective){
+    if (Globals.camera.IsPerspective) {
       this.setupPerspective(fc, nc, cam_pos, cam_up_basis, cam_dir_basis, cam_right_basis);
     }
-    else{
+    else {
       this.setupOrthographic(fc, nc, cam_pos, cam_up_basis, cam_dir_basis, cam_right_basis);
     }
 
     //Construct the correct up basis vector
 
   }
-  private setupPerspective(fc:vec3,nc:vec3, camPos:vec3, camUp:vec3, camView:vec3, camRight:vec3){
-    
+  private setupPerspective(fc: vec3, nc: vec3, camPos: vec3, camUp: vec3, camView: vec3, camRight: vec3) {
+
 
     let ar = Globals.screen.elementHeight / Globals.screen.elementWidth;
     let fov = THREE.Math.degToRad(Globals.camera.PerspectiveCamera.getEffectiveFOV());//The FOV with zoom applied, we don't use zoom for perspective camera however.
@@ -1643,27 +1661,30 @@ export class Frustum {
     let w_near_2 = tan_fov_2 * Globals.camera.Near;
     let h_near_2 = w_near_2 * ar;
 
-    this.constructPointsAndPlanes(nc,fc, camPos,camUp,camView,camRight, w_near_2, w_far_2, h_near_2, h_far_2);
+    this.constructPointsAndPlanes(nc, fc,
+      camPos, camUp, camView, camRight,
+      w_near_2, w_far_2,
+      h_near_2, h_far_2);
 
   }
-  private setupOrthographic(fc:vec3,nc:vec3, camPos:vec3, camUp:vec3, camView:vec3, camRight:vec3){
-    
+  private setupOrthographic(fc: vec3, nc: vec3, camPos: vec3, camUp: vec3, camView: vec3, camRight: vec3) {
+
     // let nc = camPos.clone().add(camView.clone().multiplyScalar(znear));
     // let fc = camPos.clone().add(camView.clone().multiplyScalar(zfar));
-    
+
     let ww = Math.abs((Globals.camera.OrthographicCamera.right - Globals.camera.OrthographicCamera.left) * 0.5);
     let hh = Math.abs((Globals.camera.OrthographicCamera.bottom - Globals.camera.OrthographicCamera.top) * 0.5);
 
-    let vpWidth_2 : number = ww;//_pViewportRef->getWidth() * 0.5f;
-    let vpHeight_2 : number = hh;//_pViewportRef->getHeight() * 0.5f;
+    let vpWidth_2: number = ww;//_pViewportRef->getWidth() * 0.5f;
+    let vpHeight_2: number = hh;//_pViewportRef->getHeight() * 0.5f;
 
     // Will this work?? IDK! ha
-    this.constructPointsAndPlanes(fc,nc, 
-        camPos, camUp, camView, camRight,
-        vpWidth_2, vpHeight_2,
-        vpWidth_2, vpHeight_2);
+    this.constructPointsAndPlanes(nc, fc,
+      camPos, camUp, camView, camRight,
+      vpWidth_2, vpWidth_2,
+      vpHeight_2, vpHeight_2);
   }
-  private constructPointsAndPlanes(nearCenter:vec3, farCenter:vec3,  pos:vec3, cam_up_basis:vec3, cam_dir_basis:vec3, cam_right_basis:vec3, w_near_2:number, w_far_2:number, h_near_2:number, h_far_2:number){
+  private constructPointsAndPlanes(nearCenter: vec3, farCenter: vec3, pos: vec3, cam_up_basis: vec3, cam_dir_basis: vec3, cam_right_basis: vec3, w_near_2: number, w_far_2: number, h_near_2: number, h_far_2: number) {
     let cup_far = cam_up_basis.clone().multiplyScalar(h_far_2);
     let crt_far = cam_right_basis.clone().multiplyScalar(w_far_2);
     this._ftl = farCenter.clone().add(cup_far).sub(crt_far);

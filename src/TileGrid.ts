@@ -192,7 +192,7 @@ export class SpriteFrameDefinition {
   public typescript_class: string = null;
   public collision: CollisionHandling = null;
   public collision_bits: Int = null; //CollisionBits enum
-  public default_character_animation: boolean = null;
+  //public default_character_animation: boolean = null;
   public frame_index: Int = null;
   public gesture: HandGesture = null;
   public is_key: boolean = false;
@@ -221,7 +221,7 @@ export class SpriteFrameDefinition {
   public static readonly prop_class: string = "class";//  - character and treasrue chest subclasses of Phy25, otherwise, the class iks Sprite25D
   public static readonly prop_collision: string = "collision";//  - none, layer (collide with layer objects)
   public static readonly prop_collision_bits: string = "collision_bits";//- the borders of this tile that can be collided, in TOP, RIGHT, BOTTOM, LEFT order, ex: to collide top and left: 1001.  Default value is : 1111 for all collided sprites.
-  public static readonly prop_default_character_animation: string = "default_character_animation";//- Whether to specify that this character is using default animation.
+ // public static readonly prop_default_character_animation: string = "default_character_animation";//- Whether to specify that this character is using default animation.
   public static readonly prop_frame_index: string = "frame_index"; // If set, this is the index of the frame, if unset, the index is row major
   public static readonly prop_gesture: string = "gesture";//   - hand gesture for grabber
   public static readonly prop_is_key: string = "is_key";//  - only one per sprite.  this sprite has the key default attributes for all other sprites
@@ -287,9 +287,9 @@ export class SpriteFrameDefinition {
         }
       }
 
-      else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_default_character_animation, key)) {
-        TiledUtils.validateProp(ret.default_character_animation = Utils.parseBool(val));
-      }
+      // else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_default_character_animation, key)) {
+      //   TiledUtils.validateProp(ret.default_character_animation = Utils.parseBool(val));
+      // }
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_frame_index, key)) {
         TiledUtils.validateProp(ret.frame_index = Utils.parseInt(val))
       }
@@ -760,6 +760,10 @@ export class SpriteSet {
     if (ret === null) {
       Globals.logWarn("Sprite class not created, defaulting to Tile for def: " + def.name)
       ret = this.makeTileSprite(atlas, def);
+    }
+
+    if(def.gesture){
+      ret.Gesture = def.gesture;
     }
 
     if (def.collision) {

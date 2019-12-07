@@ -33,9 +33,6 @@ export class ivec2 {
     this.y = (this.y + v.y) as Int;
     return this;
   }
-
-
-
 }
 export class RaycastHit {
   public _bHit: boolean;    // Whether the ray intersected the box.

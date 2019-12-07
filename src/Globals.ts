@@ -123,6 +123,7 @@ export class UnionCamera {
           side: THREE.DoubleSide,
           size: 2,
           sizeAttenuation: false,
+          color: 0x00FF00,
         })
       );
       // MESH with GEOMETRY, and Normal MATERIAL

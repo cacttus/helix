@@ -737,7 +737,6 @@ export class SpriteKeyFrame extends GloballyUniqueObject {
     this._parent = parent;
   }
 }
-
 export class SpriteAnimationData extends GloballyUniqueObject {
   //Animation sequence for a single sprite component.
   private _name: string = "";
@@ -806,7 +805,6 @@ export class SpriteAnimationData extends GloballyUniqueObject {
     }
   }
 }
-
 export enum CollisionHandling {
   None, //No collisions happen 
   Ignore, // Ignore this tile for collisions, allowinng Top to take precedence.
@@ -1253,7 +1251,6 @@ export class Animation25D extends GloballyUniqueObject {
     }
   }
 }
-
 export interface CollisionFunction25D { (thisObj: Phyobj25D, other: Phyobj25D, this_block: TileBlock, other_block: TileBlock): void; }
 export interface GestureCallback { (thisObj: Sprite25D, this_block: TileBlock, hand: Tickler): void; }
 export enum DirtyFlag { /*Transform = 0x01,*/ UVs = 0x02, Normals = 0x04, Colors = 0x08, All = 0x01 | 0x02 | 0x04 | 0x08 }
@@ -1875,7 +1872,7 @@ export class Door25D extends Sprite25D {
   public open(){
     if(this.DoorState === DoorState.Closed){
       this.DoorState = DoorState.Open;
-      this.
+      //this.
     }
   }
 }
@@ -3109,8 +3106,6 @@ export class Tickler extends PhysicsObject3D {
   public constructor(model: Object3D, action_point: Object3D) {
     super();
     this.add(model);
-    // this.add(action_point);
-
     this._actionPoint = action_point;
   }
   public snapToTile(tile: TileBlock) {
@@ -3141,8 +3136,8 @@ export class Tickler extends PhysicsObject3D {
       }
       else {
         //Project the hand onto the world.  This is for PC only. 
-        let p1 = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 0);
-        let p2 = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 100);
+        let p1 = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, Globals.camera.Near);
+        let p2 = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, Globals.camera.Far);
         let projected_world = g_mainWorld.MasterMap.project(p1, p2, WorldView25D.Normal, g_mainWorld.position);
 
         //Push the hand out a little bit so it isn't stuck in the world.
@@ -3150,9 +3145,9 @@ export class Tickler extends PhysicsObject3D {
         let push_out = p1.clone().sub(p2).normalize().multiplyScalar(push_amt);
 
         hand_pos_final = projected_world.clone().add(push_out);
-        if (!Globals.camera.IsPerspective) {
-          hand_pos_final.z = 0.5;
-        }
+        // if (!Globals.camera.IsPerspective) {
+        //   hand_pos_final.z = 0.5;
+        // }
       }
       //hardcode the z to a solid position so we can easily project it.
       this.position.copy(hand_pos_final);

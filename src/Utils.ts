@@ -213,7 +213,7 @@ export class Utils {
   public static loadingDetails(det: string) {
     $('#loadingDetails').html(det);
   }
-  public static lcmp(a: string, b: string, case_sensitive: boolean = false) {
+  public static lcmp(a: string, b: string, case_sensitive: boolean = false) :boolean {
     let d_k = Utils.copyString(a).trim();
     let d_s = Utils.copyString(b).trim();
     if (!case_sensitive) {
