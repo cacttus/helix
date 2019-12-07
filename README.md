@@ -1,9 +1,7 @@
 # Helix Game
-Helix is a 2D game in VR.  The purpose of this project is to demonstrate how VR can be used to play 2D games, and ways in which 2D games can be played comfortably in an immersive environment.
+Helix is a 2.5D game in VR.  The purpose of this project is to demonstrate how VR can be used to allow a 3D player to interact with a 2D world.
 
-Graduate Seminar Term Project Fall 2019
-
-boogerb kik
+(Graduate Seminar Term Project Fall 2019)
 
 ## Trello
 https://trello.com/b/d4cSwyt3
