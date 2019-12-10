@@ -1,3 +1,5 @@
+12/9
+Removed callback structure for loading 3D models.  Replaced with Promise.
 11/13
 Yet another way to do animation
 The spriteanimationdata is simply an offset into the Sprite's TileData set of frames.

@@ -3,14 +3,14 @@ var path = require('path');
 
 module.exports = {
   mode: 'development', //'development' or 'production' will minify the code
-  entry: './src/Main.ts',
+  entry: './src/helix/Main.ts',
   devtool: 'inline-source-map',
   module: {
     rules: [
       {
         test: /\.tsx?$/,
         use: 'ts-loader',
-        exclude: [/node_modules/, path.resolve(__dirname, "./src/index.tsx")]
+        exclude: []
       }
     ]
   },
