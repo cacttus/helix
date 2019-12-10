@@ -1,12 +1,13 @@
 # Helix Game
-Helix is a 2.5D game in VR.  The purpose of this project is to demonstrate how VR can be used to allow a 3D player to interact with a 2D world.
 
-(Graduate Seminar Term Project Fall 2019)
+Helix is a 2.5D VR game framework, allowing developers to create 2D games in VR, with a mixture of 2D and 3D graphics.
 
 ## Trello
+
 https://trello.com/b/d4cSwyt3
 
 ## How to Run
+
 install *npm
 
 install *git bash
