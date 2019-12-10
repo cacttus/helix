@@ -1405,20 +1405,7 @@ export class MasterMap {
     );
     return v;
   }
-  public project(p1: vec3, p2: vec3, normal: vec3, position: vec3): vec3 {
-    //Projects the given line segment onto this world
-    //Input: OpenGL World coordinates
-    //Returns OpenGL World coordinates.
 
-
-    //(n.p+d) = (a+tb)
-    let n = normal;
-    let d = -(n.dot(position));
-    let t: number = -(n.dot(p1) + d) / ((p2.clone().sub(p1)).dot(n));
-    let ret = p1.clone().add(p2.clone().sub(p1).multiplyScalar(t));
-    return ret;
-
-  }
 
 }
 export class MapArea {

@@ -218,6 +218,9 @@ export class ModelManager {
 
   constructor() {
   }
+  private qualifyFilename(name:string){
+    return this._modelBaseDir + name;
+  }
   public loadModel(filename: Files.Model): Promise<boolean> {
     //afterLoad - called after model loade.d
     //obj_names_in_scene is the list of object names that we search for in the GLTF file
@@ -227,7 +230,7 @@ export class ModelManager {
       Globals.logDebug('loading model "' + filename + '".')
       let that = this;
       let loader = new GLTFLoader_.GLTFLoader();
-      let szfile = this._modelBaseDir + filename;
+      let szfile = this.qualifyFilename(filename);
       loader.load(
         szfile,
         function (gltf: GLTFLoader_.GLTF) {
@@ -246,13 +249,12 @@ export class ModelManager {
           Globals.logInfo('Error loading "' + szfile + '" : ' + error);
           reject();
         }
-
       );//Loader.load
     });//Promise()
   }
   public getSceneObject(filename: string, objectName: string): THREE.Object3D {
     //Retrieves an object from a loaded scene.
-    let scene = this._cache.get(filename);
+    let scene = this._cache.get(this.qualifyFilename(filename));
     if (!scene) {
       return null;
     }

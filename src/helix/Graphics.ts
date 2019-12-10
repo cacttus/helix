@@ -26,6 +26,10 @@ export class Color4 {
     return b;
   }
 }
+/**
+ * @class Screen2D
+ * @description Holds drawable screen information, width, height, and access to the canvas.
+ */
 export class Screen2D extends GlobalEventObject {
   private _canvas: HTMLCanvasElement = null;
   private _lastWidth = 0;
@@ -91,7 +95,8 @@ export class PointGeo extends THREE.Object3D {
   }
 }
 /**
- * A viewing frustum for a camera.  Quick class to calculate point in screen.
+ * @class Frustum
+ * @description A viewing frustum for a camera.  Quick class to calculate point in screen.
  */
 export class Frustum {
   private _ftl: vec3 = new vec3();
@@ -164,10 +169,15 @@ export class Frustum {
     let wrx = screen_x / Globals.screen.elementWidth;
     let wry = screen_y / Globals.screen.elementHeight;
 
-    let dx = this._ftr.clone().sub(this._ftl).multiplyScalar(wrx);
-    let dy = this._fbl.clone().sub(this._ftl).multiplyScalar(wry);
+    let dx_near = this._ntr.clone().sub(this._ntl).multiplyScalar(wrx);
+    let dy_near = this._nbl.clone().sub(this._ntl).multiplyScalar(wry);
+    let front: vec3 = this._ntl.clone().add(dx_near).add(dy_near);
 
-    let back_plane: vec3 = this._ftl.clone().add(dx).add(dy);
+    let dx_far = this._ftr.clone().sub(this._ftl).multiplyScalar(wrx);
+    let dy_far = this._fbl.clone().sub(this._ftl).multiplyScalar(wry);
+    let back: vec3 = this._ftl.clone().add(dx_far).add(dy_far);
+
+    let proj_normal = back.clone().sub(front).normalize();
 
     //Limit distance based on orthographic projection paramters of 0,1.
     if (dist > Globals.camera.Far - Globals.camera.Near) {
@@ -175,7 +185,7 @@ export class Frustum {
     }
 
     //Project Into world.
-    let projected: vec3 = back_plane.clone().add(Globals.camera.CamDirBasis.clone().multiplyScalar(dist));
+    let projected: vec3 = front.clone().add( proj_normal.clone().multiplyScalar(dist));
 
     return projected;
   }
@@ -272,7 +282,10 @@ export class Frustum {
   }
 }
 
-// //Creates a copy of another mesh's material in case we need to set custom material properties.
+/**
+ * @class MaterialDuplicate
+ * @description Creates a copy of another mesh's material in case we need to set custom material properties.
+ */
 export class MaterialDuplicate {
   private _flashing: boolean = false;
   private _flash: number = 0;
@@ -470,6 +483,117 @@ export class MaterialDuplicate {
       }
     }
 
+  }
+}
+/**
+ * @class UnionCamera
+ * @description Handles both Orthographic and perspective cameras and makes it easy to convert from one to the other.
+ */
+export class UnionCamera {
+  private _perspective: boolean = true
+  private _frustum: Frustum = null;
+  private _camera: THREE.Camera = null;
+
+  private _camPos: vec3 = new vec3(0, 0, 0);
+  private _camDir: vec3 = new vec3(0, 0, 0);
+  private _camUp: vec3 = new vec3(0, 0, 0);
+  private _camRight: vec3 = new vec3(0, 0, 0);
+  public get CamPos(): vec3 { return this._camPos; }
+  public get CamDirBasis(): vec3 { return this._camDir; }
+  public get CamUpBasis(): vec3 { return this._camUp; }
+  public get CamRightBasis(): vec3 { return this._camRight; }
+
+  public get IsPerspective(): boolean { return this._perspective; }
+  public get PerspectiveCamera(): THREE.PerspectiveCamera { return this._camera as THREE.PerspectiveCamera; }
+  public get OrthographicCamera(): THREE.OrthographicCamera { return this._camera as THREE.OrthographicCamera; }
+
+  public get Near(): number { return this.IsPerspective ? this.PerspectiveCamera.near : this.OrthographicCamera.near; }
+  public get Far(): number { return this.IsPerspective ? this.PerspectiveCamera.far : this.OrthographicCamera.far; }
+  public get Camera(): THREE.Camera { return (this.IsPerspective ? this.PerspectiveCamera : this.OrthographicCamera) as THREE.Camera; }
+  public get Frustum(): Frustum { return this._frustum; }
+
+  public createNewOrtho(w : number = 12.5, h:number = 12.5, near:number=1, far:number=1000) {
+    this._camera = new THREE.OrthographicCamera(-w, w, h, -h , near, far);
+  }
+  public constructor(persp: boolean) {
+    this._perspective = persp;
+    this._frustum = new Frustum();
+    if (this._perspective) {
+      this._camera = new THREE.PerspectiveCamera(75, Globals.canvas.clientWidth / Globals.canvas.clientHeight, 1, 1000);
+    }
+    else {
+      this.createNewOrtho();
+    }
+  }
+
+  public windowSizeChanged(w: number, h: number, renderWidth: number, renderHeight: number) {
+    if (this.IsPerspective) {
+      this.PerspectiveCamera.aspect = renderHeight / renderWidth; //canvas.clientWidth / canvas.clientHeight;
+      this.PerspectiveCamera.updateProjectionMatrix();
+    }
+    else {
+      // Globals.OrthographicCamera.aspect = this._renderHeight / this._renderWidth; //canvas.clientWidth / canvas.clientHeight;
+      this.OrthographicCamera.updateProjectionMatrix();
+    }
+  }
+
+  public updateAfterMoving() {
+    //**This isn't called in the game loop, instead we call this RIGHT after we update the camera's position
+    //This should be the only place where we use getWorldXX because they seem to have a memory leak.
+    this.Camera.getWorldDirection(this._camDir);
+    this.Camera.getWorldPosition(this._camPos);
+
+    this._camRight = this._camDir.clone().cross(this.Camera.up); //TODO: see if this changes things
+    this._camRight.normalize();
+    this._camUp = this._camRight.clone().cross(this._camDir).normalize(); // I think cross product preserves length but whatever
+
+    this.Frustum.construct();
+    this.debug_drawFrustum();
+  }
+  private _frust_pts: THREE.Points = null
+  private debug_drawFrustum() {
+    if (Globals.isDebug()) {
+      if (this._frust_pts !== null) {
+        Globals.scene.remove(this._frust_pts);
+      }
+
+      let push1 = this.Frustum.normal.clone().multiplyScalar(0.02);
+      let push2 = this.Frustum.normal.clone().multiplyScalar(-0.02);
+      let geometry = new THREE.Geometry();
+
+      let d_ntl = this.Frustum.ntl.clone().add(push1);
+      let d_ntr = this.Frustum.ntr.clone().add(push1);
+      let d_nbl = this.Frustum.nbl.clone().add(push1);
+      let d_nbr = this.Frustum.nbr.clone().add(push1);
+      let d_ftl = this.Frustum.ftl.clone().add(push2);
+      let d_ftr = this.Frustum.ftr.clone().add(push2);
+      let d_fbl = this.Frustum.fbl.clone().add(push2);
+      let d_fbr = this.Frustum.fbr.clone().add(push2);
+
+      geometry.vertices.push(
+        d_ntl,
+        d_ntr,
+        d_nbl,
+        d_nbr,
+        d_ftl,
+        d_ftr,
+        d_fbl,
+        d_fbr,
+      );
+
+      this._frust_pts = new THREE.Points(
+        geometry,
+        new THREE.PointsMaterial({
+          side: THREE.DoubleSide,
+          size: 2,
+          sizeAttenuation: false,
+          color: 0x00FF00,
+        })
+      );
+      // MESH with GEOMETRY, and Normal MATERIAL
+      Globals.scene.add(this._frust_pts);
+    }
 
   }
+
 }

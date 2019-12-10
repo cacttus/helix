@@ -1677,9 +1677,11 @@ export class Sprite25D extends GloballyUniqueObject {
       this.R3Parent.getWorldPosition(v);
       this._worldlocation.add(v);
     }
+    else{
+      //If we don't have an R3 parent we are just a simple tile in screen space, from top left, convert to OpenGL world space.
+      this._worldlocation.y *= -1; //HACK://Convert from Grid to World
+    }
 
-    //TODO fix this
-    this._worldlocation.y *= -1; //HACK://Convert from Grid to World
 
     SpriteFrame.createQuadVerts(this.QuadVerts, this._worldlocation, this._worldrotation, this._worldscale, this.Width, this.Height);
   }
@@ -2214,6 +2216,10 @@ export class InputControls {
 
   private _playerChar: Character = null;
   private _playerCharZoom: number = null;
+  private _playerCharZoomBase: number = null;
+  private _zoomPerWheel = 0.1;
+  private _maxZoom: number = 20;
+  private _minZoom: number = 2;
 
   public get PlayerChar(): Character { return this._playerChar; }
 
@@ -2222,13 +2228,8 @@ export class InputControls {
   
   public constructor(world:WorldView25D, playerChar: Character) {
     this._playerChar = playerChar;
-    // if(Globals.camera.IsPerspective){
-    this._playerCharZoom = 13;
+    this._playerCharZoom =  this._playerCharZoomBase = 13;
     this._world = world;
-    // }
-    // else{
-    //   this._playerCharZoom =1 ;
-    //  }
   }
   public update(dt: number) {
     //If press right then move cam.
@@ -2256,7 +2257,7 @@ export class InputControls {
 
     let p1 = player_p.clone();
     let p2 = player_p.clone().add(player_n.clone().multiplyScalar(1000));
-    let center = this._world.MasterMap.project(p1, p2, WorldView25D.Normal, this._world.position);
+    let center = Utils.project(p1, p2, WorldView25D.Normal, this._world.position);
 
     this._world.Viewport.Center = center;
   }
@@ -2289,20 +2290,11 @@ export class InputControls {
     center.add(this._world.position);//Not sure if we're actually going to move the world but it's possible i guess
 
     let position: vec3 = center.clone();
-    // if(!Globals.camera.IsPerspective){
-    //   position.add(this._playerChar.QuadNormal.clone().multiplyScalar(13));
-    //  // Globals.camera.zoomOrtho(this._playerCharZoom);
-    // }
-    // else{
+
     position.add(this._playerChar.QuadNormal.clone().multiplyScalar(this._playerCharZoom));
 
-    //}
-
-    // if(!Globals.camera.IsPerspective){
-    //   position.z = 0.2;
-    // }
-
     Globals.player.position.copy(position);
+    
     //If in VR the user may not have to look at this exact thing.
     Globals.camera.Camera.lookAt(center);
     Globals.camera.updateAfterMoving();
@@ -2310,22 +2302,28 @@ export class InputControls {
     this._world.Viewport.Center = center;
   }
   private zoomPlayerChar() {
-    let zoomPerWheel = 0.1;
-    let maxZoom: number = 4;
-    let minZoom: number = 1;
-
-    if (Globals.camera.IsPerspective === false) {
-      zoomPerWheel = 0.1;
-      maxZoom = 7;
-      minZoom = 1;
-    }
-    if (Globals.isDebug()) {
-      maxZoom = 9999;
-    }
 
     if (Globals.input.mouse.Wheel !== 0) {
-      this._playerCharZoom += Globals.input.mouse.Wheel * zoomPerWheel;
-      this._playerCharZoom = Math.max(minZoom, Math.min(maxZoom, this._playerCharZoom));
+      if (Globals.camera.IsPerspective === false) {
+        this._zoomPerWheel = 0.1;
+        this._maxZoom = 50;
+        this._minZoom = 1;
+        
+        // Globals.camera.createNewOrtho(9.5,9.5);
+        //     //Update local data.
+        //     Globals.camera.OrthographicCamera.updateProjectionMatrix();
+        //     Globals.camera.updateAfterMoving();
+
+      }
+      else{
+        // if (Globals.isDebug()) {
+        //   this._maxZoom = 9999;
+        // }
+  
+        this._playerCharZoom += Globals.input.mouse.Wheel * this._zoomPerWheel;
+        this._playerCharZoom = Math.max(this._minZoom, Math.min(this._maxZoom, this._playerCharZoom));
+      }
+
       this.lookAtPlayerChar();
     }
   }

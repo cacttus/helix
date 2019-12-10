@@ -20,6 +20,17 @@ export enum BrowserType {
   Chrome, Edge, IE, Opera, Firefox, Safari, Blink, Undefined
 }
 export class Utils {
+  public static project(p1: vec3, p2: vec3, normal: vec3, position: vec3): vec3 {
+    //Projects the given line segment onto the plane
+    //Input: OpenGL World coordinates
+    //Returns OpenGL World coordinates.
+    //(n.p+d) = (a+tb)
+    let n = normal;
+    let d = -(n.dot(position));
+    let t: number = -(n.dot(p1) + d) / ((p2.clone().sub(p1)).dot(n));
+    let ret = p1.clone().add(p2.clone().sub(p1).multiplyScalar(t));
+    return ret;
+  }  
   public static parseIVec2(str: string): ivec2 {
     let arr = Utils.parseTuple(str);
     if (!arr || arr.length !== 2) {
