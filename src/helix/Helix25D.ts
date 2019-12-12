@@ -10,13 +10,13 @@ import * as THREE from 'three';
 import { Color, Box3, Object3D, MeshBasicMaterial, Material, Quaternion, Box3Helper, Texture, KeyframeTrack } from 'three';
 import { Globals, GameState, ResizeMode } from './Globals';
 import { Utils } from './Utils';
-import { Random, AfterLoadFunction, WaitTimer,IVec2Map, HashMap} from './Base';
+import { Random, AfterLoadFunction, WaitTimer, IVec2Map, HashMap } from './Base';
 import { vec2, vec3, vec4, Box2f, ivec2 } from './Math';
 import * as Files from './Files';
 import { Int, toInt } from './Int';
 import { Tiling, TileGrid, MasterMap, Cell, TileBlock, TiledTileId, HelixTileId, TileLayerId, HelixTileType, DoorState } from './TileGrid';
 import { QuickUI, UIElement } from './UI25D';
-import {Color4} from './Graphics';
+import { Color4 } from './Graphics';
 
 export class ImageUtils {
   //Basically this class was creatd to handle the changing of image colors based on time of day.
@@ -300,6 +300,16 @@ export class Atlas extends ImageResource {
   private _tileWidthR3: number = 1;
   private _tileHeightR3: number = 1;
 
+  public pixelOffsetR3(px: Int, py: Int, up_basisR3: vec3, right_basisR3: vec3) {
+    //returns an R3 point that is the offset of a sprite in 2d pixel coordinates from the TOP LEFT corner.
+    let pixelWidthR3 = this._tileWidthR3 / this._tileWidthPixels;
+    let pixelHeightR3 = this._tileHeightR3 / this._tileHeightPixels;
+    let v: vec3 = new vec3(0, 0, 0);
+    v.add(right_basisR3.clone().multiplyScalar(pixelWidthR3 * px))
+      .add(up_basisR3.clone().negate().multiplyScalar(pixelHeightR3 * py));
+    return v;
+  }
+
   public tiledFrameIdToTuple(id: Int): ivec2 {
     let ret: ivec2 = new ivec2();
     ret.x = toInt(id % this.FramesWidth);
@@ -466,11 +476,11 @@ export class FDef {
   public Collision: CollisionHandling = null;
   public Duration: number = null;
   public CollisionBits: Int = null;
-  public State : Int = null;
+  public State: Int = null;
 
   public static tileDefault(framexys: Array<Array<number>>, fliph: boolean = false, flipv: boolean = false, wh: ivec2 = new ivec2(1, 1),
     dlayer: TileLayerId = TileLayerId.Unset, dcol: CollisionHandling = null, dbits: Int = null, dir: Direction4Way = null, duration: number = null,
-     state:Int = null): IVec2Map<Array<FDef>> {
+    state: Int = null): IVec2Map<Array<FDef>> {
     let ret: IVec2Map<Array<FDef>> = new IVec2Map<Array<FDef>>();
     //Returns an FDEF for a cell tile (single animated cell frame)
     let arr: Array<FDef> = new Array<FDef>();
@@ -492,8 +502,8 @@ export class FDef {
   }
 
   public constructor(tile_off: ivec2 = null, flip_h: boolean = null, flip_v: boolean = null, color: vec4 = null, interp: SpriteKeyFrameInterpolation = null,
-    frame_wh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null, bits: Int = null, 
-    dir: Direction4Way = null, duration: number = null, state : Int = null) {
+    frame_wh: ivec2 = null,/* tileoff: ivec2,*/ layer: TileLayerId = null, collision: CollisionHandling = null, bits: Int = null,
+    dir: Direction4Way = null, duration: number = null, state: Int = null) {
     this.FramePos = tile_off;
     this.FlipH = flip_h;
     this.FlipV = flip_v;
@@ -560,7 +570,7 @@ export class SpriteKeyFrame extends GloballyUniqueObject {
   //private _direction: Direction4Way = Direction4Way.None;//Optional.
   //Direction is in the SpriteFrame itself, there is no reason for the keyframe to have direction
 
-  public State : Int = null; // This is a variable state that changes among objects.
+  public State: Int = null; // This is a variable state that changes among objects.
 
   public get CollisionHandling(): CollisionHandling { return this._collision; }
   public set CollisionHandling(x: CollisionHandling) { this._collision = x; }
@@ -934,7 +944,7 @@ export class Animation25D extends GloballyUniqueObject {
     return this._tileData_Cached;
   }
   public addTileFrame(tile: ivec2, atlas: Atlas, imageSize: ivec2 /*1,1=default*/,
-    frameSize: ivec2 /*1,1=default*/, collision: CollisionHandling, bits: Int, state:Int ): SpriteKeyFrame {
+    frameSize: ivec2 /*1,1=default*/, collision: CollisionHandling, bits: Int, state: Int): SpriteKeyFrame {
     //For background tiles and tile sets, we have a separate animation data that holds a list of static frames.
     //FrameSize vs ImageSize:
     //ImageSize > 1,1 will create NxM sub-sprites each with frames 1 tile wide.
@@ -1176,6 +1186,7 @@ export class Sprite25D extends GloballyUniqueObject {
   // private _gestureCallback: GestureCallback = null;
   // private _gesture: HandGesture = HandGesture.None;
   private _r3Parent: Object3D = null; // Do not clone - Remove this when we've created gesture sprites as PhysicsObjects 
+  private _r3Offset: vec3 = new vec3(0, 0, 0); // Do not clone - Remove this when we've created gesture sprites as PhysicsObjects 
 
   public AfterLoadCallbacks: Array<Function> = new Array<Function>(); //Called after the sprite is created.
 
@@ -1215,6 +1226,7 @@ export class Sprite25D extends GloballyUniqueObject {
         depth = WorldView25D.getLayerDepth(TileLayerId.Foreground);
       }
       else if (yp === yc) {
+        //This magic here is how sprites that are above the player in the 2D view get rendered in the back, to give a little more depth to the game.
         if (layer === TileLayerId.Player_Relative_Foreground) {
           depth = WorldView25D.getLayerDepth(TileLayerId.Foreground);
         }
@@ -1250,14 +1262,23 @@ export class Sprite25D extends GloballyUniqueObject {
   // public get GestureCallback(): GestureCallback { return this._gestureCallback; }
   // public set GestureCallback(x: GestureCallback) { this._gestureCallback = x; }
 
-  private _properties : HashMap<string> = new HashMap<string>();//Stores a list of key/value pairs
-  public get Properties() : HashMap<string> { return this._properties; }
-
+  private _properties: HashMap<string> = new HashMap<string>();//Stores a list of key/value pairs
+  public get Properties(): HashMap<string> { return this._properties; }
+  public set Properties(x: HashMap<string>) { this._properties = x; }
+  public getProperty(pname: string): string {
+    let ret: string = this._properties.get(pname.trim().toLowerCase());
+    if (!ret) {
+      ret = "";
+    }
+    return ret;
+  }
   // public get Gesture(): HandGesture { return this._gesture; }
   // public set Gesture(x: HandGesture) { this._gesture = x; }
 
   public get R3Parent(): Object3D { return this._r3Parent; }
   public set R3Parent(x: Object3D) { this._r3Parent = x; }
+  public get R3Offset(): vec3 { return this._r3Offset; }
+  public set R3Offset(x: vec3) { this._r3Offset = x; }
 
   public get PreCollisionFunction(): CollisionFunction25D { return this._preCollisionFunction; }
   public set PreCollisionFunction(x: CollisionFunction25D) { this._preCollisionFunction = x; }
@@ -1574,7 +1595,7 @@ export class Sprite25D extends GloballyUniqueObject {
       loc.add(add);
     }
 
-    let ret = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_WorldR3(loc);
+    let ret = this.WorldView.MasterMap.Area.Grid.GetCellForPoint_MapPointR3(loc);
     return ret;
   }
   public calcBoundBoxGrid(nextpos_grid: vec3 = null) {
@@ -1671,17 +1692,20 @@ export class Sprite25D extends GloballyUniqueObject {
     }
 
 
-    //R3 Parent- We use this to move the tiles around realitve to hand
+    //R3 Parent - the tile has an Object3D as its parent.
     if (this.R3Parent) {
-      let v: vec3 = new vec3();
-      this.R3Parent.getWorldPosition(v);
+      let v = Utils.getWorldPosition(this.R3Parent);
+      v.add(this.R3Offset);
       this._worldlocation.add(v);
     }
-    else{
+    else {
       //If we don't have an R3 parent we are just a simple tile in screen space, from top left, convert to OpenGL world space.
       this._worldlocation.y *= -1; //HACK://Convert from Grid to World
     }
 
+    if (!this._quadVerts) {
+      this._quadVerts = new Array<vec3>();
+    }
 
     SpriteFrame.createQuadVerts(this.QuadVerts, this._worldlocation, this._worldrotation, this._worldscale, this.Width, this.Height);
   }
@@ -1743,8 +1767,8 @@ export class Door25D extends Sprite25D {
     super(atlas);
   }
   public DoorState: DoorState = DoorState.Closed;
-  public open(){
-    if(this.DoorState === DoorState.Closed){
+  public open() {
+    if (this.DoorState === DoorState.Closed) {
       this.DoorState = DoorState.Open;
       //this.
     }
@@ -1978,11 +2002,11 @@ export class Character extends Phyobj25D {
     }
 
   }
-  private executeCellActions() { 
+  private executeCellActions() {
     let c_cur = this.getCurrentCellR3(null);
-    for(let b of c_cur.Blocks){
-      if(b.SpriteRef){
-        if(b.SpriteRef.TileType === HelixTileType.PortalTrigger){
+    for (let b of c_cur.Blocks) {
+      if (b.SpriteRef) {
+        if (b.SpriteRef.TileType === HelixTileType.PortalTrigger) {
           Globals.logInfo("Got a trigger");
         }
       }
@@ -2155,8 +2179,8 @@ export class Viewport25D {
 
   private _box3helper: Box3Helper = null;
 
-  private _atlas:Atlas = null;
-  public constructor(atlas:Atlas) {
+  private _atlas: Atlas = null;
+  public constructor(atlas: Atlas) {
     this._atlas = atlas;
   }
   private widthHeightUpdate(dt: number) {
@@ -2223,12 +2247,12 @@ export class InputControls {
 
   public get PlayerChar(): Character { return this._playerChar; }
 
-  public MovingPlayer : boolean = false;
-  private _world : WorldView25D = null;
-  
-  public constructor(world:WorldView25D, playerChar: Character) {
+  public MovingPlayer: boolean = false;
+  private _world: WorldView25D = null;
+
+  public constructor(world: WorldView25D, playerChar: Character) {
     this._playerChar = playerChar;
-    this._playerCharZoom =  this._playerCharZoomBase = 13;
+    this._playerCharZoom = this._playerCharZoomBase = 13;
     this._world = world;
   }
   public update(dt: number) {
@@ -2294,7 +2318,7 @@ export class InputControls {
     position.add(this._playerChar.QuadNormal.clone().multiplyScalar(this._playerCharZoom));
 
     Globals.player.position.copy(position);
-    
+
     //If in VR the user may not have to look at this exact thing.
     Globals.camera.Camera.lookAt(center);
     Globals.camera.updateAfterMoving();
@@ -2308,18 +2332,18 @@ export class InputControls {
         this._zoomPerWheel = 0.1;
         this._maxZoom = 50;
         this._minZoom = 1;
-        
+
         // Globals.camera.createNewOrtho(9.5,9.5);
         //     //Update local data.
         //     Globals.camera.OrthographicCamera.updateProjectionMatrix();
         //     Globals.camera.updateAfterMoving();
 
       }
-      else{
+      else {
         // if (Globals.isDebug()) {
         //   this._maxZoom = 9999;
         // }
-  
+
         this._playerCharZoom += Globals.input.mouse.Wheel * this._zoomPerWheel;
         this._playerCharZoom = Math.max(this._minZoom, Math.min(this._maxZoom, this._playerCharZoom));
       }
@@ -2366,6 +2390,8 @@ export class WorldView25D extends Object3D {
   public static readonly Normal: vec3 = new vec3(0, 0, 1);
   public static readonly LayerDepth: number = 0.01;
 
+  public HoverBlock: TileBlock = null;
+
   private _atlas: Atlas = null;
   private _buffer: TileBuffer = null;
   private _boxHelper: THREE.BoxHelper = null;
@@ -2399,7 +2425,7 @@ export class WorldView25D extends Object3D {
     super();
     this._atlas = r;
   }
-  public init(bufSizeTiles: Int, customPropertyValidator : Array<string>) {
+  public init(bufSizeTiles: Int, customPropertyValidator: Array<string>) {
     //6 high x 16 wide
     this._viewport = new Viewport25D(this.Atlas);
 
@@ -2434,10 +2460,10 @@ export class WorldView25D extends Object3D {
     let playerTile = this.MasterMap.MapData.Sprites.getPlayerTile();
     this.Player = (playerTile as Character).clone() as Character;
     this.addObject25(this.Player, this.MasterMap.MapData.PlayerStartXY);
-  
+
     //Create input controls for player.
     this.InputControls = new InputControls(this, this.Player);
-  
+
     this.Player.update(0.0001);
   }
   public update(dt: number) {
@@ -2465,9 +2491,7 @@ export class WorldView25D extends Object3D {
     this._buffer.beginCopy();
 
     if (Globals.gameState === GameState.Play) {
-      // if (Globals.isDebug()) {
-      //   this.debug_DrawCells();
-      // }
+
       this.drawEverything();
     }
     else if (Globals.gameState === GameState.Title) {
@@ -2479,7 +2503,7 @@ export class WorldView25D extends Object3D {
   private updateMapAndObjects(dt: number) {
     //Update map tile sprites
     this.MasterMap.update(dt);
-   //this.Environment.update(dt);
+    //this.Environment.update(dt);
 
     //Update Objects
     for (const [key, value] of this._objects) {
@@ -2520,24 +2544,6 @@ export class WorldView25D extends Object3D {
     ob.Destroyed = true;
   }
 
-  private copyObjectTiles(ob: Sprite25D) {
-    if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
-      let depth = ob.getRenderDepth(null, null, null, null);
-      this._buffer.copyObjectTile(ob, depth);
-    }
-    ob.clearDirty();
-
-    for (let ci = 0; ci < ob.Children.length; ci++) {
-      this.copyObjectTiles(ob.Children[ci]);
-    }
-  }
-  private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, block: TileBlock) {
-    if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
-      let depth = ob.getRenderDepth(block.Layer, block.KeyFrame, this.Player.CurrentCellPosition.y, cell.CellPos_World.y);
-      this._buffer.copyCellTile(cell, ob, frame, depth, block);
-    }
-    ob.clearDirty();
-  }
   private updateViewport(dt: number) {
     if (!this.Player) {
       Globals.debugBreak();
@@ -2547,21 +2553,22 @@ export class WorldView25D extends Object3D {
   private updatePostPhysics() {
     this._viewportCellsFrame = this._masterMap.Area.Grid.GetCellManifoldForBox(this._viewport.BoxR2)
   }
-  // private debug_DrawCells() {
-  //   for (let c of this._viewportCellsFrame) {
-  //     if (c) {
-  //       this.debug_drawCell(c);
-  //     }
-  //   }
+  private debug_DrawCells() {
+    for (let c of this._viewportCellsFrame) {
+      if (c) {
+        this.debug_drawCell(c);
+      }
+    }
 
-  // }
-  // private debug_drawCell(c: Cell) {
-  //   if (Cell.DebugFrame === null) {
-  //     Cell.DebugFrame = this.Atlas.getFrame(2 as Int, 0 as Int);
-  //   }
+  }
+  private debug_drawCell(c: Cell) {
+    if (Cell.DebugFrame === null) {
+      Cell.DebugFrame = this.Atlas.getFrame(toInt(2), toInt(0), toInt(1), toInt(1));
+    }
 
-  //   this._buffer.copyCellTile(Cell.DebugFrame, c.DebugVerts, WorldView25D.Normal, new vec4(c.DebugColor.r, c.DebugColor.g, c.DebugColor.b, 1), 1, false, false, DirtyFlag.All);
-  // }
+    // this._buffer.copyCellTile(Cell.DebugFrame, c.DebugVerts, WorldView25D.Normal,
+    //   new vec4(c.DebugColor.r, c.DebugColor.g, c.DebugColor.b, 1), 1, false, false, DirtyFlag.All);
+  }
   private drawEverything() {
     this.drawTiles();
     //Draw Objects
@@ -2569,6 +2576,25 @@ export class WorldView25D extends Object3D {
       if (key.Visible) {
         //There may be a faster way to do this. For instance, static objects don't update.
         this.copyObjectTiles(key);
+      }
+    }
+
+    this.drawHover();
+
+    if (Globals.isDebug() && Globals.urlParams.has("debugcells")) {
+      this.debug_DrawCells();
+    }
+
+  }
+  private _hoverSprite: Sprite25D = null;
+  private drawHover() {
+    if (this.HoverBlock) {
+      if (!this._hoverSprite) {
+        this._hoverSprite = this.MasterMap.MapData.Sprites.getSpriteByName("hover_box");
+      }
+      if (this._hoverSprite) {
+        let depth = (TileLayerId.LayerCountEnum) * WorldView25D.LayerDepth;
+        this.drawSpriteOnBlock(this.HoverBlock.cell, this.HoverBlock, this._hoverSprite, toInt(-1), depth);
       }
     }
   }
@@ -2586,39 +2612,65 @@ export class WorldView25D extends Object3D {
     }
   }
   private drawBlock(c: Cell, block: TileBlock) {
-    let frame = block.FrameIndex;
-    if (block.SpriteRef.TilingAnimated) {
-      //Perform special animation
-      frame = block.SpriteRef.Animation.CurrentFrameIndex;
+    this.drawSpriteOnBlock(c, block, block.SpriteRef, block.FrameIndex);
+  }
+  private drawSpriteOnBlock(c: Cell, block: TileBlock, sprite: Sprite25D, frameIndex: Int = toInt(-1), depthOverride: number = null) {
+    let frame = frameIndex;
+    if (sprite.TilingAnimated || frameIndex === toInt(-1)) {
+      //Perform tile animation
+      frame = sprite.Animation.CurrentFrameIndex;
     }
-
-    if (frame >= 0) {
-      this.copyCellTiles(c, block.SpriteRef, frame, block);
+    if (!sprite.TilingAnimated && frameIndex === toInt(-1)) {
+      Globals.logWarnOnce("Frame wasn't animated but no frame index supplied.");
     }
     else {
-      if (Globals.isDebug() && (Globals.getFrameNumber() % 10 === 0)) {
-        Globals.logWarn("Frame wasn't set for sprite: " + ((block && block.SpriteRef) ? block.SpriteRef.Name : "undefined"));
-      }
-    }
 
+      if (frame >= 0) {
+        this.copyCellTiles(c, sprite, frame, block, depthOverride);
+      }
+      else {
+        if (Globals.isDebug() && (Globals.getFrameNumber() % 10 === 0)) {
+          Globals.logWarnOnce("Frame wasn't set for sprite: " + ((block && sprite) ? sprite.Name : "undefined"));
+        }
+      }
+
+    }
   }
+  private copyCellTiles(cell: Cell, ob: Sprite25D, frame: Int, block: TileBlock, depthOverride: number = null) {
+    if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
+      let depth = 0;
+      if (depthOverride) {
+        depth = depthOverride;
+      }
+      else {
+        depth = ob.getRenderDepth(block.Layer, block.KeyFrame, this.Player.CurrentCellPosition.y, cell.CellPos_World.y);
+      }
+      this._buffer.copyCellTile(cell, ob, frame, depth, block);
+    }
+    ob.clearDirty();
+  }
+  private copyObjectTiles(ob: Sprite25D) {
+    if (!MasterMap.tileTypeIsSpecial(ob.TileType) || Globals.isDebug()) {
+      let depth = ob.getRenderDepth(null, null, null, null);
+      this._buffer.copyObjectTile(ob, depth);
+    }
+    ob.clearDirty();
+
+    for (let ci = 0; ci < ob.Children.length; ci++) {
+      this.copyObjectTiles(ob.Children[ci]);
+    }
+  }
+
   public static getLayerDepth(layer: TileLayerId): number {
     let ret = (layer as number) * WorldView25D.LayerDepth;
     return ret;
   }
-
-  public blockTileToSprite(block: TileBlock, cell: Cell): Sprite25D {
+  public blockTileToSprite(block: TileBlock): Sprite25D {
     let ret: Sprite25D = block.SpriteRef.clone();
-
     ret.Animation.setKeyFrame(block.FrameIndex, block.AnimationData);
-
     this.addObject25(ret, null);
-
-    cell.removeBlock(block);
-
     return ret;
   }
-
 
 }
 /**
@@ -2788,12 +2840,14 @@ export class TileBuffer extends THREE.BufferGeometry {
     2 --- 3
     */
     if (cell) {
+      if (!block.Verts) {
+        block.Verts = new Array<vec3>();
+      }
       //An attempt to speed this method up.
       if (block.Verts.length < 4) {
-        block.Verts[0] = tile.QuadVerts[0].clone();
-        block.Verts[1] = tile.QuadVerts[1].clone();
-        block.Verts[2] = tile.QuadVerts[2].clone();
-        block.Verts[3] = tile.QuadVerts[3].clone();
+        for (let vi = 0; vi < 4; ++vi) {
+          block.Verts[vi] = tile.QuadVerts[vi].clone();
+        }
 
         let cp: vec2 = new vec2(cell.TilePosR3.x, cell.TilePosR3.y * -1); //-1 for the "down" here.  Too lazy to multiply by the normals.
         for (let vi = 0; vi < 4; ++vi) {
@@ -2804,10 +2858,9 @@ export class TileBuffer extends THREE.BufferGeometry {
       v = block.Verts;
     }
     else {
-      v[0] = tile.QuadVerts[0].clone();
-      v[1] = tile.QuadVerts[1].clone();
-      v[2] = tile.QuadVerts[2].clone();
-      v[3] = tile.QuadVerts[3].clone();
+      for (let vi = 0; vi < 4; ++vi) {
+        v[vi] = tile.QuadVerts[vi].clone();
+      }
     }
 
 

@@ -127,21 +127,25 @@ class MsEvent {
   }
 }
 export class Mouse extends vec2 {
-  public moved: boolean = false;
-  public mousePoint: PointGeo = null;
+  private _moved: boolean = false;
   private _rmbDown: boolean = false;
   private _lmbDown: boolean = false;
   private _left: VirtualButton = new VirtualButton();
   private _right: VirtualButton = new VirtualButton();
   private _wheel: number = 0;//Returns a number of mouse wheeel clicks.
 
+  public dx : number =0 ;
+  public dy : number =0 ;
+
+  public mousePoint: PointGeo = null;
+
   public get Wheel(): number { return this._wheel; }
   public get Left(): VirtualButton { return this._left; }
   public get Right(): VirtualButton { return this._right; }
+  public get moved(): boolean {return this._moved; }
 
   private _events: Array<MsEvent> = new Array<MsEvent>();
   private _mousewheel_evt: Array<MouseWheelEvent> = new Array<MouseWheelEvent>();
-  private curView: vec3 = new vec3(0, 0, -1);
 
   public constructor() {
     super();
@@ -183,71 +187,18 @@ export class Mouse extends vec2 {
       that._events.push(new MsEvent(e, MouseEventType.MouseMove));
     }, false);
   }
+  
   private mouseMove(x: number, y: number) {
-    if (!this.moved) {
-      this.moved = true;
+    if (!this._moved) {
+      this._moved = true;
     }
 
-    if (this.Left.down()) {
-      this.flycamRotate(x, y);
-    }
-
+    this.dx = x - this.x;
+    this.dy = y - this.y;
     this.x = x;
     this.y = y;
 
     this.debugDrawMousePos();
-  }
-  private flycamRotate(newx: number, newy: number) {
-    let dx = newx - this.x;
-    let dy = newy - this.y;
-
-    let maxPixel = 8;
-
-    if (Math.abs(dx) > maxPixel) { dx = Math.sign(dx) * maxPixel }
-    if (Math.abs(dy) > maxPixel) { dy = Math.sign(dy) * maxPixel }
-
-    let campos = Globals.camera.CamPos.clone();
-
-    let camdir = Globals.camera.CamDirBasis.clone();//new vec3();
-
-    let rot_speed = 0.01; // Change this to change rotation speed.
-
-    let right = Globals.camera.CamRightBasis.clone(); //camdir.clone().cross(Globals.camera.up).normalize();
-    let down = Globals.camera.CamUpBasis.clone().multiplyScalar(-1); //Globals.camera.up.clone().normalize().multiplyScalar(-1);
-
-    this.curView.add(right.multiplyScalar(dx * rot_speed));
-    this.curView.add(down.multiplyScalar(dy * rot_speed));
-
-    Globals.camera.Camera.lookAt(this.curView.clone().add(campos));
-
-    Globals.camera.updateAfterMoving();
-  }
-  private shittyRotate() {
-    // //Look at the point in the screen projected into 3D
-    // let v2 = Globals.screen.getCanvasRelativeXY(e.clientX, e.clientY);
-
-    // v2.x = (v2.x / Globals.screen.canvas.width) * 2 - 1;
-    // v2.y = ((Globals.screen.canvas.height - v2.y) / Globals.screen.canvas.height) * 2 - 1;
-
-    // let FOV = 1;//Increase to get more FOV 
-
-    // let base = new Vector4(0, 0, -1, 1);
-    // let ry: Matrix4 = new Matrix4();
-    // ry.makeRotationAxis(new vec3(0, -1, 0), Math.PI * FOV * v2.x);
-    // let vy: Vector4 = base.clone().applyMatrix4(ry);
-
-    // let rx: Matrix4 = new Matrix4();
-    // rx.makeRotationAxis(new vec3(1, 0, 0), Math.PI * FOV * v2.y);
-    // let vxy: Vector4 = vy.clone().applyMatrix4(rx);
-
-    // let vxy3: vec3 = new vec3(vxy.x, vxy.y, vxy.z);
-
-    // vxy3.normalize().multiplyScalar(5);
-    // let campos = new vec3();
-    // Globals.camera.getWorldPosition(campos);
-    // vxy3.add(campos);
-    // Globals.camera.lookAt(new vec3(vxy3.x, vxy3.y, vxy3.z));
-
   }
   private debugDrawMousePos(): void {
     let that = this;

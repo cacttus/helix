@@ -26,6 +26,7 @@ import { ModelManager, AudioManager } from './Assets';
 import { Input } from './Input';
 import { Prof } from "./Prof";
 import { Utils, BrowserType } from './Utils';
+import { HashSet, HashMap } from "./Base";
 
 
 interface VrOrDesktopModeCallback { (): void }
@@ -69,6 +70,9 @@ export class _Globals {
   private _barColor: THREE.Color = new THREE.Color(0, 0, 0); // Color of the bars when in ResizeMode.Fit mode.
   private _browser: BrowserType = BrowserType.Undefined;
   private _unionCamera: UnionCamera = null;
+  private _urlParams : HashMap<string> = new HashMap<string>();
+
+  public get urlParams() : HashMap<string> { return this._urlParams; }
 
   public init(canvasWidth: number, canvasHeight: number, resize: ResizeMode, barColor: THREE.Color = new THREE.Color(0, 0, 0), perspective: boolean = true): Promise<boolean> {
     this._canvas = document.querySelector('#page_canvas');
@@ -224,6 +228,14 @@ export class _Globals {
     return str;
   }
   public logWarn(e: any): void {
+    let str: string = ">>W:" + e;
+    console.warn(str);
+
+    if (this._console3d) {
+      this._console3d.log(str);
+    }
+  }
+  public logWarnOnce(e: any): void {
     let str: string = ">>W:" + e;
     console.warn(str);
 
@@ -478,13 +490,14 @@ export class _Globals {
     return null;
   }
   private getBrowserMessage(): string {
+    /*
     if (this._browser === BrowserType.IE || this._browser === BrowserType.Edge) {
       return "For the best experience, try using a <a href='https://www.google.com/chrome' target='_blank'>Chrome</a> or <a href='https://www.mozilla.org/en-US/firefox/' target='_blank'>Firefox</a> web browser.";
     }
 
     if (this._browser !== BrowserType.Chrome && this._browser !== BrowserType.Firefox) {
       return "Please note Helix is currently tested on Oculus VR, <a href='https://www.google.com/chrome'>Google Chrome</a>, <a href='https://www.mozilla.org/en-US/firefox/'>Firefox</a> and Edge.  Other browsers and VR systems may not work."
-    }
+    }*/
     return "";
   }
   private checkBrowserTimeout(seconds: number) {

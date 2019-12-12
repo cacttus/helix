@@ -24,14 +24,16 @@ export class HashMap<V> {
   private hash(s: string) :number{
     //https://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript
     var hash = 0, i, chr;
-    if (this.length === 0) return hash;
-    for (i = 0; i < this.length; i++) {
+    if (s.length === 0) return hash;
+    for (i = 0; i < s.length; i++) {
       chr = s.charCodeAt(i);
       hash = ((hash << 5) - hash) + chr;
       hash |= 0; // Convert to 32bit integer
     }
     return hash | 0;
   }
+
+  public get Map() :Map<number, V> { return this._map; }
 
   *[Symbol.iterator](): IterableIterator<V> {
     //let it = new IterableIterator<[K, V]>;
@@ -176,7 +178,7 @@ export class HashSet<T> {
   }
 
 }
-export class MultiMap<K, V> /*implements Map<K,HashSet<V>> */ {
+export class MultiMap<K, V> {
 
   private _map: Map<K, HashSet<V>> = new Map<K, HashSet<V>>();
 

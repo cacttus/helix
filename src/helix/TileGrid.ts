@@ -170,7 +170,7 @@ export enum TileLayerId {
   Player_Relative_Background = 91, // Goes behind of player if player is on tile, or behind player if player is in front.
 
   DebugBackground = 92,
-  Unset = 999, // Special layer type indicating that the layer of this
+  Unset = 999, // Equivalent of "none"
 }
 export enum Tiling {
   None,
@@ -322,6 +322,9 @@ export class SpriteFrameDefinition {
         if (vv.toLowerCase() === "object") {
           vv = "objects";
         }
+        if (vv.toLowerCase() === "none") {
+          vv = "unset";
+        }
         TiledUtils.validateProp(ret.layer = Utils.stringToEnum(vv, Object.keys(TileLayerId)) as TileLayerId);
       }
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_tiling, key)) {
@@ -345,18 +348,24 @@ export class SpriteFrameDefinition {
       }
 
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_prop, key)) {
-        let exps: RegExpMatchArray = val.match(/[A-Za-z0-9_\.]+\s*\+=\s*[A-Za-z0-9_\.]+/);
-
-        if (exps.length === 2) {
-          let key = exps[0];
-          let value = exps[1];
-          ret.tile_props.set(key,value);// = value;
+        try {
+          let exps: RegExpMatchArray = val.match(/\s*([\w\-\.]+)\s*\=\s*([\w\-\.]+)\s*/i);
+          //[^] logical negation of character class.
+          if (exps && exps.length === 3) {
+            let key = exps[1].trim().toLowerCase();
+            let value = exps[2].trim().toLowerCase();
+            if (!ret.tile_props) {
+              ret.tile_props = new HashMap<string>();
+            }
+            ret.tile_props.set(key, value);// = value;
+          }
+          else {
+            Globals.logError("Invalid sprite frame property: '" + val + "'")
+          }
         }
-        else {
+        catch (ex) {
           Globals.logError("Invalid sprite frame property: '" + val + "'")
         }
-
-        TiledUtils.validateProp(ret.tiling_animated = Utils.parseBool(val));
       }
 
       else if (TiledUtils.propMatch(SpriteFrameDefinition.prop_animation_name, key)) {
@@ -808,9 +817,8 @@ export class SpriteSet {
     }
 
     if (def.tile_props) {
-      for (let [k, v] of def.tile_props) {
-        ret.Properties.set(k,v);
-      }
+      ret.Properties = def.tile_props.clone();
+
     }
 
     return ret;
@@ -1683,7 +1691,7 @@ export class TileGrid {
 
           //Add a tile block.
           if (computed_tile_data.frame >= 0) {
-            c.Blocks.push(new TileBlock());
+            c.Blocks.push(new TileBlock(c));
             c.Blocks[c.Blocks.length - 1].SpriteRef = computed_tile_data.sprite;
             c.Blocks[c.Blocks.length - 1].FrameIndex = computed_tile_data.frame;
             c.Blocks[c.Blocks.length - 1].Layer = computed_tile_data.layer;
@@ -1704,7 +1712,8 @@ export class TileGrid {
     cell = this.CellDict.get(xy);
     return cell;
   }
-  public GetCellForPoint_WorldR3(pos: vec3): Cell {
+  public GetCellForPoint_MapPointR3(pos: vec3): Cell {
+    //The input pos must be in R3 Map space. meaning  you already used worldPointToMapPoint()
     return this.GetCellForPoint_World(new vec2(pos.x, pos.y));
   }
   public GetCellForPoint_World(pos: vec2): Cell {
@@ -2067,12 +2076,30 @@ export class TileBlock {
   private _frameIndex: Int = 0 as Int;//The index of the frame that this sprite
   private _layer: Int = -1 as Int;
   private _animationData: SpriteAnimationData = null;
-  public Box: Box2f;   // So we need custom boxes for things like ladders, &c
+  private _cell: Cell = null;
+  private _box: Box2f = null;
+  private _verts: Array<vec3> = new Array<vec3>();
 
-  public Verts: Array<vec3> = new Array<vec3>();
+  private _flipH: boolean = false;
+  private _flipV: boolean = false;
 
-  public FlipH: boolean = false;
-  public FlipV: boolean = false;
+  public get Box(): Box2f { return this._box; };   // So we need custom boxes for things like ladders, &c
+  public set Box(b: Box2f) { this._box = b; };   // So we need custom boxes for things like ladders, &c
+  public get cell() :Cell { return this._cell; }
+  public set cell(x:Cell ) { this._cell = x; }
+
+  public get Verts(): Array<vec3> { return this._verts; }
+  public set Verts(x: Array<vec3>) { this._verts = x; }
+
+  public get FlipH(): boolean { return this._flipH; }
+  public get FlipV(): boolean { return this._flipV; }
+
+  public set FlipH(x: boolean) { this._flipH = x; }
+  public set FlipV(x: boolean) { this._flipV = x; }
+
+  public constructor(parentCell: Cell) {
+    this._cell = parentCell;
+  }
 
   public get KeyFrame(): SpriteKeyFrame {
     //Quick getter to easily access teh selected block frame.
@@ -2116,10 +2143,10 @@ export class Cell {
   //This is a leaf node of the MapArea class, a single cell with fixed w/h
   private _cellPosWorld: ivec2;
   public _parent: BvhNode = null;//{ get; private set; }
-  public Blocks: Array<TileBlock> = new Array<TileBlock>();
+  public Blocks: Array<TileBlock> = new Array<TileBlock>();//Unordered array of tile blocks.  Block.Layer determines depth & draw order
 
   public DebugColor: Color = null;
-  public DebugVerts: Array<vec3> = new Array<vec3>();
+  public DebugVerts: Array<vec3>; //Do not set unless used - freeup some memory
   public static DebugFrame: SpriteFrame = null; // thisis just for debug
 
   public hasTile(s: string): boolean {
@@ -2209,6 +2236,20 @@ export class Cell {
     }
 
     return ret;
+  }
+  public canAddBlock(block: TileBlock, layer:TileLayerId): boolean {
+    //returns false if the layer is already take up by the block.
+    for (let bi = this.Blocks.length - 1; bi >= 0; bi--) {
+      if (this.Blocks[bi].Layer === layer as Int) {
+        return false;
+      }
+    }
+    return true;
+  }
+  public addBlock(block: TileBlock, layer:TileLayerId) {
+    //returns false if the layer is already take up by the block.
+    this.Blocks.push(block);
+    block.cell = this;
   }
   public removeBlock(block: TileBlock): boolean {
     for (let bi = this.Blocks.length - 1; bi >= 0; bi--) {

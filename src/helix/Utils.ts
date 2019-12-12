@@ -20,17 +20,44 @@ export enum BrowserType {
   Chrome, Edge, IE, Opera, Firefox, Safari, Blink, Undefined
 }
 export class Utils {
-  public static project(p1: vec3, p2: vec3, normal: vec3, position: vec3): vec3 {
+  public static project_t(p1: vec3, p2: vec3, plane_normal: vec3, plane_position: vec3): number {
     //Projects the given line segment onto the plane
     //Input: OpenGL World coordinates
     //Returns OpenGL World coordinates.
     //(n.p+d) = (a+tb)
-    let n = normal;
-    let d = -(n.dot(position));
-    let t: number = -(n.dot(p1) + d) / ((p2.clone().sub(p1)).dot(n));
-    let ret = p1.clone().add(p2.clone().sub(p1).multiplyScalar(t));
+    //-(n.dot(p1) + d) / ((p2 - p1).dot(n));
+    //Taken from line_plane_collision_linear in collision_equations.cpp
+    let ray: vec3 = p2.clone().sub(p1);
+    let nv: number = plane_normal.dot(ray);
+
+    if (nv === 0.0) {//or zero - if nv is zero avoid infinity dividde
+      return null;//no velocity or screwy plane normal
+    }
+
+    let plane_d = -(plane_normal.clone().dot(plane_position));
+
+    //Solve this -
+    // n . (p0+t(p1-p0)) + d = 0
+    let a1: number = plane_normal.clone().negate().dot(p1) - plane_d;
+    let out_t: number = a1 / nv;
+
+    return out_t;
+  }
+  public static project(p1: vec3, p2: vec3, plane_normal: vec3, plane_position: vec3): vec3 {
+    let t = Utils.project_t(p1, p2, plane_normal, plane_position);
+
+    if(t===null){
+      //t is null if there was no collision with the line at all (perpendicular to plane)
+      return null;
+    }
+
+    let ret = p1.add(p2.clone().sub(p1).multiplyScalar(t));
+
+    //Note if ((out_t >= 0.0) && (out_t <= 1.0)){
+    //then the line did not intersect the plane
+
     return ret;
-  }  
+  }
   public static parseIVec2(str: string): ivec2 {
     let arr = Utils.parseTuple(str);
     if (!arr || arr.length !== 2) {
@@ -232,7 +259,7 @@ export class Utils {
   public static loadingDetails(det: string) {
     $('#loadingDetails').html(det);
   }
-  public static lcmp(a: string, b: string, case_sensitive: boolean = false) :boolean {
+  public static lcmp(a: string, b: string, case_sensitive: boolean = false): boolean {
     let d_k = Utils.copyString(a).trim();
     let d_s = Utils.copyString(b).trim();
     if (!case_sensitive) {
@@ -343,9 +370,19 @@ export class Utils {
     a.w *= b.w;
     return a;
   }
+  public static getWorldUp(x: THREE.Object3D): vec3 {
+    let v: vec3 = new vec3();
+    v = x.up.clone()
+    return v;
+  }
   public static getWorldPosition(x: THREE.Object3D): vec3 {
     let v: vec3 = new vec3();
     x.getWorldPosition(v);
+    return v;
+  }
+  public static getWorldDirection(x: THREE.Object3D): vec3 {
+    let v: vec3 = new vec3();
+    x.getWorldDirection(v);
     return v;
   }
   public static className(x: Object): string {

@@ -17,7 +17,7 @@ import { Int, toInt } from './Int';
 import { PhysicsObject3D } from './Physics3D';
 import { Atlas, ImageResource, WorldView25D, Sprite25D, CollisionHandling, Animation25D } from './Helix25D';
 import { vec2, vec3, ivec2 } from './Math';
-import { Cell, TileBlock } from './TileGrid';
+import { Cell, TileBlock, TileLayerId } from './TileGrid';
 
 export enum HandGesture {
   None = "none",
@@ -31,16 +31,11 @@ export enum HandGesture {
 export class Hand extends THREE.Object3D {
   public Gesture: HandGesture = HandGesture.None;
   public Grabbed: Sprite25D = null;
-  // public get ActionPoint (): Object3D {return this._actionPoint;}
-  private _actionPoint: Object3D = null;
 
   public HandSprite: Sprite25D = null;
   public Held: Sprite25D = null;
 
   private _world: WorldView25D = null;
-  public get ActionPoint(): Object3D {
-    return this._actionPoint;
-  }
 
   public constructor(world: WorldView25D) {
     super();
@@ -53,16 +48,55 @@ export class Hand extends THREE.Object3D {
     this.HandSprite.R3Parent = this;
     this.HandSprite.Animation.setDefault();
     this.HandSprite.Animation.setKeyFrame(0, this.HandSprite.Animation.TileData);
-    this.HandSprite.Position.set(-0.5, 0.5, 0);
+    this.HandSprite.Position.set(0, 0, 0);//We now add a pixel offset-0.5, 0.5, 0);
     world.addObject25(this.HandSprite);
   }
-  public getActionPointLocation(): vec3 {
-    if (this._actionPoint) {
-      let v: vec3 = new vec3();
-      this._actionPoint.getWorldPosition(v);
-      return v;
+
+  private pv(v: vec3): string {
+    return "" + v.x + "," + v.y + "," + v.z;
+  }
+  private curView: vec3 = new vec3(0, 0, -1);
+  private flycamRotate() {
+    let dx = Globals.input.mouse.dx;
+    let dy = Globals.input.mouse.dy;
+
+    let maxPixel = 8;
+
+    if (Math.abs(dx) > maxPixel) { dx = Math.sign(dx) * maxPixel }
+    if (Math.abs(dy) > maxPixel) { dy = Math.sign(dy) * maxPixel }
+
+    let campos = Globals.camera.CamPos.clone();
+
+    let camdir = Globals.camera.CamDirBasis.clone();//new vec3();
+
+    let rot_speed = 0.01; // Change this to change rotation speed.
+
+    let right = Globals.camera.CamRightBasis.clone(); //camdir.clone().cross(Globals.camera.up).normalize();
+    let down = Globals.camera.CamUpBasis.clone().multiplyScalar(-1); //Globals.camera.up.clone().normalize().multiplyScalar(-1);
+
+    this.curView.add(right.multiplyScalar(dx * rot_speed));
+    this.curView.add(down.multiplyScalar(dy * rot_speed));
+
+    Globals.camera.Camera.lookAt(this.curView.clone().add(campos));
+
+    Globals.camera.updateAfterMoving();
+  }
+  private projectMouse(sx: number, sy: number) {
+    //Project the hand onto the world.  This is for PC only. 
+    let p1 = Globals.screen.project3D(sx, sy, Globals.camera.Near);
+    let p2 = Globals.screen.project3D(sx, sy, Globals.camera.Far);
+    let projected_world = Utils.project(p1, p2, WorldView25D.Normal, this._world.position);
+
+    if (!projected_world) {
+      projected_world = new vec3(0, 0, 0);
     }
-    return null;
+
+    //Push the hand out a little bit so it isn't stuck in the world.
+    let push_amt: number = 1.9;
+    let push_out = p1.clone().sub(p2).normalize().multiplyScalar(push_amt);
+
+    let v = projected_world.clone().add(push_out);
+    return v;
   }
   public update(dt: number) {
     //super.update(dt);
@@ -72,12 +106,9 @@ export class Hand extends THREE.Object3D {
       this.position.copy(Globals.input.right.Position);
     }
     else {
-      let hand_pos_final: vec3 = null;
+      let hand_pos_final: vec3 = new vec3(0, 0, 0);
 
       if (Globals.input.mouse.Left.pressOrHold()) {
-        if(Globals.input.mouse.Left.pressed()){
-          Globals.audio.play(Files.Audio.HandGrab, this.position);
-        }
         this.HandSprite.Animation.setKeyFrame(2, this.HandSprite.Animation.TileData);
       }
       else {
@@ -85,21 +116,16 @@ export class Hand extends THREE.Object3D {
       }
 
       if (this._world.InputControls.MovingPlayer) {
+        if (Globals.input.mouse.Left.pressOrHold()) {
+          this.flycamRotate();
+        }
         //Player is moving.
         hand_pos_final = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, 4);
       }
       else {
-        //Project the hand onto the world.  This is for PC only. 
-        let p1 = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, Globals.camera.Near);
-        let p2 = Globals.screen.project3D(Globals.input.mouse.x, Globals.input.mouse.y, Globals.camera.Far);
-        let projected_world = Utils.project(p1, p2, WorldView25D.Normal, this._world.position);
+        hand_pos_final = this.projectMouse(Globals.input.mouse.x, Globals.input.mouse.y);
 
-        //Push the hand out a little bit so it isn't stuck in the world.
-        let push_amt: number = 1.9;
-        let push_out = p1.clone().sub(p2).normalize().multiplyScalar(push_amt);
-
-        hand_pos_final = projected_world.clone().add(push_out);
-
+        this.updateHover();
       }
 
       //hardcode the z to a solid position so we can easily project it.
@@ -120,54 +146,132 @@ export class Hand extends THREE.Object3D {
 
       if (Globals.input.mouse.Left.releaseOrUp()) {
         //Essentially this would work best if we used a PhysicsObject with velocity and gravity.
+        this.dropTile(this.Held);
         this.Held.R3Parent = null;
+        this.Held.R3Offset.set(0, 0, 0);
+        this._grabbedBlock = null;
         this.Held = null;
         this.Gesture = HandGesture.None;
-        if (Globals.input.mouse.Left.released()) {
-          Globals.audio.play(Files.Audio.HandRelease, this.position);
-        }
       }
     }
 
   }
-  public grabTileOrSprite(): Sprite25D {
-    let ret: Sprite25D = null;
-
-    //Grap Tile Sprite.
-    let ap_world = this.getActionPointLocation();
-    if (ap_world) {
-      let ap_map = this._world.MasterMap.worldPointToMapPoint(ap_world);
-
-      let c: Cell = this._world.MasterMap.Area.Grid.GetCellForPoint_WorldR3(ap_map);
-      if (c !== null) {
-        let blocks: TileBlock[] = c.getOrderedBlockArrayTopDown();
-        if (blocks.length > 0) {
-          if (blocks[0].SpriteRef) {
-
-            //Grab the Block
-            if (blocks[0].SpriteRef.Properties.get("gesture") === HandGesture.Grab) {
-
-              ret = this._world.blockTileToSprite(blocks[0], c);
-
-              ret.R3Parent = this.ActionPoint;
-              this.Held = ret;
-
-            }
-
-            //Do callback if needed
-            // if (blocks[0].SpriteRef.GestureCallback) {
-            //   blocks[0].SpriteRef.GestureCallback(blocks[0].SpriteRef, blocks[0], this);
-            // }
-
-          }
-
+  private dropTile(sprite: Sprite25D) {
+    let abort: boolean = false;
+    //  if (this._grabbedBlock != null) {
+    let layer = this._grabbedBlock.Layer;
+    // if (layer === TileLayerId.Unset) {
+    //   layer = sprite.Layer as Int;
+    // }
+    if (layer !== TileLayerId.Unset) {
+      let c = this.pickCell();
+      if (c != null) {
+        if (!c.canAddBlock(this._grabbedBlock, this._grabbedBlock.Layer)) {
+          abort = true;
         }
+        else {
+          c.addBlock(this._grabbedBlock, this._grabbedBlock.Layer);
+          Globals.audio.play(Files.Audio.HandRelease, this.position);
+        }
+      }
+      else {
+        Globals.logWarn("Cell was null for dropping object, aborted.");
+        abort = true;
       }
     }
     else {
-      Globals.logError("Could not find action point for tickler.");
+      Globals.logError("Both Sprite and tileblock layer were not set, could not drop sprite.")
+      abort = true;
     }
+    // }
+
+    if (abort) {
+      //Abort the drop, something went wrong.
+      this._grabbedBlock.cell.addBlock(this._grabbedBlock, this._grabbedBlock.Layer);
+      Globals.audio.play(Files.Audio.Invalid, this.position);
+    }
+
+
+  }
+  private getPixelOffset(): vec3 {
+    //offset of the hand sprite in pixels in R3 space
+    let n = Utils.getWorldDirection(this);
+    let u = Utils.getWorldUp(this);
+    let r = u.clone().cross(n);
+
+    let pxy = this._world.Atlas.pixelOffsetR3(toInt(2), toInt(9), u.clone(), r.clone());
+    return pxy;
+  }
+  private getActionPointLocation(): vec3 {
+    //returns the center position of our hand sprite.
+    let pos = Utils.getWorldPosition(this);
+    let pxy = this.getPixelOffset();
+
+    pxy.add(pos);
+    return pxy;
+  }
+  private _grabbedBlock: TileBlock = null;
+  public grabTileOrSprite(): Sprite25D {
+    let ret: Sprite25D = null;
+
+    if (this._world.HoverBlock) {
+      Globals.audio.play(Files.Audio.HandGrab, this.position);
+      ret = this._world.blockTileToSprite(this._world.HoverBlock);
+      this._world.HoverBlock.cell.removeBlock(this._world.HoverBlock);
+      this._world.HoverBlock.Verts = null;
+      
+      ret.R3Parent = this;
+      ret.R3Offset = this.getPixelOffset().add(new vec3(-0.5, 0.5, -0.01));//-0.01 pushes the rock behind hand, 0.5 centers the sprite
+      this.Held = ret;
+      this._grabbedBlock = this._world.HoverBlock;//Keep the block stored in case we mess up
+      this._world.HoverBlock = null;
+    }
+    else {
+      Globals.audio.play(Files.Audio.Miss, this.position);
+    }
+
     return ret;
+  }
+  private pickCell(): Cell {
+    //returns the cell underneath the mouse cursor
+    let ap_world = this.getActionPointLocation();
+    let ap_map = this._world.MasterMap.worldPointToMapPoint(ap_world);
+    let c: Cell = this._world.MasterMap.Area.Grid.GetCellForPoint_MapPointR3(ap_map);
+    return c;
+  }
+  private updateHover() {
+    if (Globals.input.mouse.moved) {
+      let c: Cell = this.pickCell();
+      let set: boolean = false;
+      if (c !== null) {
+
+        let blocks: TileBlock[] = c.getOrderedBlockArrayTopDown();
+        if (blocks.length > 0) {
+          if (this.Held !== null) {
+            //draw hover on placable objects.
+            if (c.canAddBlock(this._grabbedBlock, this._grabbedBlock.Layer)) {
+              this._world.HoverBlock = blocks[0];
+              set = true;
+            }
+          }
+          else {
+            //draw hover on pickable objects
+            if (blocks[0].SpriteRef) {
+              //Grab the Block
+              if (blocks[0].SpriteRef.getProperty("gesture") === HandGesture.Grab) {
+                this._world.HoverBlock = blocks[0];
+                set = true;
+              }
+            }
+          }
+        }
+      }
+
+      if (!set) {
+        this._world.HoverBlock = null;
+      }
+
+    }
   }
 }
 
@@ -186,9 +290,9 @@ $(document).ready(function () {
     loadResources();
   });
 
-  if(!Globals.isDebug()){
+  if (!Globals.isDebug()) {
     //Hide the mouse
-    $('body').css('cursor' , 'none');
+    $('body').css('cursor', 'none');
   }
 
 
@@ -248,7 +352,7 @@ function gameLoop(dt: number) {
     if (Globals.input.right.A.pressed() || Globals.input.right.Trigger.pressed() || Globals.input.left.A.pressed() || Globals.input.left.Trigger.pressed()) {
       Globals.gameState = GameState.Play;
       //You can only play music when the user has interacted wit the page.
-      // Globals.audio.playMusic(Files.Audio.MusicBeepy);
+      Globals.audio.playMusic(Files.Audio.Music);
     }
   }
 

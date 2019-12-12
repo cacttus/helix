@@ -77,9 +77,10 @@ export class Screen2D extends GlobalEventObject {
   //Project canvas point into 3D space
   //Input is NON-RELATIVE mouse point ( passed in from mousemove event )
   public project3D(clientX: number, clientY: number, distance: number): vec3 {
+    //convert to screen coords
     let v2: vec2 = this.getCanvasRelativeXY(clientX, clientY);
-
     let mouse_pos = Globals.camera.Frustum.project(v2.x, v2.y, distance);
+
     return mouse_pos;
   }
 }
@@ -120,8 +121,6 @@ export class Frustum {
 
   public get nearPlaneWidth(): number { return this._near_plane_width; }
   public get nearPlaneHeight(): number { return this._near_plane_height; }
-  // public get farPlaneWidth() : number { return this._far_plane_width; }
-  //// public get farPlaneHeight() : number { return this._far_plane_height; }
 
   public get ftl(): vec3 { return this._ftl; }//back topleft
   public get ftr(): vec3 { return this._ftr; }//back topright
@@ -137,10 +136,7 @@ export class Frustum {
   public get up(): vec3 { return this._up; }
   public get normal(): vec3 { return this._normal; }
 
-  //private Points_fpt_ntl: vec3;//back bottomleft
-  // public constructor(cam_dir: vec3 = null, cam_pos: vec3 = null) {
-  //   this.construct(cam_dir, cam_pos);
-  // }
+  
   //Project a point onto the screen in 3D
   public projectScreen(screen_x: number, screen_y: number) {
     return this.project(screen_x, screen_y, Globals.camera.Near);
@@ -164,7 +160,6 @@ export class Frustum {
     }
 
 
-
     //Project onto screen.
     let wrx = screen_x / Globals.screen.elementWidth;
     let wry = screen_y / Globals.screen.elementHeight;
@@ -185,7 +180,7 @@ export class Frustum {
     }
 
     //Project Into world.
-    let projected: vec3 = front.clone().add( proj_normal.clone().multiplyScalar(dist));
+    let projected: vec3 = front.clone().add(proj_normal.clone().multiplyScalar(dist));
 
     return projected;
   }
@@ -512,7 +507,7 @@ export class UnionCamera {
   public get Camera(): THREE.Camera { return (this.IsPerspective ? this.PerspectiveCamera : this.OrthographicCamera) as THREE.Camera; }
   public get Frustum(): Frustum { return this._frustum; }
 
-  public createNewOrtho(w : number = 12.5, h:number = 12.5, near:number=1, far:number=1000) {
+  public createNewOrtho(w : number = 9.5, h:number = 9.5, near:number=1, far:number=1000) {
     this._camera = new THREE.OrthographicCamera(-w, w, h, -h , near, far);
   }
   public constructor(persp: boolean) {

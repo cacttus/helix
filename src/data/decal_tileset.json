@@ -1656,11 +1656,6 @@
                  "value":"layer"
                 }, 
                 {
-                 "name":"gesture",
-                 "type":"string",
-                 "value":"grab"
-                }, 
-                {
                  "name":"layer",
                  "type":"string",
                  "value":"object"
@@ -1669,6 +1664,11 @@
                  "name":"name",
                  "type":"string",
                  "value":"rock"
+                }, 
+                {
+                 "name":"prop",
+                 "type":"string",
+                 "value":"gesture=grab"
                 }]
         }, 
         {
@@ -2090,6 +2090,11 @@
                  "name":"name",
                  "type":"string",
                  "value":"monster_grass_short"
+                }, 
+                {
+                 "name":"prop",
+                 "type":"string",
+                 "value":"gesture=grab"
                 }]
         }, 
         {
@@ -2550,7 +2555,27 @@
                 {
                  "name":"class",
                  "type":"string",
-                 "value":"Tile"
+                 "value":"ui"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"none"
+                }, 
+                {
+                 "name":"is_key",
+                 "type":"string",
+                 "value":"true"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"none"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"hand"
                 }]
         }, 
         {
@@ -2559,7 +2584,22 @@
                 {
                  "name":"class",
                  "type":"string",
-                 "value":"Tile"
+                 "value":"ui"
+                }, 
+                {
+                 "name":"collision",
+                 "type":"string",
+                 "value":"none"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"none"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"hand"
                 }]
         }, 
         {
@@ -2568,26 +2608,22 @@
                 {
                  "name":"class",
                  "type":"string",
-                 "value":"Tile"
-                }]
-        }, 
-        {
-         "id":163,
-         "properties":[
-                {
-                 "name":"class",
-                 "type":"string",
-                 "value":"Tile"
+                 "value":"ui"
                 }, 
                 {
-                 "name":"is_key",
+                 "name":"collision",
                  "type":"string",
-                 "value":""
+                 "value":"none"
+                }, 
+                {
+                 "name":"layer",
+                 "type":"string",
+                 "value":"none"
                 }, 
                 {
                  "name":"name",
                  "type":"string",
-                 "value":"dock"
+                 "value":"hand"
                 }]
         }, 
         {
@@ -3146,12 +3182,60 @@
                 }]
         }, 
         {
+         "animation":[
+                {
+                 "duration":400,
+                 "tileid":198
+                }, 
+                {
+                 "duration":400,
+                 "tileid":199
+                }, 
+                {
+                 "duration":400,
+                 "tileid":200
+                }],
          "id":198,
          "properties":[
+                {
+                 "name":"a_name",
+                 "type":"string",
+                 "value":"tile"
+                }, 
+                {
+                 "name":"a_offset",
+                 "type":"string",
+                 "value":"0,0"
+                }, 
                 {
                  "name":"class",
                  "type":"string",
                  "value":"Tile"
+                }, 
+                {
+                 "name":"is_key",
+                 "type":"string",
+                 "value":"true"
+                }, 
+                {
+                 "name":"name",
+                 "type":"string",
+                 "value":"hover_box"
+                }, 
+                {
+                 "name":"tiles_height",
+                 "type":"string",
+                 "value":"1"
+                }, 
+                {
+                 "name":"tiles_width",
+                 "type":"string",
+                 "value":"1"
+                }, 
+                {
+                 "name":"tiling_animated",
+                 "type":"string",
+                 "value":"true"
                 }]
         }, 
         {
@@ -3165,7 +3249,7 @@
                 {
                  "name":"name",
                  "type":"string",
-                 "value":"wood_floor"
+                 "value":"hover_box"
                 }]
         }, 
         {
@@ -3177,14 +3261,9 @@
                  "value":"Tile"
                 }, 
                 {
-                 "name":"collision",
-                 "type":"string",
-                 "value":"tile"
-                }, 
-                {
                  "name":"name",
                  "type":"string",
-                 "value":"wood_wall"
+                 "value":"hover_box"
                 }]
         }, 
         {
@@ -4900,11 +4979,6 @@
                  "name":"is_key",
                  "type":"string",
                  "value":"true"
-                }, 
-                {
-                 "name":"tiling",
-                 "type":"string",
-                 "value":"HardBorderRules"
                 }]
         }, 
         {
@@ -5596,6 +5670,11 @@
          "id":431,
          "properties":[
                 {
+                 "name":"class",
+                 "type":"string",
+                 "value":"Tile"
+                }, 
+                {
                  "name":"collision",
                  "type":"string",
                  "value":"ignore"
@@ -5604,6 +5683,11 @@
         {
          "id":432,
          "properties":[
+                {
+                 "name":"class",
+                 "type":"string",
+                 "value":"Tile"
+                }, 
                 {
                  "name":"collision",
                  "type":"string",
@@ -5614,6 +5698,11 @@
          "id":433,
          "properties":[
                 {
+                 "name":"class",
+                 "type":"string",
+                 "value":"Tile"
+                }, 
+                {
                  "name":"collision",
                  "type":"string",
                  "value":"ignore"
@@ -5622,6 +5711,11 @@
         {
          "id":434,
          "properties":[
+                {
+                 "name":"class",
+                 "type":"string",
+                 "value":"Tile"
+                }, 
                 {
                  "name":"collision",
                  "type":"string",
