@@ -38,5 +38,5 @@ After pulling down the Helix source code, take the following steps to setup the 
 ### Notes 
 * Deployable HTML and .JS files are located in /helix/dist
 * You should not need @types/three because three comes with its own types.  However, if you get three.js errors, run *npm -i @types/three*
-* Sometimes webpack or webpack-dev-server lose track of the project.  Just Ctrl+C inside of their respective Bash windows to kill them, and run them again.
+* Sometimes webpack or webpack-dev-server loses track of the file changes.  To fix this, Ctrl+C inside of the webpack and webpack-dev-server windows, and run them again.
 
