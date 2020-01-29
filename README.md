@@ -1,4 +1,4 @@
-![Helix](https://github.com/metalmario971/helix/blob/master/helix_logo.png | width=70)
+![Helix](https://github.com/metalmario971/helix/blob/master/helix_logo.png){:height="50%" width="50%"}
 # Helix VR Framework
 Helix is a 2.5D VR game framework, allowing developers to create 2D games in VR, with a mixture of 2D and 3D graphics.
 
