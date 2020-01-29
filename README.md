@@ -3,13 +3,15 @@
 
 # Helix VR Framework
 
-Helix VR is a web-based VR framework enabling developers to create responsive browser games with 2D and 3D graphics.
+Helix VR is a web-based framework enabling developers to create responsive WebVR games with 2D and 3D graphics.
 
 ## Features
 
 The purpose of the Helix VR framework is to provide VR developers the ability to create 2D adventure games, either platformers, or top-down RPGs in a VR display.  To render a 2D game in VR, helix uses 3D orthographic perspective, and it supports 3D models with OpenGL (gl markup) models.  Helix has been tested in Chrome, Edge, and Firefox.   It runs solely on top of three.js and is written and compiled with the Typescript transpiler.
 
 The animation system is based on sprite sheets.  All the game animation is thus frame-based animation.  The world-editor, *and* sprite-creator are implemented completely in the [Tiled](https://www.mapeditor.org/) map editor using custom attributes.  For information about how to create sprites, cerate worlds, and load information in your game, see the example project.
+
+Helix also supports audio as well using an asynchronous sound loading system.  Since it's not necessary to load all assets when the game starts, players can begin playing the game while the sounds are still loading (this can also be overridden).
 
 ## Using Tiled
 
