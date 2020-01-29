@@ -7,24 +7,30 @@ Helix is a web-based VR framework enabling developers to create responsive brows
 
 ## Features
 
-The Helix game world is viewed by the user as a 2D image, yet the rendering is 2.5D.  Helix supports 3D graphics, as such, you may
-use OpenGL (gl markup) models and load them into the framework.  Helix has been tested in Chrome, Edge, and Firefox. 
-Helix runs solely on top of three.js and is written and compiled with the Typescript transpiler.
+The purpose of the Helix game framework is to provide VR developers the ability to create 2D adventure games, either platformers, or top-down RPGs in a VR display.  
+To render a 2D game in VR, helix uses 3D orthographic perspective, and it supports 3D models with OpenGL (gl markup) models.  
+Helix has been tested in Chrome, Edge, and Firefox. 
+It runs solely on top of three.js and is written and compiled with the Typescript transpiler.
 
-The animation system of Helix is based on sprite sheets.  All the game animation is thus frame-based animation.
+The animation system is based on sprite sheets.  All the game animation is thus frame-based animation.
 The world-editor, *and* sprite-creator are implemented completely in the [Tiled](https://www.mapeditor.org/) map editor using custom attributes.
 For information about how to create sprites, cerate worlds, and load information in your game, see the example project.
 
-## Using Tiled.
+## Using Tiled
 
-The Tiled world Helix comes with an example project of a small 2D game with examples of sprite animation and a game world with multiple portals.  
-Tiled information must be exported in .json format to be used with Helix.
-The Helix map editor depends on flood-filling regions of rooms with Tiled. Thus, in Tiled, you only ever need one .json (tmx) map for the whole game.
-The reason for this is to make the game world spatially coherent, and also makes it easier to generate a map from the imported game world data.
+The example Helix comes with is a small 2D game containing sprite animation and a game world with multiple portals.  
+Tiled information must be exported in .json format to be used with Helix.  Helix depends on one .json (.tmx) tiled world, and as many .json tilemaps (.tmd) as you like.  Tilemaps
+must also be exported as .json.
 
-## Future Releases
+The Helix game-world uses flood-filled scene regions defined by a boundary (first sprite in the tiled map, a solid red block). 
+Thus, you only ever need one big .json (tmx) map for the whole game.
+The reason for this is to make the game world spatially coherent, which makes it easier to generate a map from the imported game world data.  
+It's also somewhat easier to manage room order and portal linkage using this format.  
+To create doors, or portals, in the game world simply place a doorway sprite on the border.  When the player collides with the doorway, then Helix
+will load the adjacent room.
 
-* Creating sprite animations in tiled is a cumbersome process. The future of Helix we will find or create a new way to import sprites, using a more detailed world editor.  
+Since Helix uses Tiled for its graphical world-editr, creating sprite animations becomes a cumbersome process. 
+The future of Helix we will find or create a new way to import sprites, using a more detailed world editor (possibly Monogame Toolkit).
 
 ## Setup Instructions 
 After pulling down the Helix source code, take the following steps to setup the environment.
