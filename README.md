@@ -1,4 +1,5 @@
-![Helix](/helix_logo.png?s=50)
+
+<img src="/helix_logo.png" width="50%" height="50%">
 # Helix VR Framework
 Helix is a 2.5D VR game framework, allowing developers to create 2D games in VR, with a mixture of 2D and 3D graphics.
 
