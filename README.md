@@ -22,12 +22,13 @@ Helix comes with an example project of a small 2D sprite-based game.
 * Creating sprite animations in tiled is a cumbersome process. The future of Helix we will find or create a new way to import sprites, using a more detailed world editor.  
 
 ## Setup Instructions 
+After pulling down the Helix source code, take the following steps to setup the environment.
 * If using Windows, install [git bash](https://git-scm.com/downloads), or another git interface if you do not currently have one.
 * Install [node.js](https://nodejs.org/en/download/) if it isn't installed.
-* Install webpack (npm -g webpack)
-* Install webpack-dev-server (npm -g webpack-dev-server)
-* Install three.js (npm -g three.js)
-* Open up Bash.
+* Install webpack (npm -g webpack).
+* Install webpack-dev-server (npm -g webpack-dev-server).
+* Install three.js (npm -g three.js).
+* Install typescript (npm -g typescript).
 * Navigate to the /helix folder
 * Type *npm webpack --watch --colors*, press enter
 * Open a separate git instance and type *npm start*, press enter
@@ -35,6 +36,7 @@ Helix comes with an example project of a small 2D sprite-based game.
 * The example project will appear in your browser window.  You can modify the code with hot reload while running webpack-dev-server.
 
 ### Notes 
-* You do not need @types/three because three comes with its own types.
+* Deployable HTML and .JS files are located in /helix/dist
+* You should not need @types/three because three comes with its own types.  However, if you get three.js errors, run *npm -i @types/three*
 * Sometimes webpack or webpack-dev-server lose track of the project.  Just Ctrl+C inside of their respective Bash windows to kill them, and run them again.
 
