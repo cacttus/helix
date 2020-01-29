@@ -18,18 +18,18 @@ For information about how to create sprites, cerate worlds, and load information
 
 ## Using Tiled
 
-The example Helix comes with is a small 2D game containing sprite animation and a game world with multiple portals.  
-Tiled information must be exported in .json format to be used with Helix.  Helix depends on one .json (.tmx) tiled world, and as many .json tilemaps (.tmd) as you like.  Tilemaps
-must also be exported as .json.
+[Tiled](https://www.mapeditor.org/) information must be exported in .json format to be used with Helix.  
+Helix depends on one .json (.tmx) tiled world, and as many .json tilemaps (.tmd) as you like.  
+Tilemaps must also be exported as .json.
 
-The Helix game-world uses flood-filled scene regions defined by a boundary (first sprite in the tiled map, a solid red block). 
-Thus, you only ever need one big .json (tmx) map for the whole game.
-The reason for this is to make the game world spatially coherent, which makes it easier to generate a map from the imported game world data.  
-It's also somewhat easier to manage room order and portal linkage using this format.  
-To create doors, or portals, in the game world simply place a doorway sprite on the border.  When the player collides with the doorway, then Helix
+The Helix game-world uses flood-filled scene regions defined by a closed boundary (first sprite in the tiled map, a solid red block). 
+Thus, you only ever need one big map for the whole game.
+The reason for this is to make the game world spatially coherent, which makes it easier to generate a mini-map from the imported game world data.  
+It's also somewhat easier to manage room order and portal linkage using this format.  Helix may also be modified to support multiple maps if needed.
+To create doors, or portals, simply place a doorway sprite on a scene border.  When the player collides with the doorway, then Helix
 will load the adjacent room.
 
-Since Helix uses Tiled for its graphical world-editr, creating sprite animations becomes a cumbersome process. 
+Since Helix uses Tiled for its world-editor, creating sprite animations becomes a cumbersome process. 
 The future of Helix we will find or create a new way to import sprites, using a more detailed world editor (possibly Monogame Toolkit).
 
 ## Setup Instructions 
