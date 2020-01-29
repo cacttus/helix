@@ -7,15 +7,20 @@ Helix is a web-based VR framework enabling developers to create responsive brows
 
 ## Features
 
-Helix runs on top of three.js. The Helix game world is viewed by the user as a 2D image, yet the rendering is "2.5D".  *Helix supports 3D graphics* as such, you may
-use OpenGL (gl markup) models and load them into the framework.  Helix has been tested in Chrome, Edge, and Firefox.
+The Helix game world is viewed by the user as a 2D image, yet the rendering is 2.5D.  Helix supports 3D graphics, as such, you may
+use OpenGL (gl markup) models and load them into the framework.  Helix has been tested in Chrome, Edge, and Firefox. 
+Helix runs solely on top of three.js and is written and compiled with the Typescript transpiler.
 
-The framework features an imported animation system from a series of sprite sheets.  The sprite sheets importer works with the [Tiled](https://www.mapeditor.org/).  
-For information about how to load the tiled information see the example project.
+The animation system of Helix is based on sprite sheets.  All the game animation is thus frame-based animation.
+The world-editor, *and* sprite-creator are implemented completely in the [Tiled](https://www.mapeditor.org/) map editor using custom attributes.
+For information about how to create sprites, cerate worlds, and load information in your game, see the example project.
 
-## Example Project
+## Using Tiled.
 
-Helix comes with an example project of a small 2D sprite-based game.  
+The Tiled world Helix comes with an example project of a small 2D game with examples of sprite animation and a game world with multiple portals.  
+Tiled information must be exported in .json format to be used with Helix.
+The Helix map editor depends on flood-filling regions of rooms with Tiled. Thus, in Tiled, you only ever need one .json (tmx) map for the whole game.
+The reason for this is to make the game world spatially coherent, and also makes it easier to generate a map from the imported game world data.
 
 ## Future Releases
 
