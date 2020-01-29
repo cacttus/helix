@@ -3,7 +3,7 @@
 
 # Helix VR Framework
 
-Helix is a VR framework enabling developers to create VR *browser* games with 2D and 3D graphics.
+Helix is a web-based VR framework enabling developers to create responsive browser games with 2D and 3D graphics.
 
 ## Features
 
@@ -15,21 +15,26 @@ For information about how to load the tiled information see the example project.
 
 ## Example Project
 
-Helix comes with an example project of a small 2D sprite-based game.
+Helix comes with an example project of a small 2D sprite-based game.  
 
 ## Future Releases
 
 * Creating sprite animations in tiled is a cumbersome process. The future of Helix we will find or create a new way to import sprites, using a more detailed world editor.  
 
-## Trello
-https://trello.com/b/d4cSwyt3
-
 ## Setup Instructions 
-* If using Windows, install [*git bash](https://git-scm.com/downloads), *and*, [node.js](https://nodejs.org/en/download/) or another git interface if you do not currently have one.
+* If using Windows, install [git bash](https://git-scm.com/downloads), or another git interface if you do not currently have one.
+* Install [node.js](https://nodejs.org/en/download/) if it isn't installed.
 * Install webpack (npm -g webpack)
 * Install webpack-dev-server (npm -g webpack-dev-server)
 * Install three.js (npm -g three.js)
-* Run webpack with: "npx webpack --watch --colors"
-* Open a separate git instance and run "npm start"
-* Note: You do not need @types/three because three comes with its own types
+* Open up Bash.
+* Navigate to the /helix folder
+* Type *npm webpack --watch --colors*, press enter
+* Open a separate git instance and type *npm start*, press enter
+* Open up a browser window and in the URL bar, type *localhost:8000*
+* The example project will appear in your browser window.  You can modify the code with hot reload while running webpack-dev-server.
+
+### Notes 
+* You do not need @types/three because three comes with its own types.
+* Sometimes webpack or webpack-dev-server lose track of the project.  Just Ctrl+C inside of their respective Bash windows to kill them, and run them again.
 
