@@ -1,6 +1,4 @@
 
-<img src="/helix_logo.png" width="50%" height="50%">
-
 # Helix VR Framework
 
 Helix VR is a web-based framework enabling developers to create responsive WebVR games with 2D and 3D graphics.
